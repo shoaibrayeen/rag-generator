@@ -34,13 +34,14 @@ log = logging.getLogger("rag")
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = Path(__file__).parent / "static"
 DOCS_DIR = ROOT / "documentation"
-_COLLECTION_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{1,62}$")
+# Mirrors ChromaDB's collection-name rule: 3-63 chars, [a-zA-Z0-9._-], alphanumeric at both ends.
+_COLLECTION_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{1,61}[a-zA-Z0-9]$")
 
 
 def _collection(name: str | None) -> str:
     name = (name or settings.DEFAULT_COLLECTION).strip()
     if not _COLLECTION_RE.match(name):
-        raise HTTPException(400, "Collection name must be 2-63 chars: letters, digits, . _ -")
+        raise HTTPException(400, "Collection name must be 3-63 chars of letters, digits, . _ - and start/end with a letter or digit")
     return name
 
 
@@ -211,10 +212,13 @@ def reset_collection(name: str):
 
 @app.get("/api/chunks", response_model=list[ChunkOut])
 def list_chunks(collection: str | None = Query(default=None),
+                doc_id: str | None = Query(default=None), job_id: str | None = Query(default=None),
                 limit: int = Query(default=50, ge=1, le=1000), offset: int = Query(default=0, ge=0)):
+    """Inspect the document_chunks store; filter by document set, document and/or upload job."""
     col = _collection(collection)
-    chunks = vector_store.get_all_chunks(col)[offset:offset + limit]
+    chunks = vector_store.get_all_chunks(col, [doc_id] if doc_id else None, job_id)[offset:offset + limit]
     return [ChunkOut(chunk_id=c["chunk_id"], doc_id=c["metadata"].get("doc_id", ""),
+                     job_id=c["metadata"].get("job_id", ""), collection=c["metadata"].get("collection", col),
                      source=c["metadata"].get("source", ""), page=int(c["metadata"].get("page", 0)),
                      section=c["metadata"].get("section") or None, text=c["text"]) for c in chunks]
 

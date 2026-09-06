@@ -15,11 +15,11 @@ def test_split_text_overlaps_and_covers_everything():
 
 def test_chunks_carry_metadata():
     pages = [Page(text="alpha. " * 300, page_no=3, section="Intro", extraction="ocr")]
-    chunks = chunk_pages(pages, doc_id="d1", source="f.pdf", file_type="pdf", collection="c")
+    chunks = chunk_pages(pages, doc_id="d1", source="f.pdf", file_type="pdf", collection="c", job_id="j9")
     assert len(chunks) > 1
     m = chunks[0].metadata
     assert m["page"] == 3 and m["section"] == "Intro" and m["extraction"] == "ocr"
-    assert m["source"] == "f.pdf" and m["doc_id"] == "d1"
+    assert m["source"] == "f.pdf" and m["doc_id"] == "d1" and m["job_id"] == "j9" and m["collection"] == "c"
     assert chunks[0].chunk_id == "d1:0" and chunks[1].chunk_id == "d1:1"
     assert [c.metadata["chunk_index"] for c in chunks] == list(range(len(chunks)))
 

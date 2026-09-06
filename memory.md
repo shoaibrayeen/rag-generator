@@ -18,6 +18,10 @@ evaluation script.
   (`JUDGE_MODEL=claude-opus-5`, `messages.parse` structured outputs). Independent from the
   generation model so the judge stays Claude even when generation is not.
 - **ChromaDB embedded** (`PersistentClient`) rather than a separate server — one compose service.
+- **Three named stores** (user requirement): `jobs` + `documents` JSON registries, and ONE Chroma
+  collection `document_chunks` with metadata `collection` / `doc_id` / `job_id`. Document sets are a
+  metadata filter, not separate Chroma collections (earlier versions used one Chroma collection per
+  set; old `data/chroma` dirs from before v0.4.0 must be deleted).
 - **BM25 in memory, rebuilt from Chroma** — single source of truth; requires one app process.
 - **RRF (k=60)** for fusion — dense distances and BM25 scores are on incomparable scales.
 - **fastembed only embeds**; chunking is our own boundary-aware sliding window.
@@ -44,7 +48,13 @@ evaluation script.
 
 ## Conventions
 - All tunables in `app/config.py`; `.env.example` mirrors every field.
-- `job_id == doc_id`. Terminal statuses: everything except `QUEUED` and `PROCESSING`.
+- A **job** is one upload request; its documents carry `job_id`. Job status is *derived* from its
+  documents on every read (never stored). Document terminal statuses: everything except `QUEUED`
+  and `PROCESSING`; job terminal statuses: `COMPLETED`, `FAILED`.
+- Scoped ask: `doc_ids`/`job_ids` → concrete COMPLETED doc set in one collection; Chroma `where`
+  `{doc_id: {$in: [...]}}` + BM25 candidate filter. Citations are validated in `app/rag.py`
+  (`extract_citations`); bogus `[n]` markers are stripped and reported.
+- Collection names follow Chroma's rule (3-63 chars, alnum at both ends) — 2-char names fail in Chroma.
 - Tests mock `app.rag.llm.chat`; no network needed.
 - Version lives in `app/main.py` (`FastAPI(version=…)`) and `documentation/changelog.html`.
 - Docs live in `documentation/` (the user asked for this name, not `docs/`; `/docs` stays Swagger).
@@ -52,4 +62,5 @@ evaluation script.
 
 ## History
 - 2026-09-06 — v0.1.0 initial build; v0.2.0 async job model with fixed statuses, dedupe, docs set;
-  v0.3.0 PyMuPDF primary + Tesseract-as-fallback tiering, transcript/rules/docs scripts.
+  v0.3.0 PyMuPDF primary + Tesseract-as-fallback tiering, transcript/rules/docs scripts;
+  v0.4.0 jobs as first-class objects, job→document filter, scoped ask, validated citations, `plans/`.

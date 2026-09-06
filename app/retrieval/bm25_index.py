@@ -1,4 +1,4 @@
-"""rank-bm25 lexical index, one per collection, rebuilt from Chroma."""
+"""rank-bm25 lexical index, one per document set (collection), rebuilt from the document_chunks store."""
 from __future__ import annotations
 
 import re

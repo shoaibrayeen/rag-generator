@@ -32,11 +32,15 @@ for a completely different set and it works unchanged — no code edits, only <c
 <tbody>
 <tr>
 <td>Interface</td>
-<td>REST API (FastAPI) · single-page UI (upload · requests &amp; status · ask · sources) · <code>rag</code> CLI</td>
+<td>REST API (FastAPI) · single-page UI (upload · jobs · documents · ask · sources) · <code>rag</code> CLI</td>
 </tr>
 <tr>
 <td>Ingestion</td>
-<td>asynchronous jobs: submit → <code>job_id</code> → poll status; fixed status vocabulary with reasons; SHA-256 duplicate detection</td>
+<td>asynchronous <strong>jobs</strong>: one upload request = one job → <code>job_id</code> → poll; job listing and per-file document listing with a fixed status vocabulary and reasons; SHA-256 duplicate detection</td>
+</tr>
+<tr>
+<td>Asking</td>
+<td>over the whole collection <strong>or scoped to selected documents and/or jobs</strong>; answer = text with <code>[n]</code> markers + validated <code>citations</code> + all retrieved <code>sources</code></td>
 </tr>
 <tr>
 <td>Formats</td>
@@ -132,12 +136,22 @@ retrieved context (it is not a language model — for demos and CI only):</p>
 rag serve
 </code></pre>
 <h2 id="2-how-the-upload-job-flow-works">2. How the upload job flow works</h2>
-<p>Uploading is asynchronous. Every file in a request becomes a <strong>job</strong> and the API returns
-immediately (HTTP 202) with one <code>job_id</code> per file. A background worker indexes the file; you
-poll <code>GET /api/jobs/{job_id}</code> or watch the listing. The interactive walkthrough is in
+<p>Uploading is asynchronous. <strong>One upload request (any number of files) = one job.</strong> The API
+returns immediately (HTTP 202) with the job — its <code>job_id</code>, a derived job status, and one
+document record per file. A background worker indexes the files; poll <code>GET /api/jobs/{job_id}</code>
+or watch the listings. The interactive walkthrough is in
 <a href="/documentation/flow.html"><code>documentation/flow.html</code></a>.</p>
-<p>The listing (<code>GET /api/documents</code>, and the <strong>Requests &amp; status</strong> table in the UI) shows
-<strong>DOC ID · NAME · STATUS · REASON</strong> for every request ever made, including rejected ones.</p>
+<p>Two listings:</p>
+<ul>
+<li><strong>Jobs</strong> (<code>GET /api/jobs</code>, UI panel 2): <strong>JOB ID · FILES · STATUS · REASON</strong>. Job status is
+  derived from its documents every time it is read: <code>QUEUED</code> (nothing started), <code>PROCESSING</code>
+  (any file still running), <code>COMPLETED</code> (all files finished and at least one indexed or
+  duplicate; reason says "partially completed: …" when some files failed) or <code>FAILED</code> (all
+  files finished, none indexed). Clicking a job in the UI filters the document listing to that
+  job (<code>GET /api/documents?job_id=…</code>).</li>
+<li><strong>Documents</strong> (<code>GET /api/documents</code>, UI panel 3): <strong>DOC ID · NAME · STATUS · REASON</strong> for every
+  file ever uploaded, including rejected ones, with a link from a duplicate to its original.</li>
+</ul>
 <table>
 <thead>
 <tr>
@@ -199,22 +213,38 @@ poll <code>GET /api/jobs/{job_id}</code> or watch the listing. The interactive w
 </tbody>
 </table>
 <p>Terminal statuses are all of them except <code>QUEUED</code> and <code>PROCESSING</code>. Duplicate detection is
-per collection: the same file in another collection is a separate document set. Jobs caught
+per collection: the same file in another collection is a separate document set. Documents caught
 mid-flight by a restart are marked <code>FAILED</code> with an explanatory reason.</p>
+<h3 id="asking-over-selected-documents-or-jobs">Asking over selected documents or jobs</h3>
+<p><code>POST /api/ask</code> accepts <code>doc_ids</code> and/or <code>job_ids</code>. Without them the whole collection is
+searched. With them, both retrievers (dense and BM25) are restricted to exactly those
+documents (a job expands to its <code>COMPLETED</code> documents; a duplicate id resolves to its original).
+The request is validated: unknown id → 404, a document or job that is not <code>COMPLETED</code> → 409,
+ids spanning several collections or contradicting <code>collection</code> → 400.</p>
+<p>The response always contains the <strong>answer text</strong> (with <code>[n]</code> markers), <strong><code>citations</code></strong> — the
+sources those markers actually refer to, in order of first use — plus <strong><code>sources</code></strong> (everything
+retrieved) and <strong><code>scope</code></strong> (what was searched). Markers the LLM produced that match no retrieved
+source are removed from the text and reported in <code>unresolved_citations</code>, so a client never shows a
+citation it cannot open.</p>
 <h2 id="3-using-it">3. Using it</h2>
 <h3 id="ui-httplocalhost8000">UI (<a href="http://localhost:8000">http://localhost:8000</a>)</h3>
 <ol>
-<li><strong>Upload</strong> — drop files, optionally name a <em>collection</em> (a document set). Accepted extensions are shown.</li>
-<li><strong>Requests &amp; status</strong> — every job with its Doc ID, name, status pill and reason; duplicates link to their original; delete finished jobs with ✕.</li>
-<li><strong>Ask</strong> — the answer cites <code>[n]</code> blocks; click a citation to jump to the chunk.</li>
-<li><strong>Sources</strong> — each retrieved chunk with file, page/section, whether it came from dense or BM25 (or both) and its RRF score. OCR'd chunks are flagged.</li>
+<li><strong>Upload</strong> — drop files, optionally name a <em>collection</em> (a document set); they are submitted as one job and the job id is shown.</li>
+<li><strong>Jobs</strong> — JOB ID · FILES · STATUS · REASON. Click a row to filter the documents to that job; tick a job to ask over it.</li>
+<li><strong>Documents</strong> — DOC ID · NAME · STATUS · REASON for every file (job id shown under the doc id); duplicates link to their original; tick <code>COMPLETED</code> documents to ask over them; delete finished ones with ✕.</li>
+<li><strong>Ask</strong> — the scope line shows what will be searched (whole collection or the ticked jobs/documents). The answer shows <code>[n]</code> markers, then a <strong>Citations</strong> list (file, page, section, doc id); click a marker to jump to the chunk.</li>
+<li><strong>Sources</strong> — every retrieved chunk with file, page/section, doc id, whether it came from dense or BM25 (or both), its RRF score and a "cited" badge. OCR'd chunks are flagged.</li>
 </ol>
 <p><strong>Reset collection</strong> wipes a document set so you can load a different one.</p>
 <h3 id="cli">CLI</h3>
-<pre><code class="language-bash">rag ingest samples/*.md samples/*.pdf --collection demo   # prints job ids, waits for terminal status
-rag status --watch                                        # DOC ID · NAME · STATUS · REASON
-rag job &lt;job_id&gt;                                          # one job in detail
-rag ask &quot;How many days of annual leave do employees get?&quot; -c demo --show-sources
+<pre><code class="language-bash">rag ingest samples/*.md samples/*.pdf --collection demo   # one job; prints the job id, waits for it
+rag jobs                                                  # JOB ID · FILES · STATUS · REASON
+rag job &lt;job_id&gt;                                          # one job and its documents
+rag status --watch                                        # DOC ID · NAME · STATUS · REASON (all documents)
+rag status --job &lt;job_id&gt;                                 # documents of one job
+rag ask &quot;How many days of annual leave do employees get?&quot; -c demo          # whole collection
+rag ask &quot;What is the notice period?&quot; --doc &lt;doc_id&gt; --doc &lt;doc_id&gt;         # only these documents
+rag ask &quot;Summarise the warranty terms&quot; --job &lt;job_id&gt; --show-sources        # only this job's documents
 rag reset -c demo --yes
 rag serve
 </code></pre>
@@ -237,37 +267,42 @@ rag serve
 <tr>
 <td><code>POST</code></td>
 <td><code>/api/documents</code></td>
-<td>multipart <code>files[]</code> (+ <code>collection</code>) → <strong>202</strong> with one job per file</td>
+<td>multipart <code>files[]</code> (+ <code>collection</code>) → <strong>202</strong> with the <strong>job</strong> (<code>job_id</code>, status, one document record per file)</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/jobs?collection=</code></td>
+<td>job listing: job id, files, status, reason, counts per status</td>
 </tr>
 <tr>
 <td><code>GET</code></td>
 <td><code>/api/jobs/{job_id}</code></td>
-<td>poll one job (<code>job_id</code> = <code>doc_id</code>)</td>
+<td>poll one job, including its documents</td>
 </tr>
 <tr>
 <td><code>GET</code></td>
-<td><code>/api/documents?collection=&amp;status=</code></td>
-<td>listing of all requests: doc id, name, status, reason, duplicate link</td>
+<td><code>/api/documents?collection=&amp;job_id=&amp;status=</code></td>
+<td>document listing: doc id, name, status, reason, duplicate link; filter by job</td>
 </tr>
 <tr>
 <td><code>GET</code></td>
 <td><code>/api/documents/{doc_id}</code></td>
-<td>same record as <code>/api/jobs/{id}</code></td>
+<td>one document</td>
 </tr>
 <tr>
 <td><code>DELETE</code></td>
 <td><code>/api/documents/{doc_id}</code></td>
-<td>remove a finished job and its chunks</td>
+<td>remove a finished document and its chunks</td>
 </tr>
 <tr>
 <td><code>GET</code></td>
-<td><code>/api/chunks?collection=&amp;limit=&amp;offset=</code></td>
-<td>inspect indexed chunks</td>
+<td><code>/api/chunks?collection=&amp;doc_id=&amp;job_id=&amp;limit=&amp;offset=</code></td>
+<td>inspect the <code>document_chunks</code> store, filterable by document or job</td>
 </tr>
 <tr>
 <td><code>POST</code></td>
 <td><code>/api/ask</code></td>
-<td><code>{"question", "collection"?, "top_k"?}</code> → answer + cited sources</td>
+<td><code>{"question", "collection"?, "doc_ids"?, "job_ids"?, "top_k"?}</code> → <code>answer</code>, <code>citations</code>, <code>sources</code>, <code>scope</code>, <code>unresolved_citations</code></td>
 </tr>
 <tr>
 <td><code>DELETE</code></td>
@@ -276,10 +311,13 @@ rag serve
 </tr>
 </tbody>
 </table>
-<pre><code class="language-bash">curl -F &quot;files=@samples/handbook.md&quot; -F collection=demo localhost:8000/api/documents
-curl localhost:8000/api/jobs/&lt;job_id&gt;
+<pre><code class="language-bash">curl -F &quot;files=@samples/handbook.md&quot; -F &quot;files=@samples/warranty.pdf&quot; -F collection=demo localhost:8000/api/documents
+curl localhost:8000/api/jobs/&lt;job_id&gt;                       # job status + its documents
+curl &quot;localhost:8000/api/documents?job_id=&lt;job_id&gt;&quot;         # documents of that job
 curl -X POST localhost:8000/api/ask -H 'content-type: application/json' \
      -d '{&quot;question&quot;:&quot;What is the meal allowance?&quot;,&quot;collection&quot;:&quot;demo&quot;}'
+curl -X POST localhost:8000/api/ask -H 'content-type: application/json' \
+     -d '{&quot;question&quot;:&quot;How long is the Titan warranty?&quot;,&quot;job_ids&quot;:[&quot;&lt;job_id&gt;&quot;]}'
 </code></pre>
 <h2 id="4-what-is-supported">4. What is supported</h2>
 <ul>
@@ -293,7 +331,8 @@ curl -X POST localhost:8000/api/ask -H 'content-type: application/json' \
   If neither tier yields text the job ends <code>FAILED</code> with the precise reason (e.g. Tesseract not installed).</li>
 <li><strong>Page metadata:</strong> PDF = printed page · DOCX = one page per heading section · HTML = one page, <code>&lt;title&gt;</code> as section ·
   MD = one page per heading · TXT = one page · CSV = one page per <code>CSV_ROWS_PER_PAGE</code> rows (header repeated) · images = one page per frame.</li>
-<li><strong>Multiple document sets</strong> via collections; reset or delete without restarting.</li>
+<li><strong>Multiple document sets</strong> via collections (names: 3-63 chars of letters, digits, <code>. _ -</code>); reset or delete without restarting.</li>
+<li><strong>Scoped questions</strong> over selected documents and/or jobs, with validated citations in every answer.</li>
 <li><strong>Any OpenAI-compatible LLM</strong>; <strong>any fastembed model</strong>; CPU-only inference.</li>
 <li><strong>Multi-file uploads</strong>, up to <code>MAX_UPLOAD_MB</code> (50 MB) per file.</li>
 <li><strong>Grounded answers</strong> with citations and an explicit "I could not find this in the provided documents." fallback.</li>
@@ -302,6 +341,7 @@ curl -X POST localhost:8000/api/ask -H 'content-type: application/json' \
 <ul>
 <li>Non-OpenAI-compatible generation APIs (e.g. raw Anthropic Messages API for generation — use a gateway such as OpenRouter or LiteLLM). The <strong>judge</strong> is Claude via the official SDK.</li>
 <li>Cross-encoder reranking, query rewriting, multi-hop or conversational memory: single-turn retrieval → answer only.</li>
+<li>Asking across several collections in one question (a scope must live in one collection).</li>
 <li>Authentication, multi-tenancy, rate limiting — run behind your own gateway.</li>
 <li>Horizontal scaling: BM25 lives in one process's memory; run a single replica.</li>
 <li>Formats outside the list above (PPTX, XLSX, EPUB, audio…). Adding one is a small extractor — see Tuning.</li>
@@ -310,11 +350,44 @@ curl -X POST localhost:8000/api/ask -H 'content-type: application/json' \
 <li>Real-time streaming of the answer (responses are returned whole).</li>
 </ul>
 <h2 id="6-architecture">6. Architecture</h2>
+<h3 id="the-three-stores">The three stores</h3>
+<table>
+<thead>
+<tr>
+<th>Store</th>
+<th>Where</th>
+<th>Serves</th>
+<th>Keyed / filtered by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>jobs</code></td>
+<td><code>data/jobs.json</code></td>
+<td>job listing, <code>GET /api/jobs</code>, job status (derived)</td>
+<td><code>job_id</code>, <code>collection</code></td>
+</tr>
+<tr>
+<td><code>documents</code></td>
+<td><code>data/documents.json</code></td>
+<td>document listing, <code>GET /api/documents</code>, per-file status and reason</td>
+<td><code>doc_id</code>, <code>job_id</code>, <code>collection</code>, <code>status</code>, <code>sha256</code></td>
+</tr>
+<tr>
+<td><code>document_chunks</code></td>
+<td>ChromaDB collection (<code>data/chroma/</code>)</td>
+<td>chunking output: text + embedding + metadata for retrieval; <code>GET /api/chunks</code></td>
+<td>metadata <code>collection</code>, <code>doc_id</code>, <code>job_id</code>, <code>page</code>, <code>section</code>, <code>chunk_index</code></td>
+</tr>
+</tbody>
+</table>
+<p>Every chunk carries <code>job_id</code> as well as <code>doc_id</code>, so filtering retrieval (or <code>/api/chunks</code>) by an
+upload job needs no join. Names are settings (<code>JOBS_STORE</code>, <code>DOCUMENTS_STORE</code>, <code>CHUNKS_STORE</code>).</p>
 <p>Full description with diagrams: <a href="/documentation/architecture.html"><code>documentation/architecture.md</code></a>
 (browser version: <a href="/documentation/architecture.html"><code>architecture.html</code></a>). In short:</p>
-<pre><code>upload ─► validate/hash ─► QUEUED ─► worker: extract (PyMuPDF/docx/bs4/stdlib → OCR fallback) ─► chunk ─► fastembed ─► ChromaDB + BM25 ─► COMPLETED
-ask    ─► embed ─► Chroma top-k ─┐
-       └► tokenize ─► BM25 top-k ─┴─► RRF ─► top FUSED_TOP_K ─► grounded prompt ─► OpenAI-compatible LLM ─► answer + sources
+<pre><code>upload ─► job ─► per file: validate/hash ─► QUEUED ─► worker: extract (PyMuPDF/docx/bs4/stdlib → OCR fallback) ─► chunk ─► fastembed ─► ChromaDB + BM25 ─► COMPLETED
+ask    ─► resolve scope (collection | doc_ids | job_ids) ─► embed ─► Chroma top-k ─┐
+                                                         └► tokenize ─► BM25 top-k ─┴─► RRF ─► grounded prompt ─► LLM ─► answer + validated citations + sources
 </code></pre>
 <h2 id="7-tuning-everything-lives-in-appconfigpy">7. Tuning — everything lives in <code>app/config.py</code></h2>
 <p>Every tunable is a field on <code>Settings</code> with a default, overridable from <code>.env</code> (same name);
@@ -455,8 +528,8 @@ python -m evaluation.run_eval --dataset evaluation/dataset.mydocs.jsonl
 </tr>
 <tr>
 <td>Vector DB</td>
-<td>ChromaDB embedded <code>PersistentClient</code></td>
-<td>required by the brief; zero extra services</td>
+<td>ChromaDB embedded <code>PersistentClient</code>, one <code>document_chunks</code> collection with metadata filters</td>
+<td>required by the brief; zero extra services; jobs/documents/sets are metadata, not separate indexes</td>
 </tr>
 <tr>
 <td>Lexical</td>
@@ -507,12 +580,12 @@ the binary ones with <code>pip install -r requirements-dev.txt &amp;&amp; python
 <pre><code class="language-bash">pytest   # chunker, RRF, every extractor, OCR-unavailable path, async job flow, duplicates, rejections, 502 on LLM errors
 </code></pre>
 <h2 id="11-repository-layout">11. Repository layout</h2>
-<pre><code>app/            FastAPI service (config, models, ingest/, retrieval/, llm/, rag.py, jobs.py, main.py, static/index.html)
+<pre><code>app/            FastAPI service (config, models, ingest/, retrieval/, llm/, rag.py, jobs.py [jobs + documents registry], main.py, static/index.html)
 cli/            `rag` CLI
 evaluation/     Claude-as-judge runner, dataset generator, example dataset, reports/
 documentation/  architecture.md(.html), flow.html (interactive), changelog.html, readme.html
 samples/        demo corpus     scripts/  make_samples.py, mock_llm.py, build_docs.py, sync_rules.py
-tests/          pytest suite    transcripts/  agent session exports
+tests/          pytest suite    transcripts/  agent session exports    plans/  the approved implementation plan + change log
 CLAUDE.md       rules for AI agents (source of truth) → synced to .cursor/rules/project.mdc and AGENTS.md
 memory.md       project memory: decisions, gotchas, conventions
 </code></pre>

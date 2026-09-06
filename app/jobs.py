@@ -23,7 +23,7 @@ def _load() -> None:
     global _loaded
     if _loaded:
         return
-    jpath = settings.DATA_DIR / "jobs.json"
+    jpath = settings.jobs_file
     if jpath.exists():
         try:
             for raw in json.loads(jpath.read_text()):
@@ -49,9 +49,9 @@ def _save() -> None:
     tmp = settings.documents_file.with_suffix(".tmp")
     tmp.write_text(json.dumps([d.model_dump() for d in _docs.values()], indent=2))
     tmp.replace(settings.documents_file)
-    jtmp = (settings.DATA_DIR / "jobs.json").with_suffix(".tmp")
+    jtmp = settings.jobs_file.with_suffix(".tmp")
     jtmp.write_text(json.dumps(list(_jobs.values()), indent=2))
-    jtmp.replace(settings.DATA_DIR / "jobs.json")
+    jtmp.replace(settings.jobs_file)
 
 
 def create_job(job_id: str, collection: str) -> None:

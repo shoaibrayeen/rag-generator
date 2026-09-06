@@ -1,7 +1,6 @@
-"""End-to-end API test with the LLM mocked (embeddings + Chroma + BM25 are real)."""
+"""End-to-end API tests with the LLM mocked (embeddings + Chroma + BM25 are real)."""
 import shutil
 import time
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,6 +9,7 @@ from app.config import settings
 from app.models import TERMINAL_STATUSES
 
 DATA = settings.DATA_DIR
+JOB_TERMINAL = ("COMPLETED", "FAILED")
 
 
 @pytest.fixture(scope="module")
@@ -22,20 +22,30 @@ def client():
     shutil.rmtree(DATA, ignore_errors=True)
 
 
-def _wait(client, job_id, timeout=60):
+def _wait_job(client, job_id, timeout=60):
     t0 = time.time()
     while time.time() - t0 < timeout:
-        d = client.get(f"/api/jobs/{job_id}").json()
-        if d["status"] in TERMINAL_STATUSES:
-            return d
+        j = client.get(f"/api/jobs/{job_id}").json()
+        if j["status"] in JOB_TERMINAL:
+            return j
         time.sleep(0.2)
     raise AssertionError("timed out waiting for job")
 
 
-def _upload(client, name, data, collection):
-    r = client.post("/api/documents", files=[("files", (name, data))], data={"collection": collection})
+def _upload(client, files, collection):
+    r = client.post("/api/documents", files=[("files", (n, b)) for n, b in files], data={"collection": collection})
     assert r.status_code == 202, r.text
-    return r.json()["documents"]
+    return r.json()
+
+
+POLICY = (b"# Refund policy\nCustomers may request a refund within 30 days of purchase.\n\n"
+          b"# Shipping\nOrders ship within 2 business days.\n")
+SECURITY = b"Passwords must be rotated every 180 days and be at least 14 characters long."
+
+
+def test_collection_name_validation(client):
+    r = client.post("/api/documents", files=[("files", ("a.txt", b"x"))], data={"collection": "ab"})
+    assert r.status_code == 400 and "3-63" in r.json()["detail"]
 
 
 def test_health(client):
@@ -46,73 +56,128 @@ def test_health(client):
                                   "EMPTY_FILE", "EXTRACTION_NOT_SUPPORTED", "UPLOAD_FAILED"}
 
 
-def test_async_upload_ask_duplicate_delete(client, monkeypatch):
-    captured = {}
+def test_job_lifecycle_listing_and_filter(client):
+    job = _upload(client, [("policy.md", POLICY), ("security.txt", SECURITY), ("junk.xyz", b"?")], "col1")
+    assert job["files"] == 3 and job["status"] in ("QUEUED", "PROCESSING")
+    assert {d["status"] for d in job["documents"]} <= {"QUEUED", "EXTRACTION_NOT_SUPPORTED"}
+    assert all(d["job_id"] == job["job_id"] for d in job["documents"])
+
+    done = _wait_job(client, job["job_id"])
+    assert done["status"] == "COMPLETED", done
+    assert done["counts"] == {"COMPLETED": 2, "EXTRACTION_NOT_SUPPORTED": 1}
+    assert done["reason"].startswith("partially completed")
+
+    jobs = client.get("/api/jobs", params={"collection": "col1"}).json()
+    assert [j["job_id"] for j in jobs] == [job["job_id"]]
+    assert {"job_id", "files", "status", "reason"} <= set(jobs[0])
+
+    # job -> document listing filter
+    docs = client.get("/api/documents", params={"job_id": job["job_id"]}).json()
+    assert {d["filename"] for d in docs} == {"policy.md", "security.txt", "junk.xyz"}
+    assert client.get("/api/documents", params={"job_id": "nope"}).json() == []
+    assert client.get("/api/jobs/nope").status_code == 404
+
+    # duplicate in a second job -> job COMPLETED (nothing new indexed), doc DUPLICATE linking original
+    job2 = _upload(client, [("policy-copy.md", POLICY)], "col1")
+    done2 = _wait_job(client, job2["job_id"])
+    dup = done2["documents"][0]
+    original = next(d for d in docs if d["filename"] == "policy.md")
+    assert dup["status"] == "DUPLICATE" and dup["duplicate_of"] == original["doc_id"]
+    assert done2["status"] == "COMPLETED" and done2["counts"] == {"DUPLICATE": 1}
+
+    # a job whose only file fails -> FAILED
+    job3 = _upload(client, [("broken.pdf", b"not a pdf")], "col1")
+    done3 = _wait_job(client, job3["job_id"])
+    assert done3["status"] == "FAILED" and done3["reason"].startswith("no file could be indexed")
+    assert done3["documents"][0]["reason"].startswith("PROCESSING FAILED: Could not read this pdf")
+
+
+def test_ask_scoped_by_docs_and_jobs_with_citations(client, monkeypatch):
+    seen = {}
 
     def fake_chat(messages, **kw):
-        captured["messages"] = messages
-        return "The refund window is 30 days [1]."
+        seen["prompt"] = messages[1]["content"]
+        # cites source 1 and a bogus 9 that must be removed and reported
+        return "The refund window is 30 days [1]. Bogus claim [9]."
 
     monkeypatch.setattr("app.rag.llm.chat", fake_chat)
 
-    content = (b"# Refund policy\nCustomers may request a refund within 30 days of purchase.\n\n"
-               b"# Shipping\nOrders ship within 2 business days.\n")
-    [doc] = _upload(client, "policy.md", content, "test")
-    assert doc["status"] == "QUEUED" and doc["job_id"] == doc["doc_id"]
-    d = _wait(client, doc["job_id"])
-    assert d["status"] == "COMPLETED", d
-    assert d["pages"] == 2 and d["chunks"] >= 2 and "Indexed 2 pages" in d["reason"]
+    jp = _upload(client, [("policy.md", POLICY)], "col2")
+    js = _upload(client, [("security.txt", SECURITY)], "col2")
+    _wait_job(client, jp["job_id"])
+    _wait_job(client, js["job_id"])
+    policy_id = jp["documents"][0]["doc_id"]
+    security_id = js["documents"][0]["doc_id"]
 
-    # Same bytes again -> DUPLICATE pointing at the original, never processed.
-    [dup] = _upload(client, "policy-copy.md", content, "test")
-    assert dup["status"] == "DUPLICATE" and dup["duplicate_of"] == doc["doc_id"]
-    assert dup["duplicate_of_name"] == "policy.md" and "policy.md" in dup["reason"]
-    # Same bytes in a different collection is not a duplicate.
-    [other] = _upload(client, "policy.md", content, "other")
-    assert other["status"] == "QUEUED"
-    _wait(client, other["job_id"])
-    client.delete("/api/collections/other")
-
-    r = client.post("/api/ask", json={"question": "How long is the refund window?", "collection": "test"})
+    # whole collection: both documents can appear
+    r = client.post("/api/ask", json={"question": "How long is the refund window?", "collection": "col2"})
     assert r.status_code == 200, r.text
     body = r.json()
-    assert "30 days" in body["answer"] and body["sources"]
-    top = body["sources"][0]
-    assert top["source"] == "policy.md" and "refund" in top["text"].lower()
-    assert top["dense_rank"] is not None or top["bm25_rank"] is not None
-    assert "CONTEXT:" in captured["messages"][1]["content"]
+    assert body["scope"] == {"collection": "col2", "doc_ids": [], "job_ids": [], "restricted": False}
+    assert body["answer"] == "The refund window is 30 days [1]. Bogus claim."  # only the bogus [9] marker is removed
+    assert [c["n"] for c in body["citations"]] == [1] and body["unresolved_citations"] == [9]
+    assert body["citations"][0]["source"] == "policy.md" and body["citations"][0]["page"] == 1
+    assert {s["doc_id"] for s in body["sources"]} == {policy_id, security_id}
 
-    listing = client.get("/api/documents", params={"collection": "test"}).json()
-    assert {x["status"] for x in listing} == {"COMPLETED", "DUPLICATE"}
-    assert client.get("/api/documents", params={"collection": "test", "status": "DUPLICATE"}).json()[0]["doc_id"] == dup["doc_id"]
+    # chunk store carries job_id / collection and can be filtered by either
+    chunks = client.get("/api/chunks", params={"collection": "col2", "job_id": jp["job_id"]}).json()
+    assert chunks and all(c["job_id"] == jp["job_id"] and c["doc_id"] == policy_id and c["collection"] == "col2" for c in chunks)
+    assert client.get("/api/chunks", params={"collection": "col2", "doc_id": security_id}).json()[0]["source"] == "security.txt"
+    assert client.get("/api/chunks", params={"collection": "col2", "job_id": "nope"}).json() == []
 
-    chunks = client.get("/api/chunks", params={"collection": "test"}).json()
-    assert len(chunks) == d["chunks"]
+    # scoped to the security document only: no policy chunk may be retrieved
+    r = client.post("/api/ask", json={"question": "How long is the refund window?", "doc_ids": [security_id]})
+    body = r.json()
+    assert body["scope"]["restricted"] and body["scope"]["doc_ids"] == [security_id]
+    assert {s["doc_id"] for s in body["sources"]} == {security_id}
+    assert "Passwords" in seen["prompt"] and "refund" not in seen["prompt"].lower().split("question:")[0]
 
-    assert client.delete(f"/api/documents/{doc['doc_id']}").status_code == 204
-    assert client.delete(f"/api/documents/{dup['doc_id']}").status_code == 204
-    assert client.get("/api/documents", params={"collection": "test"}).json() == []
-    r = client.post("/api/ask", json={"question": "anything", "collection": "test"})
+    # scoped by job id -> resolves to that job's COMPLETED documents
+    r = client.post("/api/ask", json={"question": "refund?", "job_ids": [jp["job_id"]]})
+    body = r.json()
+    assert body["scope"]["job_ids"] == [jp["job_id"]] and body["scope"]["doc_ids"] == [policy_id]
+    assert {s["doc_id"] for s in body["sources"]} == {policy_id}
+
+    # docs + jobs together are unioned
+    r = client.post("/api/ask", json={"question": "refund?", "job_ids": [js["job_id"]], "doc_ids": [policy_id]})
+    assert set(r.json()["scope"]["doc_ids"]) == {policy_id, security_id}
+
+    # validation
+    assert client.post("/api/ask", json={"question": "q", "doc_ids": ["missing"]}).status_code == 404
+    assert client.post("/api/ask", json={"question": "q", "job_ids": ["missing"]}).status_code == 404
+    r = client.post("/api/ask", json={"question": "q", "doc_ids": [policy_id], "collection": "other"})
+    assert r.status_code == 400 and "does not match" in r.json()["detail"]
+    bad = _upload(client, [("x.exe", b"MZ")], "col2")["documents"][0]["doc_id"]
+    r = client.post("/api/ask", json={"question": "q", "doc_ids": [bad]})
+    assert r.status_code == 409 and "EXTRACTION_NOT_SUPPORTED" in r.json()["detail"]
+    other = _upload(client, [("policy.md", POLICY)], "col3")
+    _wait_job(client, other["job_id"])
+    r = client.post("/api/ask", json={"question": "q", "doc_ids": [policy_id, other["documents"][0]["doc_id"]]})
+    assert r.status_code == 400 and "several collections" in r.json()["detail"]
+
+    # a duplicate id resolves to its original
+    dup = _upload(client, [("copy.md", POLICY)], "col2")["documents"][0]
+    r = client.post("/api/ask", json={"question": "refund?", "doc_ids": [dup["doc_id"]]})
+    assert r.status_code == 200 and r.json()["scope"]["doc_ids"] == [policy_id]
+
+    # delete + empty scope message
+    assert client.delete(f"/api/documents/{policy_id}").status_code == 204
+    r = client.post("/api/ask", json={"question": "anything", "collection": "col2", "doc_ids": [security_id]})
+    assert r.status_code == 200 and r.json()["sources"]
+    client.delete("/api/collections/col2")
+    client.delete("/api/collections/t3")
+    r = client.post("/api/ask", json={"question": "anything", "collection": "col2"})
     assert r.json()["sources"] == [] and "could not find" in r.json()["answer"]
+    assert client.get("/api/jobs", params={"collection": "col2"}).json() == []
 
 
 def test_rejections_become_records(client):
-    docs = client.post("/api/documents", files=[("files", ("x.exe", b"MZ")), ("files", ("empty.txt", b""))],
-                       data={"collection": "rej"}).json()["documents"]
-    by_name = {d["filename"]: d for d in docs}
+    job = _upload(client, [("x.exe", b"MZ"), ("empty.txt", b"")], "rej")
+    by_name = {d["filename"]: d for d in job["documents"]}
     assert by_name["x.exe"]["status"] == "EXTRACTION_NOT_SUPPORTED" and ".exe" in by_name["x.exe"]["reason"]
     assert by_name["empty.txt"]["status"] == "EMPTY_FILE"
-    assert client.get(f"/api/jobs/{docs[0]['job_id']}").status_code == 200
-    assert client.get("/api/jobs/nope").status_code == 404
+    assert job["status"] == "FAILED"
     client.delete("/api/collections/rej")
-
-
-def test_processing_failure_is_reported(client):
-    # A PDF that is not really a PDF -> FAILED with a "PROCESSING FAILED: ..." reason.
-    [doc] = _upload(client, "broken.pdf", b"not a pdf at all", "bad")
-    d = _wait(client, doc["job_id"])
-    assert d["status"] == "FAILED" and d["reason"].startswith("PROCESSING FAILED: Could not read this pdf")
-    client.delete("/api/collections/bad")
 
 
 def test_llm_error_is_502(client, monkeypatch):
@@ -122,8 +187,8 @@ def test_llm_error_is_502(client, monkeypatch):
         raise LLMError("bad key")
 
     monkeypatch.setattr("app.rag.llm.chat", boom)
-    [doc] = _upload(client, "n.txt", b"The capital of Freedonia is Marxburg.", "err")
-    _wait(client, doc["job_id"])
+    job = _upload(client, [("n.txt", b"The capital of Freedonia is Marxburg.")], "err")
+    _wait_job(client, job["job_id"])
     r = client.post("/api/ask", json={"question": "capital of Freedonia?", "collection": "err"})
     assert r.status_code == 502 and "bad key" in r.json()["detail"]
     client.delete("/api/collections/err")

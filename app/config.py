@@ -48,7 +48,12 @@ class Settings(BaseSettings):
 
     # --- Storage / server ---
     DATA_DIR: Path = Path("data")
-    DEFAULT_COLLECTION: str = "default"
+    DEFAULT_COLLECTION: str = "default"      # default document set (user-facing "collection")
+    # The three stores. `jobs` and `documents` are JSON registries under DATA_DIR; `document_chunks`
+    # is the single ChromaDB collection holding every chunk, tagged with collection / doc_id / job_id.
+    JOBS_STORE: str = "jobs"
+    DOCUMENTS_STORE: str = "documents"
+    CHUNKS_STORE: str = "document_chunks"
     MAX_UPLOAD_MB: int = 50
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
@@ -71,7 +76,11 @@ class Settings(BaseSettings):
 
     @property
     def documents_file(self) -> Path:
-        return self.DATA_DIR / "documents.json"
+        return self.DATA_DIR / f"{self.DOCUMENTS_STORE}.json"
+
+    @property
+    def jobs_file(self) -> Path:
+        return self.DATA_DIR / f"{self.JOBS_STORE}.json"
 
     @property
     def chat_completions_url(self) -> str:

@@ -57,7 +57,7 @@ def split_text(text: str, size: int | None = None, overlap: int | None = None) -
 
 
 def chunk_pages(pages: list[Page], *, doc_id: str, source: str, file_type: str,
-                collection: str) -> list[Chunk]:
+                collection: str, job_id: str = "") -> list[Chunk]:
     chunks: list[Chunk] = []
     idx = 0
     for page in pages:
@@ -74,6 +74,7 @@ def chunk_pages(pages: list[Page], *, doc_id: str, source: str, file_type: str,
                     text=piece,
                     metadata={
                         "doc_id": doc_id,
+                        "job_id": job_id,
                         "source": source,
                         "file_type": file_type,
                         "collection": collection,

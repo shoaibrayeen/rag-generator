@@ -107,6 +107,8 @@ class AskResponse(BaseModel):
 class ChunkOut(BaseModel):
     chunk_id: str
     doc_id: str
+    job_id: str
+    collection: str
     source: str
     page: int
     section: Optional[str] = None

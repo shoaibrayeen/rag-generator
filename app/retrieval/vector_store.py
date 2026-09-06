@@ -1,4 +1,9 @@
-"""ChromaDB (embedded PersistentClient) wrapper. One collection per document set."""
+"""ChromaDB (embedded PersistentClient) wrapper.
+
+All chunks live in ONE Chroma collection, `settings.CHUNKS_STORE` ("document_chunks").
+Every chunk's metadata carries `collection` (the user-facing document set), `doc_id` and
+`job_id`, so document sets, documents and upload jobs are all metadata filters.
+"""
 from __future__ import annotations
 
 import threading
@@ -21,72 +26,85 @@ def client() -> chromadb.ClientAPI:
     return _client
 
 
-def get_collection(name: str):
-    return client().get_or_create_collection(name=name, metadata={"hnsw:space": "cosine"})
+def store():
+    return client().get_or_create_collection(name=settings.CHUNKS_STORE, metadata={"hnsw:space": "cosine"})
 
 
-def list_collections() -> list[str]:
-    cols = client().list_collections()
-    return sorted(c.name if hasattr(c, "name") else str(c) for c in cols)
+def _where(collection: str, doc_ids: list[str] | None = None, job_id: str | None = None) -> dict:
+    clauses: list[dict] = [{"collection": collection}]
+    if doc_ids is not None:
+        clauses.append({"doc_id": {"$in": list(doc_ids) or ["__none__"]}})
+    if job_id:
+        clauses.append({"job_id": job_id})
+    return clauses[0] if len(clauses) == 1 else {"$and": clauses}
 
 
-def add_chunks(collection: str, ids: list[str], texts: list[str],
-               embeddings: list[list[float]], metadatas: list[dict]) -> None:
+def add_chunks(ids: list[str], texts: list[str], embeddings: list[list[float]], metadatas: list[dict]) -> None:
     if not ids:
         return
-    col = get_collection(collection)
-    # Chroma has a per-call batch limit; stay well under it.
-    step = 500
+    col = store()
+    step = 500  # stay under Chroma's per-call batch limit
     for i in range(0, len(ids), step):
         col.add(ids=ids[i:i + step], documents=texts[i:i + step],
                 embeddings=embeddings[i:i + step], metadatas=metadatas[i:i + step])
 
 
+def count(collection: str, doc_ids: list[str] | None = None, job_id: str | None = None) -> int:
+    return len(store().get(where=_where(collection, doc_ids, job_id), include=[])["ids"])
+
+
 def query_dense(collection: str, query_embedding: list[float], top_k: int,
                 doc_ids: list[str] | None = None) -> list[dict]:
-    col = get_collection(collection)
-    total = col.count()
-    if total == 0 or doc_ids == []:
+    if doc_ids == []:
         return []
-    kwargs = {}
-    if doc_ids:
-        kwargs["where"] = {"doc_id": {"$in": list(doc_ids)}}
-        total = min(total, col.count() if len(doc_ids) > 50 else
-                    len(col.get(where=kwargs["where"], include=[])["ids"]))
-        if total == 0:
-            return []
-    res = col.query(query_embeddings=[query_embedding], n_results=min(top_k, total),
-                    include=["documents", "metadatas", "distances"], **kwargs)
-    out = []
-    for cid, doc, meta, dist in zip(res["ids"][0], res["documents"][0],
-                                    res["metadatas"][0], res["distances"][0]):
-        out.append({"chunk_id": cid, "text": doc, "metadata": meta, "distance": dist})
-    return out
+    where = _where(collection, doc_ids)
+    total = count(collection, doc_ids)
+    if total == 0:
+        return []
+    res = store().query(query_embeddings=[query_embedding], n_results=min(top_k, total), where=where,
+                        include=["documents", "metadatas", "distances"])
+    return [{"chunk_id": cid, "text": doc, "metadata": meta, "distance": dist}
+            for cid, doc, meta, dist in zip(res["ids"][0], res["documents"][0],
+                                            res["metadatas"][0], res["distances"][0])]
 
 
-def get_all_chunks(collection: str) -> list[dict]:
-    col = get_collection(collection)
-    total = col.count()
+def get_all_chunks(collection: str, doc_ids: list[str] | None = None, job_id: str | None = None) -> list[dict]:
+    col = store()
+    where = _where(collection, doc_ids, job_id)
     out: list[dict] = []
     step = 1000
-    for offset in range(0, total, step):
-        res = col.get(include=["documents", "metadatas"], limit=step, offset=offset)
+    offset = 0
+    while True:
+        res = col.get(where=where, include=["documents", "metadatas"], limit=step, offset=offset)
         for cid, doc, meta in zip(res["ids"], res["documents"], res["metadatas"]):
             out.append({"chunk_id": cid, "text": doc, "metadata": meta})
+        if len(res["ids"]) < step:
+            break
+        offset += step
+    out.sort(key=lambda c: (c["metadata"].get("doc_id", ""), int(c["metadata"].get("chunk_index", 0))))
     return out
+
+
+def list_collections() -> list[str]:
+    """Distinct document sets that currently have chunks."""
+    col = store()
+    seen: set[str] = set()
+    offset, step = 0, 5000
+    while True:
+        res = col.get(include=["metadatas"], limit=step, offset=offset)
+        for meta in res["metadatas"]:
+            if meta and meta.get("collection"):
+                seen.add(meta["collection"])
+        if len(res["ids"]) < step:
+            break
+        offset += step
+    return sorted(seen)
 
 
 def delete_document(collection: str, doc_id: str) -> None:
-    col = get_collection(collection)
-    col.delete(where={"doc_id": doc_id})
+    store().delete(where=_where(collection, [doc_id]))
 
 
 def delete_collection(collection: str) -> None:
-    try:
-        client().delete_collection(collection)
-    except Exception:
-        pass
-
-
-def count(collection: str) -> int:
-    return get_collection(collection).count()
+    if count(collection):
+        store().delete(where=_where(collection))

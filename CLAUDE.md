@@ -53,4 +53,4 @@ A change is not complete if the docs describe something the code no longer does.
 
 ## Repo map
 `app/` service · `cli/` typer CLI · `evaluation/` Claude-as-judge · `documentation/` architecture (.md + .html), changelog.html, flow.html, readme.html · `samples/` demo corpus · `scripts/` sample generator, mock LLM ·
-`tests/` · `transcripts/` agent session exports.
+`tests/` · `transcripts/` agent session exports · `plans/` approved plan + mid-session change log (append there when the plan changes).

@@ -27,16 +27,16 @@ def run(doc_id: str, path: Path) -> None:
 
         jobs.update(doc_id, stage="chunking", pages=len(pages), ocr_pages=ocr_pages,
                     reason=f"Chunking {len(pages)} pages")
-        chunks = chunk_pages(pages, doc_id=doc_id, source=doc.filename,
-                             file_type=doc.file_type or "", collection=doc.collection)
+        chunks = chunk_pages(pages, doc_id=doc_id, source=doc.filename, file_type=doc.file_type or "",
+                             collection=doc.collection, job_id=doc.job_id)
         if not chunks:
             raise ValueError("Extraction produced no usable text.")
 
         jobs.update(doc_id, stage="embedding", chunks=len(chunks),
                     reason=f"Embedding {len(chunks)} chunks")
         vectors = embedder.embed_texts([c.text for c in chunks])
-        vector_store.add_chunks(doc.collection, [c.chunk_id for c in chunks],
-                                [c.text for c in chunks], vectors, [c.metadata for c in chunks])
+        vector_store.add_chunks([c.chunk_id for c in chunks], [c.text for c in chunks], vectors,
+                                [c.metadata for c in chunks])
         bm25_index.rebuild(doc.collection)
 
         ocr_note = f", {ocr_pages} via OCR" if ocr_pages else ""

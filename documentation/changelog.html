@@ -20,6 +20,21 @@
 <div class="sub">All notable changes to RAG Generator. Versions follow <code>app/main.py</code>'s FastAPI version.</div>
 
 <section class="rel">
+  <h2>0.4.0 <time>2026-09-06</time></h2>
+  <p><span class="tag added">Added</span> Jobs are first-class: one upload request = one job that owns its documents; questions can be scoped to documents and/or jobs; answers carry validated citations.</p>
+  <ul>
+    <li><span class="tag changed">Changed</span> <code>POST /api/documents</code> now returns the <b>job</b> (<code>job_id</code>, derived status <code>QUEUED / PROCESSING / COMPLETED / FAILED</code>, reason, per-status counts, documents). Document records keep the parent <code>job_id</code>.</li>
+    <li><span class="tag added">Added</span> <code>GET /api/jobs</code> listing (JOB ID · FILES · STATUS · REASON) and <code>GET /api/documents?job_id=</code> to see one job's documents. UI: Jobs panel; clicking a job filters the Documents panel.</li>
+    <li><span class="tag added">Added</span> Scoped asking: <code>POST /api/ask</code> accepts <code>doc_ids</code> and <code>job_ids</code>; both retrievers (Chroma <code>where</code> filter, BM25 candidate filter) honour the scope. Validation: 404 unknown id, 409 not COMPLETED, 400 mixed collections. UI: tick jobs/documents; CLI: <code>rag ask --doc … --job …</code>.</li>
+    <li><span class="tag added">Added</span> Answer payload: <code>citations</code> (sources actually cited, first-use order), <code>unresolved_citations</code> (bogus <code>[n]</code> markers removed from the text), <code>scope</code>. UI shows a Citations list under the answer and a "cited" badge on sources.</li>
+    <li><span class="tag added">Added</span> CLI <code>rag jobs</code>, <code>rag job &lt;id&gt;</code> (job + documents), <code>rag status --job</code>.</li>
+    <li><span class="tag changed">Changed</span> Storage is now three named stores: <code>jobs</code> and <code>documents</code> (JSON registries) and one ChromaDB collection <code>document_chunks</code> whose metadata carries <code>collection</code>, <code>doc_id</code> and <code>job_id</code>. Document sets, documents and jobs are metadata filters instead of separate Chroma collections; <code>GET /api/chunks</code> accepts <code>doc_id</code> / <code>job_id</code>.</li>
+    <li><span class="tag fixed">Fixed</span> Collection names are validated with ChromaDB's rule (3-63 chars) instead of accepting 2-char names Chroma rejects.</li>
+    <li><span class="tag docs">Docs</span> README, architecture, flow walkthrough updated; approved plan and its mid-session changes committed under <code>plans/</code>.</li>
+  </ul>
+</section>
+
+<section class="rel">
   <h2>0.3.0 <time>2026-09-06</time></h2>
   <p><span class="tag changed">Changed</span> Extraction is now explicitly two-tier: primary extractors first, Tesseract OCR strictly as the fallback.</p>
   <ul>
