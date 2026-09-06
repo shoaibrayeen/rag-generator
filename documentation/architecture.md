@@ -44,10 +44,13 @@ background worker (FastAPI BackgroundTasks, thread pool)
                       │                        │                       │
                       └──────── any exception ─┴───────────────────────┴──► FAILED ("PROCESSING FAILED: …")
 
-client ──GET /api/jobs──► job listing (JOB ID · FILES · STATUS · REASON)
+client ──GET /api/jobs?page=0&size=5──► paginated job listing (JOB ID · FILES · STATUS · REASON)
 client ──GET /api/jobs/{job_id}──► job + its documents
-client ──GET /api/documents?job_id=──► documents of one job (DOC ID · NAME · STATUS · REASON)
+client ──GET /api/documents?job_id=&page=0&size=5──► paginated documents of one job (DOC ID · NAME · STATUS · REASON)
 ```
+
+Listings are paginated in the API layer (`_paginate` in `app/main.py`): 0-based `page`, `size`
+defaulting to `LIST_PAGE_SIZE` (5), envelope `{items, page, size, total, pages, has_next, has_prev}`.
 
 Job status is never stored; it is derived from the documents each time it is read:
 `PROCESSING` if any document is processing (or some are queued and others done), `QUEUED` if

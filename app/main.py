@@ -24,7 +24,7 @@ from app.ingest import pipeline
 from app.ingest.extractors import file_type_for, ocr_available
 from app.llm.client import LLMError
 from app.models import (TERMINAL_STATUSES, AskRequest, AskResponse, ChunkOut, DocStatus, DocumentInfo,
-                        HealthResponse, JobDetail, JobInfo, UploadResponse)
+                        DocumentPage, HealthResponse, JobDetail, JobPage, UploadResponse)
 from app.rag import answer
 from app.retrieval import bm25_index, embedder, vector_store
 
@@ -36,6 +36,15 @@ STATIC_DIR = Path(__file__).parent / "static"
 DOCS_DIR = ROOT / "documentation"
 # Mirrors ChromaDB's collection-name rule: 3-63 chars, [a-zA-Z0-9._-], alphanumeric at both ends.
 _COLLECTION_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{1,61}[a-zA-Z0-9]$")
+
+
+def _paginate(items: list, page: int, size: int) -> dict:
+    """0-based page slicing shared by the job and document listings."""
+    total = len(items)
+    pages = (total + size - 1) // size if total else 0
+    start = page * size
+    return {"items": items[start:start + size], "page": page, "size": size, "total": total, "pages": pages,
+            "has_next": start + size < total, "has_prev": page > 0 and total > 0}
 
 
 def _collection(name: str | None) -> str:
@@ -57,7 +66,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="RAG Generator", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="RAG Generator", version="0.5.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 if DOCS_DIR.exists():
     app.mount("/documentation", StaticFiles(directory=DOCS_DIR), name="documentation")
@@ -147,10 +156,12 @@ async def upload(background: BackgroundTasks, files: list[UploadFile] = File(...
 
 # ----------------------------------------------------------------------- jobs
 
-@app.get("/api/jobs", response_model=list[JobInfo])
-def list_jobs(collection: str | None = Query(default=None)):
-    """Job listing: JOB ID, FILES, STATUS, REASON. Status is derived from the job's documents."""
-    return jobs.list_jobs(collection)
+@app.get("/api/jobs", response_model=JobPage)
+def list_jobs(collection: str | None = Query(default=None),
+              page: int = Query(default=0, ge=0, description="0-based page index"),
+              size: int = Query(default=settings.LIST_PAGE_SIZE, ge=1, le=settings.LIST_MAX_PAGE_SIZE)):
+    """Paginated job listing (newest first): JOB ID, FILES, STATUS, REASON. Defaults: page=0, size=5."""
+    return _paginate(jobs.list_jobs(collection), page, size)
 
 
 @app.get("/api/jobs/{job_id}", response_model=JobDetail)
@@ -164,14 +175,16 @@ def job_status(job_id: str):
 
 # ----------------------------------------------------------------------- documents
 
-@app.get("/api/documents", response_model=list[DocumentInfo])
+@app.get("/api/documents", response_model=DocumentPage)
 def list_documents(collection: str | None = Query(default=None),
                    job_id: str | None = Query(default=None),
-                   status: DocStatus | None = Query(default=None)):
-    """Listing of every uploaded file: DOC ID, NAME, STATUS, REASON (+ duplicate link).
-    Filter by job_id to see only the files of one upload request."""
+                   status: DocStatus | None = Query(default=None),
+                   page: int = Query(default=0, ge=0, description="0-based page index"),
+                   size: int = Query(default=settings.LIST_PAGE_SIZE, ge=1, le=settings.LIST_MAX_PAGE_SIZE)):
+    """Paginated listing of every uploaded file (newest first): DOC ID, NAME, STATUS, REASON
+    (+ duplicate link). Filter by job_id and/or status. Defaults: page=0, size=5."""
     docs = jobs.list_docs(collection, job_id)
-    return [d for d in docs if status is None or d.status == status]
+    return _paginate([d for d in docs if status is None or d.status == status], page, size)
 
 
 @app.get("/api/documents/{doc_id}", response_model=DocumentInfo)

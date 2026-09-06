@@ -64,7 +64,7 @@ for a completely different set and it works unchanged — no code edits, only <c
 </tr>
 <tr>
 <td>Docs</td>
-<td><a href="/documentation/"><code>documentation/</code></a> — <a href="/documentation/architecture.html">architecture</a> (<a href="/documentation/architecture.html">html</a>) · <a href="/documentation/flow.html">interactive flow walkthrough</a> · <a href="/documentation/changelog.html">changelog</a> · this README as <a href="/documentation/readme.html">html</a></td>
+<td><a href="/documentation/"><code>documentation/</code></a> — <a href="/documentation/architecture.html">architecture</a> (<a href="/documentation/architecture.html">html</a>) · <a href="/documentation/flow.html">interactive flow walkthrough</a> · <a href="/documentation/changelog.html">changelog</a> · <a href="/documentation/enhancements.html">enhancements</a> (<a href="/documentation/enhancements.html">html</a>) · this README as <a href="/documentation/readme.html">html</a></td>
 </tr>
 </tbody>
 </table>
@@ -141,7 +141,10 @@ returns immediately (HTTP 202) with the job — its <code>job_id</code>, a deriv
 document record per file. A background worker indexes the files; poll <code>GET /api/jobs/{job_id}</code>
 or watch the listings. The interactive walkthrough is in
 <a href="/documentation/flow.html"><code>documentation/flow.html</code></a>.</p>
-<p>Two listings:</p>
+<p>Two listings, both <strong>paginated</strong> (<code>page</code> is 0-based and defaults to <code>0</code>, <code>size</code> defaults to <code>5</code>,
+max <code>LIST_MAX_PAGE_SIZE</code>). Every listing response is an envelope:</p>
+<pre><code class="language-json">{&quot;items&quot;: [...], &quot;page&quot;: 0, &quot;size&quot;: 5, &quot;total&quot;: 12, &quot;pages&quot;: 3, &quot;has_next&quot;: true, &quot;has_prev&quot;: false}
+</code></pre>
 <ul>
 <li><strong>Jobs</strong> (<code>GET /api/jobs</code>, UI panel 2): <strong>JOB ID · FILES · STATUS · REASON</strong>. Job status is
   derived from its documents every time it is read: <code>QUEUED</code> (nothing started), <code>PROCESSING</code>
@@ -230,18 +233,19 @@ citation it cannot open.</p>
 <h3 id="ui-httplocalhost8000">UI (<a href="http://localhost:8000">http://localhost:8000</a>)</h3>
 <ol>
 <li><strong>Upload</strong> — drop files, optionally name a <em>collection</em> (a document set); they are submitted as one job and the job id is shown.</li>
-<li><strong>Jobs</strong> — JOB ID · FILES · STATUS · REASON. Click a row to filter the documents to that job; tick a job to ask over it.</li>
-<li><strong>Documents</strong> — DOC ID · NAME · STATUS · REASON for every file (job id shown under the doc id); duplicates link to their original; tick <code>COMPLETED</code> documents to ask over them; delete finished ones with ✕.</li>
+<li><strong>Jobs</strong> — JOB ID · FILES · STATUS · REASON, 5 per page with prev/next. Click a row to filter the documents to that job; tick a job to ask over it.</li>
+<li><strong>Documents</strong> — DOC ID · NAME · STATUS · REASON for every file, 5 per page with prev/next (job id shown under the doc id); duplicates link to their original; tick <code>COMPLETED</code> documents to ask over them; delete finished ones with ✕.</li>
 <li><strong>Ask</strong> — the scope line shows what will be searched (whole collection or the ticked jobs/documents). The answer shows <code>[n]</code> markers, then a <strong>Citations</strong> list (file, page, section, doc id); click a marker to jump to the chunk.</li>
 <li><strong>Sources</strong> — every retrieved chunk with file, page/section, doc id, whether it came from dense or BM25 (or both), its RRF score and a "cited" badge. OCR'd chunks are flagged.</li>
 </ol>
 <p><strong>Reset collection</strong> wipes a document set so you can load a different one.</p>
 <h3 id="cli">CLI</h3>
 <pre><code class="language-bash">rag ingest samples/*.md samples/*.pdf --collection demo   # one job; prints the job id, waits for it
-rag jobs                                                  # JOB ID · FILES · STATUS · REASON
+rag jobs                                                  # JOB ID · FILES · STATUS · REASON (page 0, size 5)
+rag jobs --page 1 --size 10                               # next page / larger page
 rag job &lt;job_id&gt;                                          # one job and its documents
-rag status --watch                                        # DOC ID · NAME · STATUS · REASON (all documents)
-rag status --job &lt;job_id&gt;                                 # documents of one job
+rag status --watch                                        # DOC ID · NAME · STATUS · REASON (page 0, size 5)
+rag status --job &lt;job_id&gt; --page 0 --size 5               # documents of one job
 rag ask &quot;How many days of annual leave do employees get?&quot; -c demo          # whole collection
 rag ask &quot;What is the notice period?&quot; --doc &lt;doc_id&gt; --doc &lt;doc_id&gt;         # only these documents
 rag ask &quot;Summarise the warranty terms&quot; --job &lt;job_id&gt; --show-sources        # only this job's documents
@@ -271,8 +275,8 @@ rag serve
 </tr>
 <tr>
 <td><code>GET</code></td>
-<td><code>/api/jobs?collection=</code></td>
-<td>job listing: job id, files, status, reason, counts per status</td>
+<td><code>/api/jobs?collection=&amp;page=0&amp;size=5</code></td>
+<td>paginated job listing (newest first): job id, files, status, reason, counts per status</td>
 </tr>
 <tr>
 <td><code>GET</code></td>
@@ -281,8 +285,8 @@ rag serve
 </tr>
 <tr>
 <td><code>GET</code></td>
-<td><code>/api/documents?collection=&amp;job_id=&amp;status=</code></td>
-<td>document listing: doc id, name, status, reason, duplicate link; filter by job</td>
+<td><code>/api/documents?collection=&amp;job_id=&amp;status=&amp;page=0&amp;size=5</code></td>
+<td>paginated document listing (newest first): doc id, name, status, reason, duplicate link; filter by job / status</td>
 </tr>
 <tr>
 <td><code>GET</code></td>
@@ -447,6 +451,11 @@ ask    ─► resolve scope (collection | doc_ids | job_ids) ─► embed ─►
 <td>upload limit, collection used when none is given</td>
 </tr>
 <tr>
+<td><code>LIST_PAGE_SIZE</code> / <code>LIST_MAX_PAGE_SIZE</code></td>
+<td>5 / 200</td>
+<td>default and maximum <code>size</code> for the job and document listings (<code>page</code> is 0-based)</td>
+</tr>
+<tr>
 <td><code>APP_PORT</code> / <code>APP_HOST</code></td>
 <td>8000 / <code>0.0.0.0</code></td>
 <td>port the app listens on (<code>rag serve</code>) and the host port docker compose publishes (<code>${APP_PORT:-8000}</code>)</td>
@@ -583,7 +592,7 @@ the binary ones with <code>pip install -r requirements-dev.txt &amp;&amp; python
 <pre><code>app/            FastAPI service (config, models, ingest/, retrieval/, llm/, rag.py, jobs.py [jobs + documents registry], main.py, static/index.html)
 cli/            `rag` CLI
 evaluation/     Claude-as-judge runner, dataset generator, example dataset, reports/
-documentation/  architecture.md(.html), flow.html (interactive), changelog.html, readme.html
+documentation/  architecture.md(.html), enhancements.md(.html), flow.html (interactive), changelog.html, readme.html
 samples/        demo corpus     scripts/  make_samples.py, mock_llm.py, build_docs.py, sync_rules.py
 tests/          pytest suite    transcripts/  agent session exports    plans/  the approved implementation plan + change log
 CLAUDE.md       rules for AI agents (source of truth) → synced to .cursor/rules/project.mdc and AGENTS.md

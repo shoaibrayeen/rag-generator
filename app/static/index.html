@@ -49,6 +49,7 @@
   .chip button { background:none; color:var(--accent); padding:0; font-size:14px; line-height:1; }
   .scope { background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:12px; margin-bottom:8px; }
   .scroll { max-height:320px; overflow:auto; }
+  .pager { display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-top:8px; font-size:12px; color:var(--muted); }
 </style>
 </head>
 <body>
@@ -80,6 +81,7 @@
         <thead><tr><th></th><th>Job ID</th><th>Files</th><th>Status</th><th>Reason</th></tr></thead>
         <tbody id="jobs"><tr><td colspan="5" class="muted">No jobs yet.</td></tr></tbody>
       </table></div>
+      <div class="pager" id="jobsPager"></div>
     </div>
 
     <div class="card">
@@ -89,6 +91,7 @@
         <thead><tr><th></th><th>Doc ID</th><th>Name</th><th>Status</th><th>Reason</th><th></th></tr></thead>
         <tbody id="docs"><tr><td colspan="6" class="muted">No documents yet.</td></tr></tbody>
       </table></div>
+      <div class="pager" id="docsPager"></div>
     </div>
   </section>
 
@@ -121,6 +124,8 @@ const BAD = ['FAILED','UPLOAD_FAILED','EXTRACTION_NOT_SUPPORTED','EMPTY_FILE'];
 let pending = [], pollTimer = null, activeJob = null;
 const selDocs = new Set(), selJobs = new Set();
 let docsCache = [], jobsCache = [];
+const PAGE_SIZE = 5;                      // listing page size (API default LIST_PAGE_SIZE)
+const paging = { jobs: {page: 0, meta: null}, docs: {page: 0, meta: null} };
 
 async function api(path, opts = {}) {
   const r = await fetch(path, opts);
@@ -181,10 +186,14 @@ async function deleteDoc(id) {
 /* ---------------- jobs + documents ---------------- */
 async function refresh() {
   try {
-    [jobsCache, docsCache] = await Promise.all([
-      api(`/api/jobs?collection=${encodeURIComponent(col())}`),
-      api(`/api/documents?collection=${encodeURIComponent(col())}${activeJob ? `&job_id=${activeJob}` : ''}`),
+    let [j, d] = await Promise.all([
+      api(`/api/jobs?collection=${encodeURIComponent(col())}&page=${paging.jobs.page}&size=${PAGE_SIZE}`),
+      api(`/api/documents?collection=${encodeURIComponent(col())}${activeJob ? `&job_id=${activeJob}` : ''}&page=${paging.docs.page}&size=${PAGE_SIZE}`),
     ]);
+    // if a page emptied out (deletes), step back and reload
+    if (!j.items.length && j.page > 0) { paging.jobs.page = Math.max(0, j.pages - 1); return refresh(); }
+    if (!d.items.length && d.page > 0) { paging.docs.page = Math.max(0, d.pages - 1); return refresh(); }
+    jobsCache = j.items; docsCache = d.items; paging.jobs.meta = j; paging.docs.meta = d;
   } catch (e) { return; }
   renderJobs(); renderDocs(); renderScope();
   const busy = jobsCache.some(j => !['COMPLETED', 'FAILED'].includes(j.status));
@@ -194,6 +203,7 @@ async function refresh() {
 
 function renderJobs() {
   const tb = $('jobs');
+  renderPager('jobs', 'jobsPager');
   if (!jobsCache.length) { tb.innerHTML = '<tr><td colspan="5" class="muted">No jobs in this collection.</td></tr>'; return; }
   tb.innerHTML = jobsCache.map(j => `
     <tr class="clickable ${j.job_id === activeJob ? 'active' : ''}" onclick="filterJob('${j.job_id}')">
@@ -205,13 +215,23 @@ function renderJobs() {
     </tr>`).join('');
 }
 
-function filterJob(id) { activeJob = activeJob === id ? null : id; refresh(); }
+function renderPager(kind, elId) {
+  const m = paging[kind].meta;
+  const el = $(elId);
+  if (!m || m.total === 0) { el.innerHTML = ''; return; }
+  el.innerHTML = `<button class="small secondary" ${m.has_prev ? '' : 'disabled'} onclick="goPage('${kind}', ${m.page - 1})">‹ prev</button>
+    <span>page ${m.page + 1} / ${m.pages} · ${m.total} total · ${m.size} per page</span>
+    <button class="small secondary" ${m.has_next ? '' : 'disabled'} onclick="goPage('${kind}', ${m.page + 1})">next ›</button>`;
+}
+function goPage(kind, page) { paging[kind].page = Math.max(0, page); refresh(); }
+function filterJob(id) { activeJob = activeJob === id ? null : id; paging.docs.page = 0; refresh(); }
 function renderFilterChip() {
   $('jobFilter').innerHTML = activeJob ? `<span class="chip">job ${esc(activeJob)} <button title="Show all documents" onclick="filterJob('${activeJob}')">×</button></span>` : '';
 }
 
 function renderDocs() {
   renderFilterChip();
+  renderPager('docs', 'docsPager');
   const tb = $('docs');
   if (!docsCache.length) { tb.innerHTML = `<tr><td colspan="6" class="muted">${activeJob ? 'This job has no documents.' : 'No documents in this collection.'}</td></tr>`; return; }
   tb.innerHTML = docsCache.map(d => `
@@ -224,7 +244,7 @@ function renderDocs() {
       <td>${TERMINAL.includes(d.status) ? `<button class="del" title="Delete" onclick="deleteDoc('${d.doc_id}')">✕</button>` : ''}</td>
     </tr>`).join('');
 }
-function highlight(id) { activeJob = null; refresh().then(() => { const row = $(`row-${id}`); if (row) { row.style.background = '#fef9c3'; row.scrollIntoView({behavior:'smooth', block:'center'}); setTimeout(() => row.style.background = '', 1500); } }); }
+function highlight(id) { activeJob = null; paging.docs.page = 0; refresh().then(() => { const row = $(`row-${id}`); if (row) { row.style.background = '#fef9c3'; row.scrollIntoView({behavior:'smooth', block:'center'}); setTimeout(() => row.style.background = '', 1500); } }); }
 function toggleDoc(id, on) { on ? selDocs.add(id) : selDocs.delete(id); renderScope(); }
 function toggleJob(id, on) { on ? selJobs.add(id) : selJobs.delete(id); renderScope(); }
 function clearScope() { selDocs.clear(); selJobs.clear(); renderJobs(); renderDocs(); renderScope(); }
@@ -236,7 +256,7 @@ function renderScope() {
     ? `<b>Scope:</b> only ${parts.join(' + ')} <button class="small secondary" onclick="clearScope()">clear</button>`
     : `<b>Scope:</b> every COMPLETED document in collection <b>${esc(col())}</b>. Tick jobs or documents on the left to narrow it.`;
 }
-$('collection').onchange = () => { activeJob = null; selDocs.clear(); selJobs.clear(); refresh(); };
+$('collection').onchange = () => { activeJob = null; selDocs.clear(); selJobs.clear(); paging.jobs.page = 0; paging.docs.page = 0; refresh(); };
 
 /* ---------------- ask ---------------- */
 $('askBtn').onclick = ask;

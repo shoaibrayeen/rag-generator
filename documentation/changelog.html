@@ -20,6 +20,16 @@
 <div class="sub">All notable changes to RAG Generator. Versions follow <code>app/main.py</code>'s FastAPI version.</div>
 
 <section class="rel">
+  <h2>0.5.0 <time>2026-09-06</time></h2>
+  <p><span class="tag added">Added</span> Pagination for the job and document listings.</p>
+  <ul>
+    <li><span class="tag changed">Changed</span> <code>GET /api/jobs</code> and <code>GET /api/documents</code> return an envelope <code>{items, page, size, total, pages, has_next, has_prev}</code>; <code>page</code> is 0-based (default 0), <code>size</code> defaults to 5 (<code>LIST_PAGE_SIZE</code>, max <code>LIST_MAX_PAGE_SIZE</code>).</li>
+    <li><span class="tag added">Added</span> UI prev/next pagers under the Jobs and Documents panels; CLI <code>--page</code> / <code>--size</code> on <code>rag jobs</code> and <code>rag status</code>.</li>
+    <li><span class="tag docs">Docs</span> <a href="/documentation/enhancements.html">enhancements.md</a> lists future improvements; README, architecture and plan change log updated.</li>
+  </ul>
+</section>
+
+<section class="rel">
   <h2>0.4.0 <time>2026-09-06</time></h2>
   <p><span class="tag added">Added</span> Jobs are first-class: one upload request = one job that owns its documents; questions can be scoped to documents and/or jobs; answers carry validated citations.</p>
   <ul>

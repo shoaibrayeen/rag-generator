@@ -67,14 +67,18 @@ def test_job_lifecycle_listing_and_filter(client):
     assert done["counts"] == {"COMPLETED": 2, "EXTRACTION_NOT_SUPPORTED": 1}
     assert done["reason"].startswith("partially completed")
 
-    jobs = client.get("/api/jobs", params={"collection": "col1"}).json()
+    page = client.get("/api/jobs", params={"collection": "col1"}).json()
+    assert page["page"] == 0 and page["size"] == 5 and page["total"] == 1 and page["pages"] == 1
+    assert page["has_next"] is False and page["has_prev"] is False
+    jobs = page["items"]
     assert [j["job_id"] for j in jobs] == [job["job_id"]]
     assert {"job_id", "files", "status", "reason"} <= set(jobs[0])
 
     # job -> document listing filter
-    docs = client.get("/api/documents", params={"job_id": job["job_id"]}).json()
+    docs = client.get("/api/documents", params={"job_id": job["job_id"]}).json()["items"]
     assert {d["filename"] for d in docs} == {"policy.md", "security.txt", "junk.xyz"}
-    assert client.get("/api/documents", params={"job_id": "nope"}).json() == []
+    empty = client.get("/api/documents", params={"job_id": "nope"}).json()
+    assert empty["items"] == [] and empty["total"] == 0 and empty["pages"] == 0
     assert client.get("/api/jobs/nope").status_code == 404
 
     # duplicate in a second job -> job COMPLETED (nothing new indexed), doc DUPLICATE linking original
@@ -168,7 +172,7 @@ def test_ask_scoped_by_docs_and_jobs_with_citations(client, monkeypatch):
     client.delete("/api/collections/t3")
     r = client.post("/api/ask", json={"question": "anything", "collection": "col2"})
     assert r.json()["sources"] == [] and "could not find" in r.json()["answer"]
-    assert client.get("/api/jobs", params={"collection": "col2"}).json() == []
+    assert client.get("/api/jobs", params={"collection": "col2"}).json()["items"] == []
 
 
 def test_rejections_become_records(client):
@@ -192,3 +196,25 @@ def test_llm_error_is_502(client, monkeypatch):
     r = client.post("/api/ask", json={"question": "capital of Freedonia?", "collection": "err"})
     assert r.status_code == 502 and "bad key" in r.json()["detail"]
     client.delete("/api/collections/err")
+
+
+def test_pagination_defaults_and_navigation(client):
+    # 7 single-file jobs -> 7 jobs and 7 documents; default page size is 5, page index is 0-based
+    for i in range(7):
+        _upload(client, [(f"f{i}.txt", f"document number {i} about pagination".encode())], "pag")
+    first = client.get("/api/jobs", params={"collection": "pag"}).json()
+    assert first["page"] == 0 and first["size"] == 5 and first["total"] == 7 and first["pages"] == 2
+    assert len(first["items"]) == 5 and first["has_next"] and not first["has_prev"]
+    second = client.get("/api/jobs", params={"collection": "pag", "page": 1}).json()
+    assert len(second["items"]) == 2 and second["has_prev"] and not second["has_next"]
+    assert {j["job_id"] for j in first["items"]}.isdisjoint({j["job_id"] for j in second["items"]})
+    # newest first: page 0 holds the most recent uploads
+    assert first["items"][0]["created_at"] >= second["items"][-1]["created_at"]
+    beyond = client.get("/api/jobs", params={"collection": "pag", "page": 5}).json()
+    assert beyond["items"] == [] and beyond["total"] == 7
+
+    docs = client.get("/api/documents", params={"collection": "pag", "size": 3, "page": 2}).json()
+    assert docs["pages"] == 3 and len(docs["items"]) == 1 and docs["has_prev"] and not docs["has_next"]
+    assert client.get("/api/documents", params={"collection": "pag", "size": 0}).status_code == 422
+    assert client.get("/api/documents", params={"collection": "pag", "page": -1}).status_code == 422
+    client.delete("/api/collections/pag")

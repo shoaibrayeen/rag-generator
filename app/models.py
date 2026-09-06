@@ -59,6 +59,23 @@ class JobDetail(JobInfo):
     documents: list[DocumentInfo]
 
 
+class PageMeta(BaseModel):
+    page: int                        # 0-based page index
+    size: int                        # requested page size
+    total: int                       # total matching items
+    pages: int                       # total number of pages (0 when total == 0)
+    has_next: bool
+    has_prev: bool
+
+
+class JobPage(PageMeta):
+    items: list[JobInfo]
+
+
+class DocumentPage(PageMeta):
+    items: list[DocumentInfo]
+
+
 UploadResponse = JobDetail
 
 

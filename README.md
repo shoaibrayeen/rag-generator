@@ -17,7 +17,7 @@ for a completely different set and it works unchanged — no code edits, only `.
 | Generation | any OpenAI-compatible LLM endpoint, configured only in `.env` |
 | Evaluation | own script with **Claude as judge** |
 | Deployment | Docker + docker compose |
-| Docs | [`documentation/`](documentation/) — [architecture](documentation/architecture.md) ([html](documentation/architecture.html)) · [interactive flow walkthrough](documentation/flow.html) · [changelog](documentation/changelog.html) · this README as [html](documentation/readme.html) |
+| Docs | [`documentation/`](documentation/) — [architecture](documentation/architecture.md) ([html](documentation/architecture.html)) · [interactive flow walkthrough](documentation/flow.html) · [changelog](documentation/changelog.html) · [enhancements](documentation/enhancements.md) ([html](documentation/enhancements.html)) · this README as [html](documentation/readme.html) |
 
 ---
 
@@ -81,7 +81,12 @@ document record per file. A background worker indexes the files; poll `GET /api/
 or watch the listings. The interactive walkthrough is in
 [`documentation/flow.html`](documentation/flow.html).
 
-Two listings:
+Two listings, both **paginated** (`page` is 0-based and defaults to `0`, `size` defaults to `5`,
+max `LIST_MAX_PAGE_SIZE`). Every listing response is an envelope:
+
+```json
+{"items": [...], "page": 0, "size": 5, "total": 12, "pages": 3, "has_next": true, "has_prev": false}
+```
 
 - **Jobs** (`GET /api/jobs`, UI panel 2): **JOB ID · FILES · STATUS · REASON**. Job status is
   derived from its documents every time it is read: `QUEUED` (nothing started), `PROCESSING`
@@ -125,8 +130,8 @@ citation it cannot open.
 
 ### UI (<http://localhost:8000>)
 1. **Upload** — drop files, optionally name a *collection* (a document set); they are submitted as one job and the job id is shown.
-2. **Jobs** — JOB ID · FILES · STATUS · REASON. Click a row to filter the documents to that job; tick a job to ask over it.
-3. **Documents** — DOC ID · NAME · STATUS · REASON for every file (job id shown under the doc id); duplicates link to their original; tick `COMPLETED` documents to ask over them; delete finished ones with ✕.
+2. **Jobs** — JOB ID · FILES · STATUS · REASON, 5 per page with prev/next. Click a row to filter the documents to that job; tick a job to ask over it.
+3. **Documents** — DOC ID · NAME · STATUS · REASON for every file, 5 per page with prev/next (job id shown under the doc id); duplicates link to their original; tick `COMPLETED` documents to ask over them; delete finished ones with ✕.
 4. **Ask** — the scope line shows what will be searched (whole collection or the ticked jobs/documents). The answer shows `[n]` markers, then a **Citations** list (file, page, section, doc id); click a marker to jump to the chunk.
 5. **Sources** — every retrieved chunk with file, page/section, doc id, whether it came from dense or BM25 (or both), its RRF score and a "cited" badge. OCR'd chunks are flagged.
 
@@ -135,10 +140,11 @@ citation it cannot open.
 ### CLI
 ```bash
 rag ingest samples/*.md samples/*.pdf --collection demo   # one job; prints the job id, waits for it
-rag jobs                                                  # JOB ID · FILES · STATUS · REASON
+rag jobs                                                  # JOB ID · FILES · STATUS · REASON (page 0, size 5)
+rag jobs --page 1 --size 10                               # next page / larger page
 rag job <job_id>                                          # one job and its documents
-rag status --watch                                        # DOC ID · NAME · STATUS · REASON (all documents)
-rag status --job <job_id>                                 # documents of one job
+rag status --watch                                        # DOC ID · NAME · STATUS · REASON (page 0, size 5)
+rag status --job <job_id> --page 0 --size 5               # documents of one job
 rag ask "How many days of annual leave do employees get?" -c demo          # whole collection
 rag ask "What is the notice period?" --doc <doc_id> --doc <doc_id>         # only these documents
 rag ask "Summarise the warranty terms" --job <job_id> --show-sources        # only this job's documents
@@ -152,9 +158,9 @@ The CLI talks to the API at `RAG_API_URL` (default `http://localhost:8000`, over
 |---|---|---|
 | `GET` | `/api/health` | status, models, supported extensions, status vocabulary, collections, non-secret settings |
 | `POST` | `/api/documents` | multipart `files[]` (+ `collection`) → **202** with the **job** (`job_id`, status, one document record per file) |
-| `GET` | `/api/jobs?collection=` | job listing: job id, files, status, reason, counts per status |
+| `GET` | `/api/jobs?collection=&page=0&size=5` | paginated job listing (newest first): job id, files, status, reason, counts per status |
 | `GET` | `/api/jobs/{job_id}` | poll one job, including its documents |
-| `GET` | `/api/documents?collection=&job_id=&status=` | document listing: doc id, name, status, reason, duplicate link; filter by job |
+| `GET` | `/api/documents?collection=&job_id=&status=&page=0&size=5` | paginated document listing (newest first): doc id, name, status, reason, duplicate link; filter by job / status |
 | `GET` | `/api/documents/{doc_id}` | one document |
 | `DELETE` | `/api/documents/{doc_id}` | remove a finished document and its chunks |
 | `GET` | `/api/chunks?collection=&doc_id=&job_id=&limit=&offset=` | inspect the `document_chunks` store, filterable by document or job |
@@ -239,6 +245,7 @@ Every tunable is a field on `Settings` with a default, overridable from `.env` (
 | `OCR_ENABLED` / `OCR_MIN_CHARS_PER_PAGE` / `OCR_LANG` / `OCR_DPI` | true / 20 / eng / 200 | when and how the Tesseract fallback runs |
 | `LLM_TEMPERATURE` / `LLM_MAX_TOKENS` / `LLM_TIMEOUT_S` | 0.1 / 1024 / 60 | generation parameters |
 | `MAX_UPLOAD_MB` / `DEFAULT_COLLECTION` | 50 / `default` | upload limit, collection used when none is given |
+| `LIST_PAGE_SIZE` / `LIST_MAX_PAGE_SIZE` | 5 / 200 | default and maximum `size` for the job and document listings (`page` is 0-based) |
 | `APP_PORT` / `APP_HOST` | 8000 / `0.0.0.0` | port the app listens on (`rag serve`) and the host port docker compose publishes (`${APP_PORT:-8000}`) |
 | `JUDGE_MODEL` / `EVAL_MIN_FAITHFULNESS` | `claude-opus-5` / 3.5 | evaluation |
 
@@ -311,7 +318,7 @@ pytest   # chunker, RRF, every extractor, OCR-unavailable path, async job flow, 
 app/            FastAPI service (config, models, ingest/, retrieval/, llm/, rag.py, jobs.py [jobs + documents registry], main.py, static/index.html)
 cli/            `rag` CLI
 evaluation/     Claude-as-judge runner, dataset generator, example dataset, reports/
-documentation/  architecture.md(.html), flow.html (interactive), changelog.html, readme.html
+documentation/  architecture.md(.html), enhancements.md(.html), flow.html (interactive), changelog.html, readme.html
 samples/        demo corpus     scripts/  make_samples.py, mock_llm.py, build_docs.py, sync_rules.py
 tests/          pytest suite    transcripts/  agent session exports    plans/  the approved implementation plan + change log
 CLAUDE.md       rules for AI agents (source of truth) → synced to .cursor/rules/project.mdc and AGENTS.md

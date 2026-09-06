@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     DOCUMENTS_STORE: str = "documents"
     CHUNKS_STORE: str = "document_chunks"
     MAX_UPLOAD_MB: int = 50
+    LIST_PAGE_SIZE: int = 5                  # default page size for job / document listings (page is 0-based)
+    LIST_MAX_PAGE_SIZE: int = 200
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
 

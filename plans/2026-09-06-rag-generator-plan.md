@@ -262,6 +262,8 @@ matches what was shipped.
 | 6 | **Tesseract strictly as fallback**; **PyMuPDF** replaces pypdf/pypdfium2 as the primary PDF extractor; fallback tier for PDF (OCR all pages), DOCX (OCR embedded images), HTML (stdlib stripping); `ExtractionError` gives precise FAILED reasons | `app/ingest/extractors.py`, `app/ingest/pipeline.py` |
 | 7 | **Jobs as first-class objects**: one upload request = one job with derived status (`QUEUED/PROCESSING/COMPLETED/FAILED`), `GET /api/jobs`, job → documents filter, and **scoped asking** by selected documents and/or jobs with validated `citations` in the answer | `app/jobs.py`, `app/main.py`, `app/rag.py`, `app/retrieval/*`, UI, CLI `jobs`/`job`/`ask --doc/--job` |
 | 8 | This plan committed inside the repo under `plans/` | `plans/` |
+| 9 | Three named stores: `jobs`, `documents`, `document_chunks` (single Chroma collection with `collection`/`doc_id`/`job_id` metadata) | `app/config.py`, `app/retrieval/vector_store.py` |
+| 10 | **Pagination** for job and document listings (0-based `page`, default `size` 5) in API, UI and CLI; `documentation/enhancements.md` | `app/main.py`, `app/static/index.html`, `cli/rag_cli.py`, `documentation/enhancements.md` |
 
 Verification performed locally (no Docker/Tesseract on the dev machine): `pytest` suite,
 `rag ingest` of the full sample corpus (duplicate, unsupported, empty and OCR-only cases

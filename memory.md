@@ -54,6 +54,8 @@ evaluation script.
 - Scoped ask: `doc_ids`/`job_ids` → concrete COMPLETED doc set in one collection; Chroma `where`
   `{doc_id: {$in: [...]}}` + BM25 candidate filter. Citations are validated in `app/rag.py`
   (`extract_citations`); bogus `[n]` markers are stripped and reported.
+- Listings are paginated: 0-based `page`, default `size` 5 (`LIST_PAGE_SIZE`), envelope with
+  `items/total/pages/has_next/has_prev`. Clients must read `.items`.
 - Collection names follow Chroma's rule (3-63 chars, alnum at both ends) — 2-char names fail in Chroma.
 - Tests mock `app.rag.llm.chat`; no network needed.
 - Version lives in `app/main.py` (`FastAPI(version=…)`) and `documentation/changelog.html`.
@@ -63,4 +65,5 @@ evaluation script.
 ## History
 - 2026-09-06 — v0.1.0 initial build; v0.2.0 async job model with fixed statuses, dedupe, docs set;
   v0.3.0 PyMuPDF primary + Tesseract-as-fallback tiering, transcript/rules/docs scripts;
-  v0.4.0 jobs as first-class objects, job→document filter, scoped ask, validated citations, `plans/`.
+  v0.4.0 jobs as first-class objects, job→document filter, scoped ask, validated citations, `plans/`;
+  v0.5.0 paginated listings (page 0, size 5), `documentation/enhancements.md`.
