@@ -1,0 +1,9 @@
+model,category,payload_kg,reach_mm,price_eur,lead_time_weeks,warranty_years
+NW-Pico,desktop arm,0.5,350,2400,2,1
+NW-Atlas 5,collaborative arm,5,900,18500,6,2
+NW-Atlas 12,collaborative arm,12,1300,27900,8,2
+NW-Titan 60,industrial arm,60,2100,64000,12,3
+NW-Rover M,mobile base,150,0,31000,10,2
+NW-Rover XL,mobile base,600,0,58000,14,2
+NW-Gripper V2,end effector,3,0,1900,1,1
+NW-Vision Kit,accessory,0,0,4200,3,1

@@ -1,0 +1,11 @@
+{"question": "How many days of paid annual leave do employees get per year?", "reference_answer": "24 days per calendar year, credited monthly.", "collection": "default"}
+{"question": "What is the maximum daily meal reimbursement while travelling?", "reference_answer": "EUR 60 per day.", "collection": "default"}
+{"question": "How often must passwords be rotated and what is the minimum length?", "reference_answer": "Every 180 days; at least 14 characters.", "collection": "default"}
+{"question": "Within how long must a security incident be reported?", "reference_answer": "Within 1 hour of discovery, to security@northwind.example.", "collection": "default"}
+{"question": "What is the payload and price of the NW-Titan 60?", "reference_answer": "60 kg payload, EUR 64,000.", "collection": "default"}
+{"question": "Which robot has the longest lead time?", "reference_answer": "NW-Rover XL at 14 weeks.", "collection": "default"}
+{"question": "What is the minimum controller firmware for NorthwindOS 4.2?", "reference_answer": "3.9.0.", "collection": "default"}
+{"question": "How long is the warranty on Titan series industrial arms?", "reference_answer": "3 years.", "collection": "default"}
+{"question": "How many approvals does a change to the safety controller need?", "reference_answer": "Two approvals, one from the Safety team.", "collection": "default"}
+{"question": "When will the Rotterdam assembly line pause for maintenance?", "reference_answer": "From 9 to 11 April 2026 (from the scanned memo; requires OCR).", "collection": "default"}
+{"question": "What is the company's policy on cryptocurrency payments?", "reference_answer": "Not covered in the documents; the system should say it could not find this.", "collection": "default"}

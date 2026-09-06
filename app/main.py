@@ -1,0 +1,212 @@
+"""FastAPI application: REST API + single-page UI + docs pages.
+
+Upload is asynchronous: POST /api/documents stores each file, returns a job_id per file
+immediately (202), and a background worker indexes it. Poll GET /api/jobs/{job_id}.
+"""
+from __future__ import annotations
+
+import hashlib
+import logging
+import re
+import uuid
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import get_args
+
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+from app import jobs
+from app.config import SUPPORTED_EXTENSIONS, settings
+from app.ingest import pipeline
+from app.ingest.extractors import file_type_for, ocr_available
+from app.llm.client import LLMError
+from app.models import (TERMINAL_STATUSES, AskRequest, AskResponse, ChunkOut, DocStatus, DocumentInfo,
+                        HealthResponse, UploadResponse)
+from app.rag import answer
+from app.retrieval import bm25_index, embedder, vector_store
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("rag")
+
+ROOT = Path(__file__).resolve().parents[1]
+STATIC_DIR = Path(__file__).parent / "static"
+DOCS_DIR = ROOT / "documentation"
+_COLLECTION_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{1,62}$")
+
+
+def _collection(name: str | None) -> str:
+    name = (name or settings.DEFAULT_COLLECTION).strip()
+    if not _COLLECTION_RE.match(name):
+        raise HTTPException(400, "Collection name must be 2-63 chars: letters, digits, . _ -")
+    return name
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    settings.uploads_dir.mkdir(parents=True, exist_ok=True)
+    log.info("warming embedding model %s", settings.EMBEDDING_MODEL)
+    embedder.get_model()
+    for col in vector_store.list_collections():
+        n = bm25_index.rebuild(col)
+        log.info("BM25 rebuilt for '%s' (%d chunks)", col, n)
+    log.info("OCR available: %s | LLM: %s @ %s", ocr_available(), settings.LLM_MODEL, settings.LLM_API_URL)
+    yield
+
+
+app = FastAPI(title="RAG Generator", version="0.2.0", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+if DOCS_DIR.exists():
+    app.mount("/documentation", StaticFiles(directory=DOCS_DIR), name="documentation")
+
+
+@app.get("/", include_in_schema=False)
+def index():
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/api/health", response_model=HealthResponse)
+def health():
+    public = {k: v for k, v in settings.model_dump().items() if "KEY" not in k}
+    public = {k: (str(v) if isinstance(v, Path) else v) for k, v in public.items()}
+    return HealthResponse(
+        status="ok", llm_model=settings.LLM_MODEL, llm_api_url=settings.LLM_API_URL,
+        embedding_model=settings.EMBEDDING_MODEL, supported_extensions=sorted(SUPPORTED_EXTENSIONS),
+        ocr_enabled=settings.OCR_ENABLED, ocr_available=ocr_available(),
+        collections=sorted(set(vector_store.list_collections()) | set(jobs.collections())),
+        statuses=list(get_args(DocStatus)), settings=public,
+    )
+
+
+# ----------------------------------------------------------------------- upload (async)
+
+@app.post("/api/documents", response_model=UploadResponse, status_code=202)
+async def upload(background: BackgroundTasks, files: list[UploadFile] = File(...),
+                 collection: str | None = Form(default=None)):
+    """Accept files, return one job per file immediately; indexing happens in the background.
+
+    Every file gets a record, even rejected ones, so the listing explains what happened:
+    EXTRACTION_NOT_SUPPORTED, EMPTY_FILE, UPLOAD_FAILED, DUPLICATE, or QUEUED.
+    """
+    col = _collection(collection)
+    limit = settings.MAX_UPLOAD_MB * 1024 * 1024
+    out: list[DocumentInfo] = []
+    for f in files:
+        name = Path(f.filename or "upload").name
+        doc_id = uuid.uuid4().hex[:12]
+        kind = file_type_for(name)
+
+        try:
+            data = await f.read()
+        except Exception as exc:
+            out.append(jobs.create(doc_id, name, col, "UPLOAD_FAILED", file_type=kind,
+                                   reason=f"UPLOAD FAILED: could not read upload stream ({exc})"))
+            continue
+
+        if kind is None:
+            out.append(jobs.create(doc_id, name, col, "EXTRACTION_NOT_SUPPORTED",
+                                   reason=f"Extension '{Path(name).suffix or '(none)'}' is not supported. "
+                                          f"Supported: {' '.join(sorted(SUPPORTED_EXTENSIONS))}"))
+            continue
+        if not data:
+            out.append(jobs.create(doc_id, name, col, "EMPTY_FILE", file_type=kind,
+                                   reason="The uploaded file is 0 bytes"))
+            continue
+        if len(data) > limit:
+            out.append(jobs.create(doc_id, name, col, "UPLOAD_FAILED", file_type=kind,
+                                   reason=f"UPLOAD FAILED: file is larger than {settings.MAX_UPLOAD_MB} MB"))
+            continue
+
+        sha = hashlib.sha256(data).hexdigest()
+        original = jobs.find_by_hash(col, sha)
+        if original is not None:
+            out.append(jobs.create(doc_id, name, col, "DUPLICATE", file_type=kind, sha256=sha,
+                                   duplicate_of=original,
+                                   reason=f"Same content as '{original.filename}' ({original.doc_id}); "
+                                          f"not processed again"))
+            continue
+
+        path = settings.uploads_dir / f"{doc_id}_{name}"
+        try:
+            path.write_bytes(data)
+        except OSError as exc:
+            out.append(jobs.create(doc_id, name, col, "UPLOAD_FAILED", file_type=kind, sha256=sha,
+                                   reason=f"UPLOAD FAILED: could not store file ({exc})"))
+            continue
+
+        out.append(jobs.create(doc_id, name, col, "QUEUED", file_type=kind, sha256=sha,
+                               reason="Waiting for the background worker"))
+        background.add_task(pipeline.run, doc_id, path)
+    return UploadResponse(documents=out)
+
+
+# ----------------------------------------------------------------------- jobs / documents
+
+@app.get("/api/jobs/{job_id}", response_model=DocumentInfo)
+def job_status(job_id: str):
+    """Poll the status of one upload job (job_id == doc_id)."""
+    doc = jobs.get(job_id)
+    if doc is None:
+        raise HTTPException(404, "job not found")
+    return doc
+
+
+@app.get("/api/documents", response_model=list[DocumentInfo])
+def list_documents(collection: str | None = Query(default=None),
+                   status: DocStatus | None = Query(default=None)):
+    """Listing of every request: DOC ID, NAME, STATUS, REASON (+ duplicate link)."""
+    docs = jobs.list_docs(collection)
+    return [d for d in docs if status is None or d.status == status]
+
+
+@app.get("/api/documents/{doc_id}", response_model=DocumentInfo)
+def get_document(doc_id: str):
+    return job_status(doc_id)
+
+
+@app.delete("/api/documents/{doc_id}", status_code=204)
+def delete_document(doc_id: str):
+    doc = jobs.get(doc_id)
+    if doc is None:
+        raise HTTPException(404, "document not found")
+    if doc.status not in TERMINAL_STATUSES:
+        raise HTTPException(409, f"document is {doc.status}; wait until it finishes")
+    if doc.status == "COMPLETED":
+        vector_store.delete_document(doc.collection, doc_id)
+        bm25_index.rebuild(doc.collection)
+    for p in settings.uploads_dir.glob(f"{doc_id}_*"):
+        p.unlink(missing_ok=True)
+    jobs.delete(doc_id)
+
+
+@app.delete("/api/collections/{name}", status_code=204)
+def reset_collection(name: str):
+    col = _collection(name)
+    vector_store.delete_collection(col)
+    bm25_index.drop(col)
+    for doc in jobs.list_docs(col):
+        for p in settings.uploads_dir.glob(f"{doc.doc_id}_*"):
+            p.unlink(missing_ok=True)
+        jobs.delete(doc.doc_id)
+
+
+@app.get("/api/chunks", response_model=list[ChunkOut])
+def list_chunks(collection: str | None = Query(default=None),
+                limit: int = Query(default=50, ge=1, le=1000), offset: int = Query(default=0, ge=0)):
+    col = _collection(collection)
+    chunks = vector_store.get_all_chunks(col)[offset:offset + limit]
+    return [ChunkOut(chunk_id=c["chunk_id"], doc_id=c["metadata"].get("doc_id", ""),
+                     source=c["metadata"].get("source", ""), page=int(c["metadata"].get("page", 0)),
+                     section=c["metadata"].get("section") or None, text=c["text"]) for c in chunks]
+
+
+# ----------------------------------------------------------------------- ask
+
+@app.post("/api/ask", response_model=AskResponse)
+def ask(req: AskRequest):
+    col = _collection(req.collection)
+    try:
+        return answer(req.question, col, req.top_k)
+    except LLMError as exc:
+        raise HTTPException(502, str(exc))

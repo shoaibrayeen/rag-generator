@@ -1,0 +1,24 @@
+<!doctype html>
+<html><head><title>NorthwindOS 4.2 Release Notes</title>
+<style>body{font-family:sans-serif}</style>
+<script>console.log("tracking pixel should be ignored");</script>
+</head>
+<body>
+<nav>Home · Docs · Downloads</nav>
+<h1>NorthwindOS 4.2 Release Notes</h1>
+<p>Released 14 August 2026. NorthwindOS 4.2 is a long-term support release supported until August 2029.</p>
+<h2>New features</h2>
+<ul>
+<li>Path planner now supports dynamic obstacle avoidance at up to 2 m/s for Rover bases.</li>
+<li>The Atlas arm family gains force-limited hand guiding; the default collision threshold is 80 N.</li>
+<li>Fleet Manager can now schedule firmware updates in maintenance windows.</li>
+</ul>
+<h2>Breaking changes</h2>
+<ul>
+<li>The legacy REST API v1 has been removed. Integrations must migrate to API v2 before upgrading.</li>
+<li>Minimum controller firmware is 3.9.0.</li>
+</ul>
+<h2>Known issues</h2>
+<p>Vision Kit calibration may fail under flickering LED lighting; a fix is planned for 4.2.1.</p>
+<footer>© Northwind Robotics</footer>
+</body></html>

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RAG Generator · Changelog</title>
+<style>
+  body{margin:0;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1c1f26;background:#f6f7f9}
+  main{max-width:860px;margin:0 auto;padding:32px 24px}
+  h1{font-size:26px;margin:0 0 4px} .sub{color:#6b7280;margin-bottom:28px}
+  .rel{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:18px 22px;margin-bottom:18px}
+  .rel h2{margin:0;font-size:18px;display:flex;gap:10px;align-items:baseline}
+  .rel time{color:#6b7280;font-size:13px;font-weight:400}
+  .tag{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;margin-right:6px;vertical-align:middle}
+  .added{background:#dcfce7;color:#15803d}.changed{background:#e0f2fe;color:#0369a1}.fixed{background:#fef3c7;color:#b45309}.docs{background:#ede9fe;color:#6d28d9}
+  ul{margin:8px 0 0;padding-left:20px} li{margin:4px 0}
+  a{color:#2563eb;text-decoration:none}
+  .nav{font-size:13px;margin-bottom:20px}
+</style></head>
+<body><main>
+<div class="nav"><a href="/">← App</a> · <a href="/documentation/flow.html">How it works</a> · <a href="/docs">API docs</a></div>
+<h1>Changelog</h1>
+<div class="sub">All notable changes to RAG Generator. Versions follow <code>app/main.py</code>'s FastAPI version.</div>
+
+<section class="rel">
+  <h2>0.2.0 <time>2026-09-06</time></h2>
+  <p><span class="tag changed">Changed</span> Upload is now an explicit asynchronous job flow with a fixed status vocabulary.</p>
+  <ul>
+    <li><span class="tag added">Added</span> Per-file <code>job_id</code> in the upload response and <code>GET /api/jobs/{job_id}</code> to poll it.</li>
+    <li><span class="tag added">Added</span> Statuses <code>QUEUED · DUPLICATE · PROCESSING · COMPLETED · FAILED · EMPTY_FILE · EXTRACTION_NOT_SUPPORTED · UPLOAD_FAILED</code>, each with a human-readable <code>reason</code>; <code>PROCESSING</code> exposes a <code>stage</code>.</li>
+    <li><span class="tag added">Added</span> SHA-256 duplicate detection per collection. Duplicates are recorded but never processed and link to the original document.</li>
+    <li><span class="tag changed">Changed</span> Rejected uploads (unsupported extension, empty file, oversize, storage error) now become listed records instead of a 400 error.</li>
+    <li><span class="tag changed">Changed</span> UI listing shows <b>Doc ID · Name · Status · Reason</b>; <code>GET /api/documents</code> accepts a <code>status</code> filter.</li>
+    <li><span class="tag added">Added</span> <code>rag job &lt;id&gt;</code> CLI command; <code>rag status</code> prints the same four columns.</li>
+    <li><span class="tag docs">Docs</span> <a href="/documentation/architecture.html">architecture.md</a>, this changelog, the interactive <a href="/documentation/flow.html">flow walkthrough</a>, <code>CLAUDE.md</code> (documentation-update rule) and <code>memory.md</code> (project memory).</li>
+  </ul>
+</section>
+
+<section class="rel">
+  <h2>0.1.0 <time>2026-09-06</time></h2>
+  <p><span class="tag added">Added</span> Initial release.</p>
+  <ul>
+    <li>FastAPI REST API + single-page UI (upload, status, ask, sources) + <code>rag</code> CLI.</li>
+    <li>Extractors for PDF, DOCX, HTML, TXT, MD, CSV with page metadata; PNG/JPG/TIFF and scanned PDF pages via Tesseract OCR fallback.</li>
+    <li>Overlapping, metadata-tagged chunking; fastembed embeddings; ChromaDB (embedded, persistent).</li>
+    <li>Hybrid retrieval: dense top-k + rank-bm25 top-k fused with Reciprocal Rank Fusion.</li>
+    <li>OpenAI-compatible LLM client configured only through <code>.env</code>; grounded prompt with <code>[n]</code> citations and an explicit "not found" fallback.</li>
+    <li>Evaluation script with Claude as judge (<code>evaluation/run_eval.py</code>) and dataset generator.</li>
+    <li>Dockerfile (Tesseract + pre-downloaded embedding model) and docker-compose with a data volume.</li>
+    <li>Offline mock LLM (<code>scripts/mock_llm.py</code>) and sample corpus (<code>samples/</code>).</li>
+  </ul>
+</section>
+</main></body></html>

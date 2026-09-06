@@ -1,0 +1,111 @@
+# Architecture
+
+RAG Generator turns an arbitrary set of documents into a grounded question-answering
+service at runtime. There are two flows: **ingest** (asynchronous) and **ask** (synchronous).
+
+## Components
+
+| Component | Module | Role |
+|---|---|---|
+| API | `app/main.py` | FastAPI routes, background job scheduling, static UI + docs |
+| Job registry | `app/jobs.py` | in-memory dict persisted to `data/documents.json`; status per upload |
+| Extractors | `app/ingest/extractors.py` | file → pages with metadata; per-format functions; OCR fallback |
+| Chunker | `app/ingest/chunker.py` | overlapping windows, boundary-aware, metadata-tagged |
+| Pipeline | `app/ingest/pipeline.py` | background worker: extract → chunk → embed → store → BM25 rebuild |
+| Embedder | `app/retrieval/embedder.py` | fastembed (`BAAI/bge-small-en-v1.5`, ONNX, CPU) |
+| Vector store | `app/retrieval/vector_store.py` | ChromaDB `PersistentClient`, one collection per document set |
+| Lexical index | `app/retrieval/bm25_index.py` | rank-bm25 `BM25Okapi` per collection, rebuilt from Chroma |
+| Fusion | `app/retrieval/fusion.py` | Reciprocal Rank Fusion of dense and BM25 rankings |
+| LLM client | `app/llm/client.py` | OpenAI-compatible `chat/completions` over httpx |
+| Prompts | `app/llm/prompts.py` | grounded-answer system prompt, `[n]` context formatting |
+| Orchestrator | `app/rag.py` | `answer()` = retrieve → prompt → LLM → answer + sources |
+| UI | `app/static/index.html` | upload · listing · ask · sources |
+| CLI | `cli/rag_cli.py` | `rag ingest/status/job/ask/reset/serve` over HTTP |
+| Evaluation | `evaluation/` | Claude-as-judge scoring, dataset generation |
+| Config | `app/config.py` | every tunable, overridable from `.env` |
+
+## Ingest flow (asynchronous)
+
+```
+client ──POST /api/documents (multipart, collection)──► API
+                                                        │ per file:
+                                                        │  read bytes ──fail──► UPLOAD_FAILED
+                                                        │  extension ∉ SUPPORTED_EXTENSIONS ──► EXTRACTION_NOT_SUPPORTED
+                                                        │  0 bytes ──► EMPTY_FILE
+                                                        │  > MAX_UPLOAD_MB ──► UPLOAD_FAILED
+                                                        │  sha256 already live in collection ──► DUPLICATE (links original)
+                                                        │  store to data/uploads/<doc_id>_<name> ──fail──► UPLOAD_FAILED
+                                                        │  else ──► QUEUED + background task
+                                                        ▼
+client ◄── 202 {documents:[{job_id, status, reason, …}]} ──┘
+
+background worker (FastAPI BackgroundTasks, thread pool)
+   QUEUED ─► PROCESSING/extracting ─► PROCESSING/chunking ─► PROCESSING/embedding ─► COMPLETED
+                      │                        │                       │
+                      └──────── any exception ─┴───────────────────────┴──► FAILED ("PROCESSING FAILED: …")
+
+client ──GET /api/jobs/{job_id}──► current record        client ──GET /api/documents?collection=──► listing
+```
+
+Every status is persisted after each transition, so a listing is always consistent with
+what the worker has done. Jobs that were mid-flight during a restart are marked `FAILED`
+on load with an explanatory reason.
+
+### Extraction and page metadata
+
+| Format | Library | "page" means | Section metadata |
+|---|---|---|---|
+| PDF | pypdf (+ Tesseract via pypdfium2 render when a page has < `OCR_MIN_CHARS_PER_PAGE` chars) | printed page | – |
+| DOCX | python-docx | one page per heading block | heading text |
+| HTML | beautifulsoup4 + lxml | 1 | `<title>` |
+| MD | stdlib | one page per heading | heading text |
+| TXT | stdlib | 1 | – |
+| CSV | stdlib csv | `CSV_ROWS_PER_PAGE` rows (header repeated) | `rows a-b` |
+| PNG/JPG/TIFF | Pillow + Tesseract | one page per frame | – |
+
+Each chunk records: `doc_id, source, file_type, collection, page, section, extraction
+(text|ocr|ocr_unavailable), chunk_index, char_start, char_end`.
+
+### Chunking
+
+Sliding window of `CHUNK_SIZE_CHARS` (default 1200) with `CHUNK_OVERLAP_CHARS` (200) of
+overlap. The cut point is chosen in the last quarter of the window at the first available
+boundary in this priority: blank line, newline, sentence end, clause, word.
+
+## Ask flow (synchronous)
+
+```
+question ─► embed (fastembed) ─► Chroma cosine top DENSE_TOP_K ──┐
+        └─► tokenize          ─► BM25 top BM25_TOP_K ────────────┴─► RRF: score = Σ 1/(RRF_K + rank)
+                                                                         │ keep FUSED_TOP_K
+                                                                         ▼
+            system prompt (answer only from context, cite [n], say "not found" otherwise)
+          + user prompt: "[1] (source, page N, section) text …" × k + question
+                                                                         │
+                                                                         ▼
+                     POST {LLM_API_URL}/chat/completions (Bearer LLM_API_KEY, model LLM_MODEL)
+                                                                         │
+                                                                         ▼
+            {answer, sources:[{n, source, page, section, text, dense_rank, bm25_rank, rrf_score}], latency_ms}
+```
+
+Reciprocal Rank Fusion is used instead of score normalisation because dense cosine
+distances and BM25 scores live on incomparable scales; RRF only needs ranks and rewards
+chunks that both retrievers agree on.
+
+## Persistence and process model
+
+- `data/uploads/` original files, `data/chroma/` vectors + chunk text + metadata,
+  `data/documents.json` job registry. All under one Docker volume.
+- BM25 is in-memory and derived from Chroma; it is rebuilt on startup for every collection
+  and after each successful ingest or delete. This keeps a single source of truth and makes
+  restarts safe, at the cost of requiring a single app process.
+- The LLM and embedding models are the only external dependencies; the LLM is reached
+  purely via `.env` settings.
+
+## Evaluation
+
+`evaluation/run_eval.py` replays a JSONL dataset through `/api/ask`, then asks Claude
+(`JUDGE_MODEL`, official `anthropic` SDK, structured outputs) for faithfulness, answer
+relevance, context relevance, correctness and a hallucination flag. `generate_dataset.py`
+synthesises questions from indexed chunks so the eval works for any new document set.

@@ -1,0 +1,19 @@
+NORTHWIND ROBOTICS - INFORMATION SECURITY POLICY (v2.3, effective 1 February 2026)
+
+1. Passwords must be at least 14 characters and rotated every 180 days. Multi-factor
+authentication is mandatory for email, GitHub, AWS and the HR system.
+
+2. Laptops must have full-disk encryption enabled (FileVault or BitLocker) and screen lock
+after 5 minutes of inactivity.
+
+3. Production customer data may only be accessed through the bastion host "gatekeeper".
+Direct database connections from laptops are prohibited.
+
+4. Security incidents must be reported to security@northwind.example within 1 hour of
+discovery. The on-call security engineer can be paged via the #sec-oncall Slack channel.
+
+5. Third-party vendors handling personal data require a signed Data Processing Agreement
+and an annual SOC 2 Type II report before onboarding.
+
+6. Access reviews are performed quarterly by team leads; unused accounts are disabled
+after 90 days of inactivity.

@@ -1,0 +1,26 @@
+# Web / API
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic-settings
+httpx
+typer
+# Retrieval
+fastembed
+chromadb
+rank-bm25
+# Document extraction
+pypdf
+python-docx
+beautifulsoup4
+lxml
+# OCR fallback (Tesseract binary required at runtime; see README)
+pypdfium2
+pytesseract
+pillow
+# Evaluation judge
+anthropic
+# Tests
+pytest
+# Documentation rendering (scripts/build_docs.py)
+markdown

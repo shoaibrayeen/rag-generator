@@ -1,0 +1,2 @@
+# Only needed for scripts/make_samples.py (generates sample PDF/DOCX/PNG)
+reportlab

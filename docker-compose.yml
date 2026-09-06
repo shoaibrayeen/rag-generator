@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    image: rag-generator:latest
+    env_file: .env
+    environment:
+      DATA_DIR: /app/data
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - ./data:/app/data          # uploads, Chroma index, document registry
+      - ./samples:/app/samples:ro # handy for `docker compose exec app rag ingest samples/*`
+    restart: unless-stopped

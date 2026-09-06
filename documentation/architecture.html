@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RAG Generator · Architecture</title>
+<style>
+  body{margin:0;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1c1f26;background:#f6f7f9}
+  main{max-width:960px;margin:0 auto;padding:32px 24px}
+  article{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:26px 30px}
+  h1{font-size:26px;margin:0 0 12px} h2{font-size:20px;margin:28px 0 8px;padding-top:12px;border-top:1px solid #eef0f3} h3{font-size:16px;margin:18px 0 6px}
+  a{color:#2563eb;text-decoration:none} .nav{font-size:13px;margin-bottom:16px}
+  pre{background:#f8fafc;border:1px solid #e5e7eb;border-radius:6px;padding:12px;overflow:auto;font:12.5px/1.5 ui-monospace,Menlo,monospace}
+  code{background:#f1f5f9;padding:1px 5px;border-radius:4px;font:12.5px ui-monospace,Menlo,monospace} pre code{background:none;padding:0}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;margin:10px 0} th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #e5e7eb;vertical-align:top} th{color:#6b7280}
+  .src{color:#6b7280;font-size:12px;margin-top:18px}
+</style></head>
+<body><main>
+<div class="nav"><a href="/">← App</a> · <a href="/documentation/flow.html">How it works</a> · <a href="/documentation/architecture.html">Architecture</a> · <a href="/documentation/changelog.html">Changelog</a> · <a href="/documentation/readme.html">README</a> · <a href="/docs">API docs</a></div>
+<article>
+<h1 id="architecture">Architecture</h1>
+<p>RAG Generator turns an arbitrary set of documents into a grounded question-answering
+service at runtime. There are two flows: <strong>ingest</strong> (asynchronous) and <strong>ask</strong> (synchronous).</p>
+<h2 id="components">Components</h2>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Module</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>API</td>
+<td><code>app/main.py</code></td>
+<td>FastAPI routes, background job scheduling, static UI + docs</td>
+</tr>
+<tr>
+<td>Job registry</td>
+<td><code>app/jobs.py</code></td>
+<td>in-memory dict persisted to <code>data/documents.json</code>; status per upload</td>
+</tr>
+<tr>
+<td>Extractors</td>
+<td><code>app/ingest/extractors.py</code></td>
+<td>file → pages with metadata; per-format functions; OCR fallback</td>
+</tr>
+<tr>
+<td>Chunker</td>
+<td><code>app/ingest/chunker.py</code></td>
+<td>overlapping windows, boundary-aware, metadata-tagged</td>
+</tr>
+<tr>
+<td>Pipeline</td>
+<td><code>app/ingest/pipeline.py</code></td>
+<td>background worker: extract → chunk → embed → store → BM25 rebuild</td>
+</tr>
+<tr>
+<td>Embedder</td>
+<td><code>app/retrieval/embedder.py</code></td>
+<td>fastembed (<code>BAAI/bge-small-en-v1.5</code>, ONNX, CPU)</td>
+</tr>
+<tr>
+<td>Vector store</td>
+<td><code>app/retrieval/vector_store.py</code></td>
+<td>ChromaDB <code>PersistentClient</code>, one collection per document set</td>
+</tr>
+<tr>
+<td>Lexical index</td>
+<td><code>app/retrieval/bm25_index.py</code></td>
+<td>rank-bm25 <code>BM25Okapi</code> per collection, rebuilt from Chroma</td>
+</tr>
+<tr>
+<td>Fusion</td>
+<td><code>app/retrieval/fusion.py</code></td>
+<td>Reciprocal Rank Fusion of dense and BM25 rankings</td>
+</tr>
+<tr>
+<td>LLM client</td>
+<td><code>app/llm/client.py</code></td>
+<td>OpenAI-compatible <code>chat/completions</code> over httpx</td>
+</tr>
+<tr>
+<td>Prompts</td>
+<td><code>app/llm/prompts.py</code></td>
+<td>grounded-answer system prompt, <code>[n]</code> context formatting</td>
+</tr>
+<tr>
+<td>Orchestrator</td>
+<td><code>app/rag.py</code></td>
+<td><code>answer()</code> = retrieve → prompt → LLM → answer + sources</td>
+</tr>
+<tr>
+<td>UI</td>
+<td><code>app/static/index.html</code></td>
+<td>upload · listing · ask · sources</td>
+</tr>
+<tr>
+<td>CLI</td>
+<td><code>cli/rag_cli.py</code></td>
+<td><code>rag ingest/status/job/ask/reset/serve</code> over HTTP</td>
+</tr>
+<tr>
+<td>Evaluation</td>
+<td><code>evaluation/</code></td>
+<td>Claude-as-judge scoring, dataset generation</td>
+</tr>
+<tr>
+<td>Config</td>
+<td><code>app/config.py</code></td>
+<td>every tunable, overridable from <code>.env</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="ingest-flow-asynchronous">Ingest flow (asynchronous)</h2>
+<pre><code>client ──POST /api/documents (multipart, collection)──► API
+                                                        │ per file:
+                                                        │  read bytes ──fail──► UPLOAD_FAILED
+                                                        │  extension ∉ SUPPORTED_EXTENSIONS ──► EXTRACTION_NOT_SUPPORTED
+                                                        │  0 bytes ──► EMPTY_FILE
+                                                        │  &gt; MAX_UPLOAD_MB ──► UPLOAD_FAILED
+                                                        │  sha256 already live in collection ──► DUPLICATE (links original)
+                                                        │  store to data/uploads/&lt;doc_id&gt;_&lt;name&gt; ──fail──► UPLOAD_FAILED
+                                                        │  else ──► QUEUED + background task
+                                                        ▼
+client ◄── 202 {documents:[{job_id, status, reason, …}]} ──┘
+
+background worker (FastAPI BackgroundTasks, thread pool)
+   QUEUED ─► PROCESSING/extracting ─► PROCESSING/chunking ─► PROCESSING/embedding ─► COMPLETED
+                      │                        │                       │
+                      └──────── any exception ─┴───────────────────────┴──► FAILED (&quot;PROCESSING FAILED: …&quot;)
+
+client ──GET /api/jobs/{job_id}──► current record        client ──GET /api/documents?collection=──► listing
+</code></pre>
+<p>Every status is persisted after each transition, so a listing is always consistent with
+what the worker has done. Jobs that were mid-flight during a restart are marked <code>FAILED</code>
+on load with an explanatory reason.</p>
+<h3 id="extraction-and-page-metadata">Extraction and page metadata</h3>
+<table>
+<thead>
+<tr>
+<th>Format</th>
+<th>Library</th>
+<th>"page" means</th>
+<th>Section metadata</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PDF</td>
+<td>pypdf (+ Tesseract via pypdfium2 render when a page has &lt; <code>OCR_MIN_CHARS_PER_PAGE</code> chars)</td>
+<td>printed page</td>
+<td>–</td>
+</tr>
+<tr>
+<td>DOCX</td>
+<td>python-docx</td>
+<td>one page per heading block</td>
+<td>heading text</td>
+</tr>
+<tr>
+<td>HTML</td>
+<td>beautifulsoup4 + lxml</td>
+<td>1</td>
+<td><code>&lt;title&gt;</code></td>
+</tr>
+<tr>
+<td>MD</td>
+<td>stdlib</td>
+<td>one page per heading</td>
+<td>heading text</td>
+</tr>
+<tr>
+<td>TXT</td>
+<td>stdlib</td>
+<td>1</td>
+<td>–</td>
+</tr>
+<tr>
+<td>CSV</td>
+<td>stdlib csv</td>
+<td><code>CSV_ROWS_PER_PAGE</code> rows (header repeated)</td>
+<td><code>rows a-b</code></td>
+</tr>
+<tr>
+<td>PNG/JPG/TIFF</td>
+<td>Pillow + Tesseract</td>
+<td>one page per frame</td>
+<td>–</td>
+</tr>
+</tbody>
+</table>
+<p>Each chunk records: <code>doc_id, source, file_type, collection, page, section, extraction
+(text|ocr|ocr_unavailable), chunk_index, char_start, char_end</code>.</p>
+<h3 id="chunking">Chunking</h3>
+<p>Sliding window of <code>CHUNK_SIZE_CHARS</code> (default 1200) with <code>CHUNK_OVERLAP_CHARS</code> (200) of
+overlap. The cut point is chosen in the last quarter of the window at the first available
+boundary in this priority: blank line, newline, sentence end, clause, word.</p>
+<h2 id="ask-flow-synchronous">Ask flow (synchronous)</h2>
+<pre><code>question ─► embed (fastembed) ─► Chroma cosine top DENSE_TOP_K ──┐
+        └─► tokenize          ─► BM25 top BM25_TOP_K ────────────┴─► RRF: score = Σ 1/(RRF_K + rank)
+                                                                         │ keep FUSED_TOP_K
+                                                                         ▼
+            system prompt (answer only from context, cite [n], say &quot;not found&quot; otherwise)
+          + user prompt: &quot;[1] (source, page N, section) text …&quot; × k + question
+                                                                         │
+                                                                         ▼
+                     POST {LLM_API_URL}/chat/completions (Bearer LLM_API_KEY, model LLM_MODEL)
+                                                                         │
+                                                                         ▼
+            {answer, sources:[{n, source, page, section, text, dense_rank, bm25_rank, rrf_score}], latency_ms}
+</code></pre>
+<p>Reciprocal Rank Fusion is used instead of score normalisation because dense cosine
+distances and BM25 scores live on incomparable scales; RRF only needs ranks and rewards
+chunks that both retrievers agree on.</p>
+<h2 id="persistence-and-process-model">Persistence and process model</h2>
+<ul>
+<li><code>data/uploads/</code> original files, <code>data/chroma/</code> vectors + chunk text + metadata,
+  <code>data/documents.json</code> job registry. All under one Docker volume.</li>
+<li>BM25 is in-memory and derived from Chroma; it is rebuilt on startup for every collection
+  and after each successful ingest or delete. This keeps a single source of truth and makes
+  restarts safe, at the cost of requiring a single app process.</li>
+<li>The LLM and embedding models are the only external dependencies; the LLM is reached
+  purely via <code>.env</code> settings.</li>
+</ul>
+<h2 id="evaluation">Evaluation</h2>
+<p><code>evaluation/run_eval.py</code> replays a JSONL dataset through <code>/api/ask</code>, then asks Claude
+(<code>JUDGE_MODEL</code>, official <code>anthropic</code> SDK, structured outputs) for faithfulness, answer
+relevance, context relevance, correctness and a hallucination flag. <code>generate_dataset.py</code>
+synthesises questions from indexed chunks so the eval works for any new document set.</p>
+<p class="src">Generated from <code>documentation/architecture.md</code> by <code>scripts/build_docs.py</code>. Edit the Markdown, then re-run the script.</p>
+</article>
+</main></body></html>

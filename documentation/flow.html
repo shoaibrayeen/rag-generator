@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RAG Generator · How it works</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#1c1f26;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb;--ok:#15803d;--bad:#b91c1c;--warn:#b45309;--info:#0369a1}
+  *{box-sizing:border-box} body{margin:0;font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--bg)}
+  main{max-width:1100px;margin:0 auto;padding:28px 24px}
+  h1{font-size:24px;margin:0 0 4px} .sub{color:var(--muted);margin-bottom:22px}
+  .nav{font-size:13px;margin-bottom:16px} a{color:var(--accent);text-decoration:none}
+  .tabs{display:flex;gap:8px;margin-bottom:16px} .tabs button{padding:8px 14px;border:1px solid var(--line);background:var(--card);border-radius:8px;font:inherit;cursor:pointer}
+  .tabs button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .panel{display:none} .panel.on{display:block}
+  .controls{display:flex;gap:8px;align-items:center;margin:10px 0 16px;flex-wrap:wrap}
+  .controls button{padding:7px 12px;border:0;border-radius:6px;background:var(--accent);color:#fff;font:inherit;cursor:pointer}
+  .controls button.sec{background:#eef2ff;color:var(--accent)} .controls .muted{color:var(--muted);font-size:12px}
+  .track{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .step{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;position:relative;opacity:.45;transition:all .25s;cursor:pointer}
+  .step.done{opacity:1;border-color:#bbf7d0} .step.now{opacity:1;border-color:var(--accent);box-shadow:0 0 0 3px #dbeafe}
+  .step .n{font-size:11px;color:var(--muted)} .step h3{margin:2px 0 4px;font-size:14px} .step p{margin:0;font-size:12px;color:var(--muted)}
+  .detail{margin-top:16px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;min-height:120px}
+  .detail h3{margin:0 0 6px;font-size:15px} .detail pre{background:#f8fafc;border:1px solid var(--line);border-radius:6px;padding:10px;font:12px/1.5 ui-monospace,Menlo,monospace;overflow:auto;margin:10px 0 0;white-space:pre-wrap}
+  .pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;background:#eef2ff;color:var(--accent);margin:2px 4px 2px 0}
+  .pill.ok{background:#dcfce7;color:var(--ok)} .pill.bad{background:#fee2e2;color:var(--bad)} .pill.warn{background:#fef3c7;color:var(--warn)} .pill.info{background:#e0f2fe;color:var(--info)}
+  .branches{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:14px}
+  .branch{border:1px dashed var(--line);border-radius:8px;padding:10px 12px;font-size:12px;background:#fff} .branch b{display:block;margin-bottom:4px}
+  .try{margin-top:20px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .try input{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;font:inherit;margin:6px 0 10px}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px} th,td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)} th{color:var(--muted)}
+  .bar{height:8px;background:#eef2ff;border-radius:4px;overflow:hidden} .bar i{display:block;height:100%;background:var(--accent)}
+</style></head>
+<body><main>
+<div class="nav"><a href="/">← App</a> · <a href="/documentation/changelog.html">Changelog</a> · <a href="/documentation/architecture.html">architecture.md</a> · <a href="/docs">API docs</a></div>
+<h1>How RAG Generator works</h1>
+<div class="sub">Step through what happens after you upload a file, and what happens when you ask a question. Click any step, or press <b>Play</b>.</div>
+
+<div class="tabs"><button class="on" data-tab="ingest">1 · After upload (async job)</button><button data-tab="ask">2 · Asking a question</button><button data-tab="statuses">3 · Status vocabulary</button></div>
+
+<!-- ============================== INGEST ============================== -->
+<section class="panel on" id="ingest">
+  <div class="controls"><button onclick="play('ingest')">▶ Play</button><button class="sec" onclick="step('ingest',-1)">‹ Back</button><button class="sec" onclick="step('ingest',1)">Next ›</button><button class="sec" onclick="reset('ingest')">Reset</button><span class="muted" id="ingest-pos"></span></div>
+  <div class="track" id="ingest-track"></div>
+  <div class="detail" id="ingest-detail"></div>
+</section>
+
+<!-- ============================== ASK ============================== -->
+<section class="panel" id="ask">
+  <div class="controls"><button onclick="play('ask')">▶ Play</button><button class="sec" onclick="step('ask',-1)">‹ Back</button><button class="sec" onclick="step('ask',1)">Next ›</button><button class="sec" onclick="reset('ask')">Reset</button><span class="muted" id="ask-pos"></span></div>
+  <div class="track" id="ask-track"></div>
+  <div class="detail" id="ask-detail"></div>
+  <div class="try">
+    <h3 style="margin:0 0 4px">Try Reciprocal Rank Fusion</h3>
+    <div class="muted" style="font-size:12px">Edit the two ranked lists (comma-separated chunk ids). RRF score = Σ 1/(k+rank), k = 60.</div>
+    <label style="font-size:12px;color:var(--muted)">Dense (vector) ranking</label><input id="rrf-dense" value="A, B, C, D">
+    <label style="font-size:12px;color:var(--muted)">BM25 (lexical) ranking</label><input id="rrf-bm25" value="C, A, E, B">
+    <table id="rrf-table"></table>
+  </div>
+</section>
+
+<!-- ============================== STATUSES ============================== -->
+<section class="panel" id="statuses">
+  <table>
+    <thead><tr><th>Status</th><th>Meaning</th><th>Processed?</th><th>Reason column shows</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pill">QUEUED</span></td><td>Accepted and stored; waiting for the background worker.</td><td>soon</td><td>"Waiting for the background worker"</td></tr>
+      <tr><td><span class="pill warn">DUPLICATE</span></td><td>A file with the same SHA-256 already exists (QUEUED/PROCESSING/COMPLETED) in this collection.</td><td><b>no</b></td><td>Name and id of the original, with a link in the listing</td></tr>
+      <tr><td><span class="pill info">PROCESSING</span></td><td>Worker is running; <code>stage</code> is extracting → chunking → embedding.</td><td>in progress</td><td>Current stage with counts</td></tr>
+      <tr><td><span class="pill ok">COMPLETED</span></td><td>Chunks are in ChromaDB and BM25; the file is searchable.</td><td>yes</td><td>"Indexed N pages (k via OCR) into M chunks"</td></tr>
+      <tr><td><span class="pill bad">FAILED</span></td><td>Processing raised an error (corrupt file, no extractable text, embedding error…).</td><td>no</td><td>"PROCESSING FAILED: &lt;exception&gt;"</td></tr>
+      <tr><td><span class="pill bad">EMPTY_FILE</span></td><td>The upload was 0 bytes.</td><td>no</td><td>"The uploaded file is 0 bytes"</td></tr>
+      <tr><td><span class="pill bad">EXTRACTION_NOT_SUPPORTED</span></td><td>Extension is not in <code>SUPPORTED_EXTENSIONS</code>.</td><td>no</td><td>The extension and the supported list</td></tr>
+      <tr><td><span class="pill bad">UPLOAD_FAILED</span></td><td>Could not read the upload stream, file exceeds <code>MAX_UPLOAD_MB</code>, or could not write to disk.</td><td>no</td><td>"UPLOAD FAILED: &lt;cause&gt;"</td></tr>
+    </tbody>
+  </table>
+  <p class="muted" style="font-size:12px">Terminal statuses (no further change): everything except QUEUED and PROCESSING. Poll <code>GET /api/jobs/{job_id}</code> until the status is terminal.</p>
+</section>
+
+<script>
+const FLOWS = {
+  ingest: [
+    {t:'POST /api/documents', d:'Client sends one or more files (multipart) with an optional collection name. The API responds 202 immediately — nothing waits for indexing.',
+     code:`curl -F "files=@handbook.md" -F collection=demo localhost:8000/api/documents\n→ 202 {"documents":[{"job_id":"7f3a…","status":"QUEUED","reason":"Waiting for the background worker"}]}`},
+    {t:'Validate & hash', d:'Per file: read bytes → check extension against SUPPORTED_EXTENSIONS → reject empty or oversize → compute SHA-256 → look for a live document with the same hash in this collection.',
+     branches:[['EXTRACTION_NOT_SUPPORTED','bad','extension not supported'],['EMPTY_FILE','bad','0 bytes'],['UPLOAD_FAILED','bad','oversize / unreadable / disk error'],['DUPLICATE','warn','same hash already live → links to original, stops here']]},
+    {t:'QUEUED', d:'File stored at data/uploads/<doc_id>_<name>. A job record (job_id = doc_id) is written to data/documents.json and a background task is scheduled.',
+     code:`GET /api/jobs/7f3a…  → {"status":"QUEUED"}`},
+    {t:'PROCESSING · extracting', d:'The worker picks a format-specific extractor: pypdf, python-docx, BeautifulSoup, csv, plain text. Each page keeps its page number and section. PDF pages with fewer than OCR_MIN_CHARS_PER_PAGE characters (scans) are rendered with pypdfium2 and read by Tesseract; image files always go through OCR.',
+     code:`pages = [Page(text, page_no=3, section="Leave policy", extraction="text"), …]`},
+    {t:'PROCESSING · chunking', d:'Each page is split into overlapping windows (CHUNK_SIZE_CHARS=1200, CHUNK_OVERLAP_CHARS=200), cutting at paragraph/sentence/word boundaries. Every chunk is tagged with doc_id, source, page, section, extraction, chunk_index, char offsets.',
+     code:`chunk_id "7f3a…:4"  metadata {source:"handbook.md", page:3, section:"Leave policy", chunk_index:4, char_start:812, …}`},
+    {t:'PROCESSING · embedding', d:'fastembed (BAAI/bge-small-en-v1.5, 384-d, ONNX on CPU) embeds every chunk in batches. Vectors, text and metadata are written to the ChromaDB collection; then the BM25 index for the collection is rebuilt from Chroma.',
+     code:`vector_store.add_chunks(collection, ids, texts, embeddings, metadatas)\nbm25_index.rebuild(collection)`},
+    {t:'COMPLETED', d:'The record becomes COMPLETED with a reason like "Indexed 5 pages into 14 chunks". The listing (DOC ID · NAME · STATUS · REASON) and GET /api/jobs/{id} reflect it. Any exception on the way → FAILED with "PROCESSING FAILED: …".',
+     branches:[['COMPLETED','ok','searchable now'],['FAILED','bad','PROCESSING FAILED: <exception>']]},
+  ],
+  ask: [
+    {t:'POST /api/ask', d:'{"question": "...", "collection": "demo"}. Synchronous: the answer comes back in the response.',
+     code:`curl -X POST localhost:8000/api/ask -H 'content-type: application/json' -d '{"question":"How many leave days?","collection":"demo"}'`},
+    {t:'Dense retrieval', d:'The question is embedded with the same fastembed model and ChromaDB returns the DENSE_TOP_K (20) nearest chunks by cosine similarity.'},
+    {t:'BM25 retrieval', d:'The question is tokenised (lower-cased words, stop-words removed) and rank-bm25 scores every chunk in the collection; the BM25_TOP_K (20) best are kept.'},
+    {t:'Reciprocal Rank Fusion', d:'Both rankings are merged: score(chunk) = Σ over lists of 1/(RRF_K + rank). Chunks found by both retrievers rise to the top. The best FUSED_TOP_K (6) chunks continue. Try it in the widget below.',
+     code:`rrf_merge({"dense":[a,b,c], "bm25":[c,d,a]}, k=60)\n→ a: 1/61+1/63,  c: 1/63+1/61,  b: 1/62,  d: 1/62`},
+    {t:'Grounded prompt', d:'A system prompt tells the model to answer only from the context, cite [n] block numbers, and reply "I could not find this in the provided documents." when the context lacks the answer. The user message lists the chunks as [1] (source, page, section) text … followed by the question.',
+     code:`[1] (handbook.md, page 3, section "Leave policy")\nEmployees accrue 24 days of paid annual leave …\n\nQUESTION: How many leave days?`},
+    {t:'LLM call', d:'POST {LLM_API_URL}/chat/completions with Bearer LLM_API_KEY and model LLM_MODEL — any OpenAI-compatible provider. Auth or network problems surface as HTTP 502 with the provider message so a wrong .env is obvious.'},
+    {t:'Answer + sources', d:'The response carries the answer text with [n] citations plus every retrieved chunk: source file, page, section, whether it came from dense, BM25 or both (ranks), RRF score, and the chunk text. The UI links each citation to its source card.',
+     code:`{"answer":"Employees accrue 24 days … [1]","sources":[{"n":1,"source":"handbook.md","page":3,"dense_rank":1,"bm25_rank":2,"rrf_score":0.0325,…}]}`},
+  ],
+};
+const pos = {ingest:-1, ask:-1}; const timers = {};
+
+function render(name){
+  const flow = FLOWS[name], track = document.getElementById(name+'-track');
+  track.innerHTML = flow.map((s,i)=>`<div class="step ${i<pos[name]?'done':''} ${i===pos[name]?'now':''}" onclick="goto('${name}',${i})"><div class="n">step ${i+1}</div><h3>${s.t}</h3><p>${s.d.split('.')[0]}.</p></div>`).join('');
+  const det = document.getElementById(name+'-detail');
+  const s = flow[pos[name]];
+  document.getElementById(name+'-pos').textContent = pos[name]<0 ? `${flow.length} steps` : `step ${pos[name]+1} of ${flow.length}`;
+  if(!s){ det.innerHTML = `<h3>Press Play or click a step</h3><p class="muted">Each card explains what the service does at that point, which module does it, and what you would see in the API.</p>`; return; }
+  det.innerHTML = `<h3>${s.t}</h3><p>${s.d}</p>${s.code?`<pre>${esc(s.code)}</pre>`:''}${s.branches?`<div class="branches">${s.branches.map(([st,cls,why])=>`<div class="branch"><b><span class="pill ${cls}">${st}</span></b>${why}</div>`).join('')}</div>`:''}`;
+}
+function goto(name,i){ pos[name]=i; render(name); }
+function step(name,d){ pos[name]=Math.max(-1,Math.min(FLOWS[name].length-1,pos[name]+d)); render(name); }
+function reset(name){ clearInterval(timers[name]); pos[name]=-1; render(name); }
+function play(name){ clearInterval(timers[name]); pos[name]=-1; render(name); timers[name]=setInterval(()=>{ if(pos[name]>=FLOWS[name].length-1){clearInterval(timers[name]);return;} step(name,1); },1600); }
+const esc=(s)=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on',p.id===b.dataset.tab));});
+
+function rrf(){
+  const parse=(id)=>document.getElementById(id).value.split(',').map(s=>s.trim()).filter(Boolean);
+  const lists={dense:parse('rrf-dense'),bm25:parse('rrf-bm25')}, k=60, score={}, ranks={};
+  for(const [n,ids] of Object.entries(lists)) ids.forEach((id,i)=>{score[id]=(score[id]||0)+1/(k+i+1);(ranks[id]=ranks[id]||{})[n]=i+1;});
+  const rows=Object.entries(score).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])); const max=rows[0]?.[1]||1;
+  document.getElementById('rrf-table').innerHTML=`<tr><th>#</th><th>chunk</th><th>dense rank</th><th>bm25 rank</th><th>RRF score</th><th></th></tr>`+rows.map(([id,s],i)=>`<tr><td>${i+1}</td><td><b>${esc(id)}</b></td><td>${ranks[id].dense??'–'}</td><td>${ranks[id].bm25??'–'}</td><td>${s.toFixed(5)}</td><td style="width:30%"><div class="bar"><i style="width:${(s/max*100).toFixed(0)}%"></i></div></td></tr>`).join('');
+}
+document.getElementById('rrf-dense').oninput=rrf; document.getElementById('rrf-bm25').oninput=rrf; rrf();
+render('ingest'); render('ask');
+</script>
+</main></body></html>

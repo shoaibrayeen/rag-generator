@@ -1,0 +1,53 @@
+# Project rules for AI coding agents (Claude Code, Cursor, Codex)
+
+This file is the **single source of truth**. `.cursor/rules/project.mdc` and `AGENTS.md` are
+generated copies — edit this file, then run `python scripts/sync_rules.py`
+(`--check` verifies they are identical). Never edit the copies directly.
+
+## Always
+1. **Read `memory.md` first** when planning any change; it records decisions, gotchas and
+   conventions. Adjust the plan to what it says, and update it when a plan changes a decision.
+2. **After every code change** run a compilation check and the test suite before moving on:
+   ```bash
+   .venv/bin/python -m compileall -q app cli evaluation scripts && .venv/bin/python -m pytest -q
+   ```
+   Fix failures before touching anything else. Work is not done while either fails.
+3. **Never commit or push.** The user reviews the changes and commits themselves. Do not run
+   `git add`, `git commit`, `git push`, `git stash` or anything that rewrites history.
+4. **Update the documentation** with the code, in the same change (details below).
+5. **Keep the rule copies in sync.** After editing this file run `python scripts/sync_rules.py`.
+6. **Every Markdown doc has an HTML twin.** After editing any `documentation/*.md` or
+   `README.md`, run `python scripts/build_docs.py` and keep the generated
+   `documentation/<name>.html` alongside it. Never hand-edit the generated HTML files
+   (`architecture.html`, `readme.html`, …); `changelog.html` and `flow.html` are hand-written.
+
+## Documentation must move with the code (non-negotiable)
+Every code change in this repository ships with matching documentation updates **in the same
+change**. Before finishing any task that touches code, check and update as needed:
+
+1. `README.md` — setup, what is supported / not supported, API table, CLI usage, tech stack, tuning table.
+2. `documentation/changelog.html` — add an entry under the current (or a new) version with Added / Changed / Fixed / Docs tags. Bump the version in `app/main.py` (`FastAPI(version=...)`) for user-visible changes.
+3. `documentation/architecture.md` (then regenerate `architecture.html`) — if modules, flows, statuses, or data layout changed.
+4. `documentation/flow.html` — if the ingest or ask flow steps or status vocabulary changed.
+5. `memory.md` — record new decisions, gotchas, and conventions worth remembering.
+6. `.env.example` and the tuning table in the README — whenever a setting is added, renamed, or its default changes.
+7. Docstrings on public functions and the module header comment when behaviour changes.
+
+A change is not complete if the docs describe something the code no longer does.
+
+## Engineering conventions
+- Every tunable (model names, sizes, top-k, thresholds, paths) lives in `app/config.py` as a
+  `Settings` field with a default; never hard-code them elsewhere.
+- The job status vocabulary is fixed: `QUEUED, DUPLICATE, PROCESSING, COMPLETED, FAILED,
+  EMPTY_FILE, EXTRACTION_NOT_SUPPORTED, UPLOAD_FAILED`. Do not add or rename statuses without
+  updating `app/models.py`, the UI, the CLI, tests, and all docs above.
+- Adding a file format = extractor function in `app/ingest/extractors.py` + entry in
+  `EXTRACTORS` + entry in `SUPPORTED_EXTENSIONS` (`app/config.py`) + README/architecture rows + a test.
+- Tests must not need network or an LLM key (mock `app.rag.llm.chat`).
+- The CLI and eval script talk to the API over HTTP; never open Chroma from a second process.
+- Judge code uses the official `anthropic` SDK; generation uses the OpenAI-compatible client in
+  `app/llm/client.py`. Keep them separate.
+
+## Repo map
+`app/` service · `cli/` typer CLI · `evaluation/` Claude-as-judge · `documentation/` architecture (.md + .html), changelog.html, flow.html, readme.html · `samples/` demo corpus · `scripts/` sample generator, mock LLM ·
+`tests/` · `transcripts/` agent session exports.

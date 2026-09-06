@@ -1,0 +1,18 @@
+[project]
+name = "rag-generator"
+version = "0.1.0"
+description = "Upload documents at runtime, get a hybrid-retrieval RAG app with grounded answers."
+requires-python = ">=3.11"
+dynamic = ["dependencies"]
+
+[project.scripts]
+rag = "cli.rag_cli:app"
+
+[tool.setuptools]
+packages = ["app", "app.ingest", "app.retrieval", "app.llm", "cli", "evaluation"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

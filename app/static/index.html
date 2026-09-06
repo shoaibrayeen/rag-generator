@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAG Generator</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c1f26; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --ok:#15803d; --bad:#b91c1c; --warn:#b45309; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:18px 28px; background:var(--card); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:18px; }
+  header .meta { color:var(--muted); font-size:12px; }
+  header a { color:var(--accent); text-decoration:none; }
+  main { display:grid; grid-template-columns:minmax(300px,380px) 1fr; gap:20px; padding:20px 28px; max-width:1400px; margin:0 auto; }
+  @media (max-width:900px) { main { grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:20px; }
+  .card h2 { margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+  label { display:block; font-size:12px; color:var(--muted); margin:8px 0 4px; }
+  input[type=text], textarea { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:6px; font:inherit; }
+  textarea { min-height:70px; resize:vertical; }
+  button { padding:9px 14px; border:0; border-radius:6px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }
+  button.secondary { background:#eef2ff; color:var(--accent); }
+  button:disabled { opacity:.5; cursor:default; }
+  .drop { border:2px dashed var(--line); border-radius:8px; padding:20px; text-align:center; color:var(--muted); cursor:pointer; }
+  .drop.over { border-color:var(--accent); background:#eff6ff; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:6px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12px; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:600; background:#eef2ff; color:var(--accent); }
+  .pill.COMPLETED { background:#dcfce7; color:var(--ok); }
+  .pill.FAILED, .pill.UPLOAD_FAILED, .pill.EXTRACTION_NOT_SUPPORTED, .pill.EMPTY_FILE { background:#fee2e2; color:var(--bad); }
+  .pill.DUPLICATE { background:#fef3c7; color:var(--warn); }
+  .pill.PROCESSING { background:#e0f2fe; color:#0369a1; }
+  code.id { font:11px ui-monospace, Menlo, monospace; color:var(--muted); }
+  .pill.ocr { background:#fef3c7; color:var(--warn); }
+  .answer { white-space:pre-wrap; padding:14px; background:#f8fafc; border:1px solid var(--line); border-radius:8px; min-height:60px; }
+  .answer cite { color:var(--accent); font-style:normal; font-weight:600; cursor:pointer; }
+  .src { border:1px solid var(--line); border-radius:8px; margin-top:10px; padding:10px 12px; }
+  .src summary { cursor:pointer; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .src .n { font-weight:700; color:var(--accent); }
+  .src pre { white-space:pre-wrap; font:12px/1.5 ui-monospace, Menlo, monospace; color:#374151; margin:10px 0 0; max-height:260px; overflow:auto; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .err { color:var(--bad); font-size:13px; white-space:pre-wrap; }
+  .muted { color:var(--muted); font-size:12px; }
+  .del { background:none; color:var(--bad); padding:0 4px; font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>RAG Generator</h1>
+  <span class="meta" id="meta">connecting…</span>
+  <span class="meta" style="margin-left:auto"><a href="/documentation/flow.html" target="_blank">How it works</a> · <a href="/documentation/changelog.html" target="_blank">Changelog</a> · <a href="/docs" target="_blank">API docs</a></span>
+</header>
+<main>
+  <section>
+    <div class="card">
+      <h2>1 · Upload documents</h2>
+      <label for="collection">Collection (document set)</label>
+      <input type="text" id="collection" value="default">
+      <div class="drop" id="drop">Drop files here or click to choose<br><span class="muted" id="exts"></span></div>
+      <input type="file" id="files" multiple hidden>
+      <div class="row" style="margin-top:10px">
+        <button id="uploadBtn" disabled>Upload</button>
+        <button class="secondary" id="resetBtn" title="Delete every document in this collection">Reset collection</button>
+        <span class="muted" id="picked"></span>
+      </div>
+      <div class="err" id="uploadErr"></div>
+    </div>
+
+    <div class="card">
+      <h2>2 · Requests &amp; status <span class="muted" style="text-transform:none;letter-spacing:0">(every upload becomes a job; poll <code>/api/jobs/{id}</code>)</span></h2>
+      <table>
+        <thead><tr><th>Doc ID</th><th>Name</th><th>Status</th><th>Reason</th><th></th></tr></thead>
+        <tbody id="docs"><tr><td colspan="5" class="muted">No documents yet.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="card">
+      <h2>3 · Ask</h2>
+      <textarea id="question" placeholder="Ask something answerable from the uploaded documents…"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button id="askBtn">Ask</button>
+        <span class="muted" id="askMeta"></span>
+      </div>
+      <div class="err" id="askErr"></div>
+      <div class="answer" id="answer" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card">
+      <h2>4 · Sources</h2>
+      <div id="sources" class="muted">Retrieved chunks appear here after you ask a question.</div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let pending = [];
+let pollTimer = null;
+const TERMINAL = ['DUPLICATE','COMPLETED','FAILED','EMPTY_FILE','EXTRACTION_NOT_SUPPORTED','UPLOAD_FAILED'];
+function highlight(id) { const rows = [...document.querySelectorAll('#docs tr')]; const row = rows.find(r => r.querySelector('code.id')?.textContent === id); if (row) { row.style.background = '#fef9c3'; row.scrollIntoView({behavior:'smooth', block:'center'}); setTimeout(() => row.style.background = '', 1500); } }
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, opts);
+  if (r.status === 204) return null;
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail || body));
+  return body;
+}
+const col = () => $('collection').value.trim() || 'default';
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function loadHealth() {
+  try {
+    const h = await api('/api/health');
+    $('meta').textContent = `LLM: ${h.llm_model} · embeddings: ${h.embedding_model} · OCR: ${h.ocr_available ? 'on' : 'unavailable'} · collections: ${h.collections.join(', ') || 'none'}`;
+    $('exts').textContent = 'Accepted: ' + h.supported_extensions.join(' ');
+  } catch (e) { $('meta').textContent = 'API unreachable: ' + e.message; }
+}
+
+function setPending(list) {
+  pending = Array.from(list);
+  $('picked').textContent = pending.length ? pending.map(f => f.name).join(', ') : '';
+  $('uploadBtn').disabled = pending.length === 0;
+}
+$('drop').onclick = () => $('files').click();
+$('files').onchange = (e) => setPending(e.target.files);
+$('drop').ondragover = (e) => { e.preventDefault(); $('drop').classList.add('over'); };
+$('drop').ondragleave = () => $('drop').classList.remove('over');
+$('drop').ondrop = (e) => { e.preventDefault(); $('drop').classList.remove('over'); setPending(e.dataTransfer.files); };
+
+$('uploadBtn').onclick = async () => {
+  $('uploadErr').textContent = '';
+  const fd = new FormData();
+  pending.forEach(f => fd.append('files', f));
+  fd.append('collection', col());
+  $('uploadBtn').disabled = true;
+  try {
+    const res = await api('/api/documents', { method: 'POST', body: fd });
+    setPending([]); $('files').value = '';
+    await refreshDocs(); loadHealth();
+  } catch (e) { $('uploadErr').textContent = e.message; $('uploadBtn').disabled = false; }
+};
+
+$('resetBtn').onclick = async () => {
+  if (!confirm(`Delete all documents in collection "${col()}"?`)) return;
+  try { await api(`/api/collections/${encodeURIComponent(col())}`, { method: 'DELETE' }); await refreshDocs(); loadHealth(); }
+  catch (e) { $('uploadErr').textContent = e.message; }
+};
+
+async function deleteDoc(id) {
+  try { await api(`/api/documents/${id}`, { method: 'DELETE' }); await refreshDocs(); }
+  catch (e) { $('uploadErr').textContent = e.message; }
+}
+
+async function refreshDocs() {
+  let docs = [];
+  try { docs = await api(`/api/documents?collection=${encodeURIComponent(col())}`); } catch (e) { return; }
+  const tb = $('docs');
+  if (!docs.length) { tb.innerHTML = '<tr><td colspan="5" class="muted">No documents in this collection.</td></tr>'; }
+  else tb.innerHTML = docs.map(d => `
+    <tr>
+      <td><code class="id">${esc(d.doc_id)}</code></td>
+      <td>${esc(d.filename)}<br><span class="muted">${esc(d.file_type || '')}${d.ocr_pages ? ` · <span class="pill ocr">OCR ×${d.ocr_pages}</span>` : ''}</span></td>
+      <td><span class="pill ${d.status}">${d.status}</span>${d.stage ? `<div class="muted">${esc(d.stage)}…</div>` : ''}</td>
+      <td class="${['FAILED','UPLOAD_FAILED','EXTRACTION_NOT_SUPPORTED','EMPTY_FILE'].includes(d.status) ? 'err' : 'muted'}" style="font-size:12px">${esc(d.reason || '')}${d.duplicate_of ? ` <a href="#" onclick="highlight('${d.duplicate_of}');return false;">→ original ${esc(d.duplicate_of)}</a>` : ''}</td>
+      <td>${TERMINAL.includes(d.status) ? `<button class="del" title="Delete" onclick="deleteDoc('${d.doc_id}')">✕</button>` : ''}</td>
+    </tr>`).join('');
+  const busy = docs.some(d => !TERMINAL.includes(d.status));
+  clearTimeout(pollTimer);
+  if (busy) pollTimer = setTimeout(refreshDocs, 1500);
+}
+$('collection').onchange = () => { refreshDocs(); };
+
+$('askBtn').onclick = ask;
+$('question').onkeydown = (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) ask(); };
+
+async function ask() {
+  const q = $('question').value.trim();
+  if (!q) return;
+  $('askErr').textContent = ''; $('answer').textContent = 'Thinking…'; $('askMeta').textContent = '';
+  $('sources').innerHTML = '<span class="muted">Retrieving…</span>';
+  $('askBtn').disabled = true;
+  try {
+    const res = await api('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q, collection: col() }) });
+    $('answer').innerHTML = esc(res.answer).replace(/\[(\d+)\]/g, (m, n) => `<cite onclick="openSrc(${n})">[${n}]</cite>`);
+    $('askMeta').textContent = `${res.model} · ${res.latency_ms} ms · ${res.sources.length} chunks (dense+BM25 → RRF)`;
+    renderSources(res.sources);
+  } catch (e) { $('answer').textContent = ''; $('askErr').textContent = e.message; $('sources').innerHTML = ''; }
+  $('askBtn').disabled = false;
+}
+
+function renderSources(sources) {
+  if (!sources.length) { $('sources').innerHTML = '<span class="muted">No chunks retrieved.</span>'; return; }
+  $('sources').innerHTML = sources.map(s => `
+    <details class="src" id="src-${s.n}">
+      <summary><span class="n">[${s.n}]</span> <strong>${esc(s.source)}</strong>
+        <span class="muted">page ${s.page}${s.section ? ` · ${esc(s.section)}` : ''}</span>
+        ${s.extraction === 'ocr' ? '<span class="pill ocr">OCR</span>' : ''}
+        <span class="muted">dense #${s.dense_rank ?? '–'} · bm25 #${s.bm25_rank ?? '–'} · rrf ${s.rrf_score}</span>
+      </summary>
+      <pre>${esc(s.text)}</pre>
+    </details>`).join('');
+}
+function openSrc(n) { const el = $(`src-${n}`); if (el) { el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }
+
+loadHealth(); refreshDocs();
+</script>
+</body>
+</html>

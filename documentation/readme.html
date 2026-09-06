@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RAG Generator · RAG Generator</title>
+<style>
+  body{margin:0;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1c1f26;background:#f6f7f9}
+  main{max-width:960px;margin:0 auto;padding:32px 24px}
+  article{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:26px 30px}
+  h1{font-size:26px;margin:0 0 12px} h2{font-size:20px;margin:28px 0 8px;padding-top:12px;border-top:1px solid #eef0f3} h3{font-size:16px;margin:18px 0 6px}
+  a{color:#2563eb;text-decoration:none} .nav{font-size:13px;margin-bottom:16px}
+  pre{background:#f8fafc;border:1px solid #e5e7eb;border-radius:6px;padding:12px;overflow:auto;font:12.5px/1.5 ui-monospace,Menlo,monospace}
+  code{background:#f1f5f9;padding:1px 5px;border-radius:4px;font:12.5px ui-monospace,Menlo,monospace} pre code{background:none;padding:0}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;margin:10px 0} th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #e5e7eb;vertical-align:top} th{color:#6b7280}
+  .src{color:#6b7280;font-size:12px;margin-top:18px}
+</style></head>
+<body><main>
+<div class="nav"><a href="/">← App</a> · <a href="/documentation/flow.html">How it works</a> · <a href="/documentation/architecture.html">Architecture</a> · <a href="/documentation/changelog.html">Changelog</a> · <a href="/documentation/readme.html">README</a> · <a href="/docs">API docs</a></div>
+<article>
+<h1 id="rag-generator">RAG Generator</h1>
+<p><strong>What it does:</strong> you upload documents while the service is running; it extracts their text
+(with page metadata), splits it into overlapping, metadata-tagged chunks, embeds them, and
+indexes them for <strong>hybrid retrieval</strong> (vector search + BM25, fused with Reciprocal Rank
+Fusion). You then ask questions in a web UI, CLI or REST call and get an answer <strong>grounded in
+your documents with <code>[n]</code> citations</strong> to the exact file, page and passage. Swap the documents
+for a completely different set and it works unchanged — no code edits, only <code>.env</code>.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Interface</td>
+<td>REST API (FastAPI) · single-page UI (upload · requests &amp; status · ask · sources) · <code>rag</code> CLI</td>
+</tr>
+<tr>
+<td>Ingestion</td>
+<td>asynchronous jobs: submit → <code>job_id</code> → poll status; fixed status vocabulary with reasons; SHA-256 duplicate detection</td>
+</tr>
+<tr>
+<td>Formats</td>
+<td>PDF, DOCX, HTML, TXT, MD, CSV → text with page metadata · PNG/JPG/TIFF and scanned PDF pages via Tesseract OCR</td>
+</tr>
+<tr>
+<td>Retrieval</td>
+<td>dense top-k (fastembed → ChromaDB) <strong>+</strong> BM25 top-k (rank-bm25) → <strong>Reciprocal Rank Fusion</strong></td>
+</tr>
+<tr>
+<td>Generation</td>
+<td>any OpenAI-compatible LLM endpoint, configured only in <code>.env</code></td>
+</tr>
+<tr>
+<td>Evaluation</td>
+<td>own script with <strong>Claude as judge</strong></td>
+</tr>
+<tr>
+<td>Deployment</td>
+<td>Docker + docker compose</td>
+</tr>
+<tr>
+<td>Docs</td>
+<td><a href="/documentation/"><code>documentation/</code></a> — <a href="/documentation/architecture.html">architecture</a> (<a href="/documentation/architecture.html">html</a>) · <a href="/documentation/flow.html">interactive flow walkthrough</a> · <a href="/documentation/changelog.html">changelog</a> · this README as <a href="/documentation/readme.html">html</a></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="1-setup">1. Setup</h2>
+<h3 id="docker-recommended">Docker (recommended)</h3>
+<pre><code class="language-bash">cp .env.example .env
+# edit .env — set the three required lines:
+#   LLM_API_URL=https://api.openai.com/v1      (base URL; /chat/completions is appended)
+#   LLM_API_KEY=sk-...
+#   LLM_MODEL=gpt-4o-mini
+# optional: ANTHROPIC_API_KEY=sk-ant-...        (only for the evaluation script)
+docker compose up --build
+</code></pre>
+<p>Open <a href="http://localhost:8000">http://localhost:8000</a> (change the port with <code>APP_PORT=9000</code> in <code>.env</code>). Interactive API docs: <a href="http://localhost:8000/docs">http://localhost:8000/docs</a>.
+Documentation pages are served at <a href="http://localhost:8000/documentation/flow.html">http://localhost:8000/documentation/flow.html</a>,
+<code>/documentation/architecture.html</code>, <code>/documentation/changelog.html</code>.</p>
+<p>Uploads, the Chroma index and the job registry live in <code>./data</code> (a compose volume) and survive restarts.</p>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th><code>LLM_API_URL</code></th>
+<th><code>LLM_MODEL</code> example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OpenAI</td>
+<td><code>https://api.openai.com/v1</code></td>
+<td><code>gpt-4o-mini</code></td>
+</tr>
+<tr>
+<td>OpenRouter</td>
+<td><code>https://openrouter.ai/api/v1</code></td>
+<td><code>anthropic/claude-sonnet-4.5</code></td>
+</tr>
+<tr>
+<td>Groq</td>
+<td><code>https://api.groq.com/openai/v1</code></td>
+<td><code>llama-3.3-70b-versatile</code></td>
+</tr>
+<tr>
+<td>Ollama (from Docker)</td>
+<td><code>http://host.docker.internal:11434/v1</code></td>
+<td><code>llama3.1</code></td>
+</tr>
+<tr>
+<td>Azure OpenAI / vLLM / LiteLLM</td>
+<td>their OpenAI-compatible base URL</td>
+<td>deployment / served model name</td>
+</tr>
+</tbody>
+</table>
+<h3 id="local-no-docker">Local (no Docker)</h3>
+<pre><code class="language-bash">uv venv --python 3.11 .venv &amp;&amp; source .venv/bin/activate   # or: python3.11 -m venv .venv
+uv pip install -r requirements.txt &amp;&amp; pip install -e .     # `-e .` installs the `rag` command
+cp .env.example .env                                       # edit the LLM_* lines
+rag serve                                                  # http://localhost:8000
+</code></pre>
+<p>OCR outside Docker needs the Tesseract binary (<code>brew install tesseract</code> / <code>apt install
+tesseract-ocr</code>). Without it the app still runs: scanned pages are skipped with a warning and
+image uploads end as <code>FAILED</code> with a clear reason.</p>
+<h3 id="offline-demo-without-an-llm-key">Offline demo without an LLM key</h3>
+<p><code>scripts/mock_llm.py</code> is a tiny OpenAI-compatible server that answers <strong>extractively</strong> from the
+retrieved context (it is not a language model — for demos and CI only):</p>
+<pre><code class="language-bash">python scripts/mock_llm.py &amp;     # http://localhost:8001/v1
+# .env:  LLM_API_URL=http://localhost:8001/v1   LLM_API_KEY=mock   LLM_MODEL=mock-extractive
+rag serve
+</code></pre>
+<h2 id="2-how-the-upload-job-flow-works">2. How the upload job flow works</h2>
+<p>Uploading is asynchronous. Every file in a request becomes a <strong>job</strong> and the API returns
+immediately (HTTP 202) with one <code>job_id</code> per file. A background worker indexes the file; you
+poll <code>GET /api/jobs/{job_id}</code> or watch the listing. The interactive walkthrough is in
+<a href="/documentation/flow.html"><code>documentation/flow.html</code></a>.</p>
+<p>The listing (<code>GET /api/documents</code>, and the <strong>Requests &amp; status</strong> table in the UI) shows
+<strong>DOC ID · NAME · STATUS · REASON</strong> for every request ever made, including rejected ones.</p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Meaning</th>
+<th>Processed?</th>
+<th>REASON column</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>QUEUED</code></td>
+<td>stored, waiting for the worker</td>
+<td>soon</td>
+<td>"Waiting for the background worker"</td>
+</tr>
+<tr>
+<td><code>DUPLICATE</code></td>
+<td>same SHA-256 as a live document in this collection</td>
+<td><strong>no</strong></td>
+<td>original's name + id, linked in the listing</td>
+</tr>
+<tr>
+<td><code>PROCESSING</code></td>
+<td>worker running; <code>stage</code> = extracting → chunking → embedding</td>
+<td>in progress</td>
+<td>current stage and counts</td>
+</tr>
+<tr>
+<td><code>COMPLETED</code></td>
+<td>indexed and searchable</td>
+<td>yes</td>
+<td>"Indexed N pages (k via OCR) into M chunks"</td>
+</tr>
+<tr>
+<td><code>FAILED</code></td>
+<td>processing raised an error</td>
+<td>no</td>
+<td><code>PROCESSING FAILED: &lt;exception&gt;</code></td>
+</tr>
+<tr>
+<td><code>EMPTY_FILE</code></td>
+<td>0-byte upload</td>
+<td>no</td>
+<td>"The uploaded file is 0 bytes"</td>
+</tr>
+<tr>
+<td><code>EXTRACTION_NOT_SUPPORTED</code></td>
+<td>extension not in <code>SUPPORTED_EXTENSIONS</code></td>
+<td>no</td>
+<td>the extension and the supported list</td>
+</tr>
+<tr>
+<td><code>UPLOAD_FAILED</code></td>
+<td>unreadable stream, larger than <code>MAX_UPLOAD_MB</code>, or disk write error</td>
+<td>no</td>
+<td><code>UPLOAD FAILED: &lt;cause&gt;</code></td>
+</tr>
+</tbody>
+</table>
+<p>Terminal statuses are all of them except <code>QUEUED</code> and <code>PROCESSING</code>. Duplicate detection is
+per collection: the same file in another collection is a separate document set. Jobs caught
+mid-flight by a restart are marked <code>FAILED</code> with an explanatory reason.</p>
+<h2 id="3-using-it">3. Using it</h2>
+<h3 id="ui-httplocalhost8000">UI (<a href="http://localhost:8000">http://localhost:8000</a>)</h3>
+<ol>
+<li><strong>Upload</strong> — drop files, optionally name a <em>collection</em> (a document set). Accepted extensions are shown.</li>
+<li><strong>Requests &amp; status</strong> — every job with its Doc ID, name, status pill and reason; duplicates link to their original; delete finished jobs with ✕.</li>
+<li><strong>Ask</strong> — the answer cites <code>[n]</code> blocks; click a citation to jump to the chunk.</li>
+<li><strong>Sources</strong> — each retrieved chunk with file, page/section, whether it came from dense or BM25 (or both) and its RRF score. OCR'd chunks are flagged.</li>
+</ol>
+<p><strong>Reset collection</strong> wipes a document set so you can load a different one.</p>
+<h3 id="cli">CLI</h3>
+<pre><code class="language-bash">rag ingest samples/*.md samples/*.pdf --collection demo   # prints job ids, waits for terminal status
+rag status --watch                                        # DOC ID · NAME · STATUS · REASON
+rag job &lt;job_id&gt;                                          # one job in detail
+rag ask &quot;How many days of annual leave do employees get?&quot; -c demo --show-sources
+rag reset -c demo --yes
+rag serve
+</code></pre>
+<p>The CLI talks to the API at <code>RAG_API_URL</code> (default <code>http://localhost:8000</code>, override with <code>--api</code>).</p>
+<h3 id="rest-api">REST API</h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/health</code></td>
+<td>status, models, supported extensions, status vocabulary, collections, non-secret settings</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/documents</code></td>
+<td>multipart <code>files[]</code> (+ <code>collection</code>) → <strong>202</strong> with one job per file</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/jobs/{job_id}</code></td>
+<td>poll one job (<code>job_id</code> = <code>doc_id</code>)</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/documents?collection=&amp;status=</code></td>
+<td>listing of all requests: doc id, name, status, reason, duplicate link</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/documents/{doc_id}</code></td>
+<td>same record as <code>/api/jobs/{id}</code></td>
+</tr>
+<tr>
+<td><code>DELETE</code></td>
+<td><code>/api/documents/{doc_id}</code></td>
+<td>remove a finished job and its chunks</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/chunks?collection=&amp;limit=&amp;offset=</code></td>
+<td>inspect indexed chunks</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/ask</code></td>
+<td><code>{"question", "collection"?, "top_k"?}</code> → answer + cited sources</td>
+</tr>
+<tr>
+<td><code>DELETE</code></td>
+<td><code>/api/collections/{name}</code></td>
+<td>reset a whole document set</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-bash">curl -F &quot;files=@samples/handbook.md&quot; -F collection=demo localhost:8000/api/documents
+curl localhost:8000/api/jobs/&lt;job_id&gt;
+curl -X POST localhost:8000/api/ask -H 'content-type: application/json' \
+     -d '{&quot;question&quot;:&quot;What is the meal allowance?&quot;,&quot;collection&quot;:&quot;demo&quot;}'
+</code></pre>
+<h2 id="4-what-is-supported">4. What is supported</h2>
+<ul>
+<li><strong>Input formats:</strong> <code>.pdf .docx .html .htm .txt .md .csv</code> plus <code>.png .jpg .jpeg .tiff .tif</code> (OCR).
+  Scanned PDF pages (fewer than <code>OCR_MIN_CHARS_PER_PAGE</code> extractable characters) fall back to OCR automatically.</li>
+<li><strong>Page metadata:</strong> PDF = printed page · DOCX = one page per heading section · HTML = one page, <code>&lt;title&gt;</code> as section ·
+  MD = one page per heading · TXT = one page · CSV = one page per <code>CSV_ROWS_PER_PAGE</code> rows (header repeated) · images = one page per frame.</li>
+<li><strong>Multiple document sets</strong> via collections; reset or delete without restarting.</li>
+<li><strong>Any OpenAI-compatible LLM</strong>; <strong>any fastembed model</strong>; CPU-only inference.</li>
+<li><strong>Multi-file uploads</strong>, up to <code>MAX_UPLOAD_MB</code> (50 MB) per file.</li>
+<li><strong>Grounded answers</strong> with citations and an explicit "I could not find this in the provided documents." fallback.</li>
+</ul>
+<h2 id="5-what-is-not-supported-by-design-for-this-version">5. What is not supported (by design, for this version)</h2>
+<ul>
+<li>Non-OpenAI-compatible generation APIs (e.g. raw Anthropic Messages API for generation — use a gateway such as OpenRouter or LiteLLM). The <strong>judge</strong> is Claude via the official SDK.</li>
+<li>Cross-encoder reranking, query rewriting, multi-hop or conversational memory: single-turn retrieval → answer only.</li>
+<li>Authentication, multi-tenancy, rate limiting — run behind your own gateway.</li>
+<li>Horizontal scaling: BM25 lives in one process's memory; run a single replica.</li>
+<li>Formats outside the list above (PPTX, XLSX, EPUB, audio…). Adding one is a small extractor — see Tuning.</li>
+<li>OCR languages other than English unless you install extra Tesseract language packs and set <code>OCR_LANG</code>.</li>
+<li>Real-time streaming of the answer (responses are returned whole).</li>
+</ul>
+<h2 id="6-architecture">6. Architecture</h2>
+<p>Full description with diagrams: <a href="/documentation/architecture.html"><code>documentation/architecture.md</code></a>
+(browser version: <a href="/documentation/architecture.html"><code>architecture.html</code></a>). In short:</p>
+<pre><code>upload ─► validate/hash ─► QUEUED ─► worker: extract (pypdf/docx/bs4/csv/OCR) ─► chunk ─► fastembed ─► ChromaDB + BM25 ─► COMPLETED
+ask    ─► embed ─► Chroma top-k ─┐
+       └► tokenize ─► BM25 top-k ─┴─► RRF ─► top FUSED_TOP_K ─► grounded prompt ─► OpenAI-compatible LLM ─► answer + sources
+</code></pre>
+<h2 id="7-tuning-everything-lives-in-appconfigpy">7. Tuning — everything lives in <code>app/config.py</code></h2>
+<p>Every tunable is a field on <code>Settings</code> with a default, overridable from <code>.env</code> (same name);
+<code>.env.example</code> lists all of them. Nothing tunable is hard-coded elsewhere.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CHUNK_SIZE_CHARS</code> / <code>CHUNK_OVERLAP_CHARS</code></td>
+<td>1200 / 200</td>
+<td>window size and overlap for chunking</td>
+</tr>
+<tr>
+<td><code>CSV_ROWS_PER_PAGE</code></td>
+<td>50</td>
+<td>rows per CSV "page"</td>
+</tr>
+<tr>
+<td><code>DENSE_TOP_K</code> / <code>BM25_TOP_K</code></td>
+<td>20 / 20</td>
+<td>candidates from each retriever before fusion</td>
+</tr>
+<tr>
+<td><code>FUSED_TOP_K</code></td>
+<td>6</td>
+<td>chunks passed to the LLM</td>
+</tr>
+<tr>
+<td><code>RRF_K</code></td>
+<td>60</td>
+<td>RRF smoothing constant</td>
+</tr>
+<tr>
+<td><code>EMBEDDING_MODEL</code></td>
+<td><code>BAAI/bge-small-en-v1.5</code></td>
+<td>any fastembed model (clear <code>data/chroma</code> after changing)</td>
+</tr>
+<tr>
+<td><code>OCR_ENABLED</code> / <code>OCR_MIN_CHARS_PER_PAGE</code> / <code>OCR_LANG</code> / <code>OCR_DPI</code></td>
+<td>true / 20 / eng / 200</td>
+<td>when and how the Tesseract fallback runs</td>
+</tr>
+<tr>
+<td><code>LLM_TEMPERATURE</code> / <code>LLM_MAX_TOKENS</code> / <code>LLM_TIMEOUT_S</code></td>
+<td>0.1 / 1024 / 60</td>
+<td>generation parameters</td>
+</tr>
+<tr>
+<td><code>MAX_UPLOAD_MB</code> / <code>DEFAULT_COLLECTION</code></td>
+<td>50 / <code>default</code></td>
+<td>upload limit, collection used when none is given</td>
+</tr>
+<tr>
+<td><code>APP_PORT</code> / <code>APP_HOST</code></td>
+<td>8000 / <code>0.0.0.0</code></td>
+<td>port the app listens on (<code>rag serve</code>) and the host port docker compose publishes (<code>${APP_PORT:-8000}</code>)</td>
+</tr>
+<tr>
+<td><code>JUDGE_MODEL</code> / <code>EVAL_MIN_FAITHFULNESS</code></td>
+<td><code>claude-opus-5</code> / 3.5</td>
+<td>evaluation</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Supported formats</strong> are the <code>SUPPORTED_EXTENSIONS</code> dict at the bottom of <code>app/config.py</code>
+(extension → extractor name). Remove an entry to stop accepting a type. To add a format: write an
+extractor in <code>app/ingest/extractors.py</code>, register it in <code>EXTRACTORS</code>, add the extension, add a test,
+and update the docs.</p>
+<h2 id="8-evaluation-claude-as-judge">8. Evaluation (Claude as judge)</h2>
+<pre><code class="language-bash">rag ingest samples/* --collection default                 # index the corpus named in the dataset
+# set ANTHROPIC_API_KEY in .env, then:
+python -m evaluation.run_eval --dataset evaluation/dataset.example.jsonl
+</code></pre>
+<p>For each row the script calls <code>/api/ask</code>, then asks Claude (<code>JUDGE_MODEL</code>, official <code>anthropic</code>
+SDK, structured outputs) to score <strong>faithfulness</strong>, <strong>answer relevance</strong>, <strong>context relevance</strong>,
+<strong>correctness vs. reference</strong> (1–5) and flag <strong>hallucination</strong>. Reports land in
+<code>evaluation/reports/&lt;timestamp&gt;.{json,md}</code>; the run exits non-zero when mean faithfulness is
+below <code>--min-faithfulness</code>. For a new document set, synthesise questions first:</p>
+<pre><code class="language-bash">python -m evaluation.generate_dataset --collection mydocs --chunks 10 --per-chunk 2 --out evaluation/dataset.mydocs.jsonl
+python -m evaluation.run_eval --dataset evaluation/dataset.mydocs.jsonl
+</code></pre>
+<h2 id="9-tech-stack">9. Tech stack</h2>
+<p><strong>Used</strong></p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Choice</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language</td>
+<td>Python 3.11</td>
+<td>required by the brief; broad library support</td>
+</tr>
+<tr>
+<td>API</td>
+<td>FastAPI + uvicorn, pydantic, pydantic-settings</td>
+<td>async uploads, background tasks, validation, free OpenAPI docs, <code>.env</code> settings</td>
+</tr>
+<tr>
+<td>UI</td>
+<td>one static <code>index.html</code>, vanilla JS</td>
+<td>no build step; the brief asked for a single page</td>
+</tr>
+<tr>
+<td>CLI</td>
+<td>typer + httpx</td>
+<td>talks to the API so only one process opens Chroma</td>
+</tr>
+<tr>
+<td>Extraction</td>
+<td>pypdf, python-docx, beautifulsoup4 + lxml, stdlib csv</td>
+<td>one small library per format</td>
+</tr>
+<tr>
+<td>OCR</td>
+<td>Tesseract via pytesseract, pypdfium2 (page rendering), Pillow</td>
+<td>fallback for scanned PDFs and images; no poppler dependency</td>
+</tr>
+<tr>
+<td>Chunking</td>
+<td>custom sliding window</td>
+<td>overlapping, boundary-aware, metadata-tagged as required</td>
+</tr>
+<tr>
+<td>Embeddings</td>
+<td>fastembed <code>BAAI/bge-small-en-v1.5</code> (ONNX, CPU)</td>
+<td>fast, no GPU, no API key</td>
+</tr>
+<tr>
+<td>Vector DB</td>
+<td>ChromaDB embedded <code>PersistentClient</code></td>
+<td>required by the brief; zero extra services</td>
+</tr>
+<tr>
+<td>Lexical</td>
+<td>rank-bm25</td>
+<td>required by the brief</td>
+</tr>
+<tr>
+<td>Fusion</td>
+<td>Reciprocal Rank Fusion</td>
+<td>rank-based, robust to incomparable score scales</td>
+</tr>
+<tr>
+<td>LLM</td>
+<td>OpenAI-compatible <code>chat/completions</code> over httpx</td>
+<td>works with every major provider by changing two <code>.env</code> lines</td>
+</tr>
+<tr>
+<td>Judge</td>
+<td>anthropic SDK, <code>claude-opus-5</code>, <code>messages.parse</code></td>
+<td>Claude as judge with validated structured verdicts</td>
+</tr>
+<tr>
+<td>Docs tooling</td>
+<td>python-markdown (<code>scripts/build_docs.py</code>)</td>
+<td>HTML twins of Markdown docs</td>
+</tr>
+<tr>
+<td>Tests</td>
+<td>pytest + FastAPI TestClient</td>
+<td>end-to-end without network or keys</td>
+</tr>
+<tr>
+<td>Packaging</td>
+<td>Docker (python:3.11-slim + tesseract), docker compose</td>
+<td>required by the brief</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Deliberately not used:</strong> LangChain / LlamaIndex (a thin custom pipeline is easier to read and
+tune), a cross-encoder reranker (out of scope; slots in after <code>hybrid_retrieve</code>), a separate
+Chroma server or a job queue like Celery/Redis (FastAPI background tasks suffice for one
+replica), a JS framework, GPU acceleration, the server-side refusal-fallback beta on the judge.</p>
+<h2 id="10-samples-and-tests">10. Samples and tests</h2>
+<p><code>samples/</code> is a small fictional company corpus covering every format: <code>handbook.md</code>,
+<code>security_policy.txt</code>, <code>robot_catalog.csv</code>, <code>release_notes.html</code>, <code>warranty.pdf</code>, <code>onboarding.docx</code>,
+plus <code>scanned_memo.pdf</code> and <code>whiteboard.png</code> whose text exists only as pixels (OCR path). Regenerate
+the binary ones with <code>pip install -r requirements-dev.txt &amp;&amp; python scripts/make_samples.py</code>.</p>
+<pre><code class="language-bash">pytest   # chunker, RRF, every extractor, OCR-unavailable path, async job flow, duplicates, rejections, 502 on LLM errors
+</code></pre>
+<h2 id="11-repository-layout">11. Repository layout</h2>
+<pre><code>app/            FastAPI service (config, models, ingest/, retrieval/, llm/, rag.py, jobs.py, main.py, static/index.html)
+cli/            `rag` CLI
+evaluation/     Claude-as-judge runner, dataset generator, example dataset, reports/
+documentation/  architecture.md(.html), flow.html (interactive), changelog.html, readme.html
+samples/        demo corpus     scripts/  make_samples.py, mock_llm.py, build_docs.py, sync_rules.py
+tests/          pytest suite    transcripts/  agent session exports
+CLAUDE.md       rules for AI agents (source of truth) → synced to .cursor/rules/project.mdc and AGENTS.md
+memory.md       project memory: decisions, gotchas, conventions
+</code></pre>
+<h2 id="12-working-on-this-repo-with-an-ai-agent">12. Working on this repo with an AI agent</h2>
+<p><code>CLAUDE.md</code> (mirrored to <code>.cursor/rules/project.mdc</code> and <code>AGENTS.md</code> by <code>scripts/sync_rules.py</code>)
+requires agents to read <code>memory.md</code> before planning, run the compile check and tests after every
+change, never commit (the user commits), and update README / changelog / architecture / flow /
+memory and the HTML twins with every code change.</p>
+<h2 id="13-transcripts">13. Transcripts</h2>
+<p><code>transcripts/</code> holds the complete Claude Code transcripts of the sessions that built this project
+(see <code>transcripts/README.md</code>).</p>
+<p class="src">Generated from <code>README.md</code> by <code>scripts/build_docs.py</code>. Edit the Markdown, then re-run the script.</p>
+</article>
+</main></body></html>
