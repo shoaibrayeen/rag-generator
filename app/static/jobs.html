@@ -57,8 +57,8 @@
   </div>
   <div class="err" id="err"></div>
   <table>
-    <thead><tr><th>Job ID</th><th>Collection</th><th>Files</th><th>Status</th><th>Per status</th><th>Reason</th><th>Created</th></tr></thead>
-    <tbody id="rows"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
+    <thead><tr><th>Job ID</th><th>Collection</th><th>Documents</th><th>Pages</th><th>Chunks</th><th>Status</th><th>Per status</th><th>Reason</th><th>Created</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="9" class="muted">Loading…</td></tr></tbody>
   </table>
   <div class="pager" id="pager"></div>
 </div>
@@ -101,12 +101,14 @@ async function load() {
       <tr class="clickable" onclick="location.href='/documents?job_id=${j.job_id}'">
         <td><code class="id">${esc(j.job_id)}</code></td>
         <td>${esc(j.collection)}</td>
-        <td>${j.files}</td>
+        <td>${j.total_documents}${j.counts.COMPLETED && j.counts.COMPLETED !== j.total_documents ? ` <span class="muted">(${j.counts.COMPLETED} indexed)</span>` : ''}</td>
+        <td>${j.counts.COMPLETED ? j.total_pages : '<span class="muted">–</span>'}</td>
+        <td>${j.counts.COMPLETED ? j.total_chunks : '<span class="muted">–</span>'}</td>
         <td><span class="pill ${j.status}">${j.status}</span></td>
         <td>${Object.entries(j.counts).map(([k, v]) => `<span class="pill ${k}" title="${k}">${v} ${k.toLowerCase().replace(/_/g, ' ')}</span>`).join(' ')}</td>
         <td class="muted">${esc(j.reason)}</td>
         <td class="muted">${esc(j.created_at.replace('T', ' ').slice(0, 19))}</td>
-      </tr>`).join('') : '<tr><td colspan="7" class="muted">No jobs.</td></tr>';
+      </tr>`).join('') : '<tr><td colspan="9" class="muted">No jobs.</td></tr>';
     pager($('pager'), m, (p) => { page = p; setQuery({page: p || null}); load(); });
     const busy = m.items.some(j => !['COMPLETED', 'FAILED'].includes(j.status));
     if (busy) setTimeout(load, 2000);

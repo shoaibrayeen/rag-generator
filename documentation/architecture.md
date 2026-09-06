@@ -19,7 +19,7 @@ service at runtime. There are two flows: **ingest** (asynchronous) and **ask** (
 | LLM client | `app/llm/client.py` | OpenAI-compatible `chat/completions` over httpx |
 | Prompts | `app/llm/prompts.py` | grounded-answer system prompt, `[n]` context formatting |
 | Orchestrator | `app/rag.py` | `answer()` = retrieve → prompt → LLM → answer + sources |
-| UI | `app/static/index.html`, `jobs.html`, `documents.html`, `document.html` | workbench (upload · jobs · documents · ask · sources); dedicated listings (20/page); document show page (original file + indexed chunks, or the reason a viewer is not applicable) |
+| UI | `app/static/index.html`, `jobs.html`, `documents.html`, `document.html` | workbench (upload · jobs · documents · ask · sources); dedicated listings (20/page); document show page = 55% page viewer + 45% per-document chat with page-number citations that jump and highlight |
 | CLI | `cli/rag_cli.py` | `rag ingest/status/job/ask/reset/serve` over HTTP |
 | Evaluation | `evaluation/` | Claude-as-judge scoring, dataset generation |
 | Config | `app/config.py` | every tunable, overridable from `.env` |
@@ -45,9 +45,9 @@ background worker (FastAPI BackgroundTasks, thread pool)
                       │                        │                       │
                       └──────── any exception ─┴───────────────────────┴──► FAILED ("PROCESSING FAILED: …")
 
-client ──GET /api/jobs?page=0&size=5──► paginated job listing (JOB ID · FILES · STATUS · REASON)
+client ──GET /api/jobs?page=0&size=5──► paginated job listing (JOB ID · DOCUMENTS · PAGES · STATUS · REASON; total_documents/total_pages/total_chunks derived from its documents)
 client ──GET /api/jobs/{job_id}──► job + its documents
-client ──GET /api/documents?job_id=&page=0&size=5──► paginated documents of one job (DOC ID · NAME · STATUS · REASON)
+client ──GET /api/documents?job_id=&page=0&size=5──► paginated documents of one job (DOC ID · NAME · PAGES · STATUS · REASON)
 ```
 
 Listings are paginated in the API layer (`_paginate` in `app/main.py`): 0-based `page`, `size`
@@ -88,6 +88,19 @@ primary reader's error (paths stripped, capped length) and what the fallback sai
 
 `POST /api/documents/{doc_id}/retry` re-queues a FAILED document from its stored file.
 `GET /api/documents/{doc_id}/file` serves the stored original (inline where browsers can render it) for the show page.
+
+### Show page: viewer + chat + citation jump
+
+1. Ingest writes `data/pages/<doc_id>.json`: for each page the normalised text (exactly what
+   `chunk_pages()` measured `char_start` / `char_end` against), section, extraction and chunk ids.
+2. `GET /api/documents/{id}/pages` returns it (or reconstructs pages from chunk offsets for
+   documents indexed before v0.8.0).
+3. The chat posts `/api/ask` with `doc_ids=[id]`, so retrieval is restricted to that document.
+4. The answer's `[n]` chunk markers are rewritten to **page-number chips** using the `citations`
+   payload (several chunks on one page collapse into one chip). Clicking a chip switches to the
+   Text view, scrolls to that page and wraps the cited chunk text in `<mark>` (light blue; the
+   clicked page's passage darker). The text is located with `indexOf` on the page text and falls
+   back to the stored offsets.
 
 ### Logging
 

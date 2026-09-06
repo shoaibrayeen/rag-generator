@@ -59,8 +59,8 @@
   </div>
   <div class="err" id="err"></div>
   <table>
-    <thead><tr><th>Doc ID</th><th>Name</th><th>Type</th><th>Job</th><th>Status</th><th>Pages / chunks</th><th>Reason</th><th>Updated</th></tr></thead>
-    <tbody id="rows"><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
+    <thead><tr><th>Doc ID</th><th>Name</th><th>Type</th><th>Job</th><th>Pages</th><th>Chunks</th><th>Status</th><th>Reason</th><th>Updated</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="9" class="muted">Loading…</td></tr></tbody>
   </table>
   <div class="pager" id="pager"></div>
 </div>
@@ -118,11 +118,12 @@ async function load() {
         <td>${esc(d.filename)}${d.ocr_pages ? ` <span class="pill ocr">OCR ×${d.ocr_pages}</span>` : ''}</td>
         <td class="muted">${esc(d.file_type || '')}</td>
         <td><a href="/documents?job_id=${d.job_id}" onclick="event.stopPropagation()"><code class="id">${esc(d.job_id)}</code></a></td>
+        <td>${d.pages ? d.pages : '<span class="muted" title="known once extraction has run">–</span>'}${d.ocr_pages ? `<div class="muted">${d.ocr_pages} via OCR</div>` : ''}</td>
+        <td>${d.chunks ? d.chunks : '<span class="muted">–</span>'}</td>
         <td><span class="pill ${d.status}">${d.status}</span>${d.stage ? `<div class="muted">${esc(d.stage)}…</div>` : ''}</td>
-        <td class="muted">${d.status === 'COMPLETED' ? `${d.pages} / ${d.chunks}` : '–'}</td>
         <td class="${BAD.includes(d.status) ? 'err' : 'muted'}" style="font-size:12px">${esc(d.reason || '')}${d.duplicate_of ? ` <a href="/documents/${d.duplicate_of}" onclick="event.stopPropagation()">→ original</a>` : ''}</td>
         <td class="muted">${esc(d.updated_at.replace('T', ' ').slice(0, 19))}</td>
-      </tr>`).join('') : '<tr><td colspan="8" class="muted">No documents match.</td></tr>';
+      </tr>`).join('') : '<tr><td colspan="9" class="muted">No documents match.</td></tr>';
     pager($('pager'), m, (p) => { page = p; setQuery({page: p || null}); load(); });
     if (m.items.some(d => !TERMINAL.includes(d.status))) setTimeout(load, 2000);
   } catch (e) { $('err').textContent = e.message; }

@@ -265,6 +265,8 @@ matches what was shipped.
 | 9 | Three named stores: `jobs`, `documents`, `document_chunks` (single Chroma collection with `collection`/`doc_id`/`job_id` metadata) | `app/config.py`, `app/retrieval/vector_store.py` |
 | 11 | **Step logging** on every stage; **content sniffing** (RTF-as-.docx incident) with RTF support and precise failure reasons; **retry** for FAILED documents; upload order store → hash → duplicate check | `app/logging_utils.py`, `app/ingest/extractors.py`, `app/main.py` |
 | 12 | Dedicated `/jobs` and `/documents` pages (20 per page) and `/documents/{id}` show page with viewer / not-applicable explanation / duplicate link | `app/static/jobs.html`, `documents.html`, `document.html`, `app/main.py` |
+| 13 | Show page as viewer (55%) + per-document chat (45%); page-number citations that jump to the page and highlight the passage; page text stored at ingest (`/api/documents/{id}/pages`) | `app/static/document.html`, `app/ingest/pipeline.py`, `app/main.py` |
+| 14 | Listings show total pages per document and total documents / pages per job, on the home page and the dedicated pages | `app/jobs.py`, `app/static/*.html`, `cli/rag_cli.py` |
 | 10 | **Pagination** for job and document listings (0-based `page`, default `size` 5) in API, UI and CLI; `documentation/enhancements.md` | `app/main.py`, `app/static/index.html`, `cli/rag_cli.py`, `documentation/enhancements.md` |
 
 Verification performed locally (no Docker/Tesseract on the dev machine): `pytest` suite,

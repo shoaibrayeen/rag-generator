@@ -91,7 +91,7 @@ service at runtime. There are two flows: <strong>ingest</strong> (asynchronous) 
 <tr>
 <td>UI</td>
 <td><code>app/static/index.html</code>, <code>jobs.html</code>, <code>documents.html</code>, <code>document.html</code></td>
-<td>workbench (upload · jobs · documents · ask · sources); dedicated listings (20/page); document show page (original file + indexed chunks, or the reason a viewer is not applicable)</td>
+<td>workbench (upload · jobs · documents · ask · sources); dedicated listings (20/page); document show page = 55% page viewer + 45% per-document chat with page-number citations that jump and highlight</td>
 </tr>
 <tr>
 <td>CLI</td>
@@ -129,9 +129,9 @@ background worker (FastAPI BackgroundTasks, thread pool)
                       │                        │                       │
                       └──────── any exception ─┴───────────────────────┴──► FAILED (&quot;PROCESSING FAILED: …&quot;)
 
-client ──GET /api/jobs?page=0&amp;size=5──► paginated job listing (JOB ID · FILES · STATUS · REASON)
+client ──GET /api/jobs?page=0&amp;size=5──► paginated job listing (JOB ID · DOCUMENTS · PAGES · STATUS · REASON; total_documents/total_pages/total_chunks derived from its documents)
 client ──GET /api/jobs/{job_id}──► job + its documents
-client ──GET /api/documents?job_id=&amp;page=0&amp;size=5──► paginated documents of one job (DOC ID · NAME · STATUS · REASON)
+client ──GET /api/documents?job_id=&amp;page=0&amp;size=5──► paginated documents of one job (DOC ID · NAME · PAGES · STATUS · REASON)
 </code></pre>
 <p>Listings are paginated in the API layer (<code>_paginate</code> in <code>app/main.py</code>): 0-based <code>page</code>, <code>size</code>
 defaulting to <code>LIST_PAGE_SIZE</code> (5), envelope <code>{items, page, size, total, pages, has_next, has_prev}</code>.</p>
@@ -223,6 +223,19 @@ the safety net for scanned, image-only or otherwise unreadable content. Failure 
 primary reader's error (paths stripped, capped length) and what the fallback said.</p>
 <p><code>POST /api/documents/{doc_id}/retry</code> re-queues a FAILED document from its stored file.
 <code>GET /api/documents/{doc_id}/file</code> serves the stored original (inline where browsers can render it) for the show page.</p>
+<h3 id="show-page-viewer-chat-citation-jump">Show page: viewer + chat + citation jump</h3>
+<ol>
+<li>Ingest writes <code>data/pages/&lt;doc_id&gt;.json</code>: for each page the normalised text (exactly what
+   <code>chunk_pages()</code> measured <code>char_start</code> / <code>char_end</code> against), section, extraction and chunk ids.</li>
+<li><code>GET /api/documents/{id}/pages</code> returns it (or reconstructs pages from chunk offsets for
+   documents indexed before v0.8.0).</li>
+<li>The chat posts <code>/api/ask</code> with <code>doc_ids=[id]</code>, so retrieval is restricted to that document.</li>
+<li>The answer's <code>[n]</code> chunk markers are rewritten to <strong>page-number chips</strong> using the <code>citations</code>
+   payload (several chunks on one page collapse into one chip). Clicking a chip switches to the
+   Text view, scrolls to that page and wraps the cited chunk text in <code>&lt;mark&gt;</code> (light blue; the
+   clicked page's passage darker). The text is located with <code>indexOf</code> on the page text and falls
+   back to the stored offsets.</li>
+</ol>
 <h3 id="logging">Logging</h3>
 <p><code>app/logging_utils.py</code> configures the root logger (<code>LOG_LEVEL</code>) and provides <code>timed()</code> /
 <code>ctx()</code>. Each step logs <code>[step] … job=… doc=… file=…</code> with elapsed ms: upload decisions, extract

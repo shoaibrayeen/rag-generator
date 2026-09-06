@@ -6,16 +6,34 @@ or FAILED with a human-readable reason. Every step is logged with job/doc ids an
 """
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
 from app import jobs
+from app.config import settings
 from app.ingest.chunker import chunk_pages
 from app.ingest.extractors import ExtractionError, extract
 from app.logging_utils import ctx, timed
 from app.retrieval import bm25_index, embedder, vector_store
 
 log = logging.getLogger("rag.pipeline")
+
+
+def save_pages(doc_id: str, pages, chunks) -> Path:
+    """Write the cleaned page text (the same text the chunk offsets refer to) for the show-page viewer."""
+    from app.ingest.chunker import normalise
+
+    settings.pages_dir.mkdir(parents=True, exist_ok=True)
+    by_page: dict[int, list[str]] = {}
+    for c in chunks:
+        by_page.setdefault(int(c.metadata["page"]), []).append(c.chunk_id)
+    data = [{"page": pg.page_no, "section": pg.section, "extraction": pg.extraction, "text": normalise(pg.text),
+             "chunk_ids": by_page.get(pg.page_no, [])} for pg in pages]
+    out = settings.pages_dir / f"{doc_id}.json"
+    out.write_text(json.dumps(data, ensure_ascii=False))
+    log.debug("[store] pages json written %s pages=%d", out, len(data))
+    return out
 
 
 def run(doc_id: str, path: Path) -> None:
@@ -51,6 +69,7 @@ def run(doc_id: str, path: Path) -> None:
         with timed(log, "store", **ids):
             vector_store.add_chunks([c.chunk_id for c in chunks], [c.text for c in chunks], vectors,
                                     [c.metadata for c in chunks])
+            save_pages(doc_id, pages, chunks)
         with timed(log, "bm25-rebuild", collection=doc.collection, **ids):
             n = bm25_index.rebuild(doc.collection)
         log.info("[bm25-rebuild] %s collection=%s indexed_chunks=%d", ctx(**ids), doc.collection, n)

@@ -150,14 +150,15 @@ max <code>LIST_MAX_PAGE_SIZE</code>). Every listing response is an envelope:</p>
 <pre><code class="language-json">{&quot;items&quot;: [...], &quot;page&quot;: 0, &quot;size&quot;: 5, &quot;total&quot;: 12, &quot;pages&quot;: 3, &quot;has_next&quot;: true, &quot;has_prev&quot;: false}
 </code></pre>
 <ul>
-<li><strong>Jobs</strong> (<code>GET /api/jobs</code>, UI panel 2): <strong>JOB ID · FILES · STATUS · REASON</strong>. Job status is
+<li><strong>Jobs</strong> (<code>GET /api/jobs</code>, UI panel 2 and <code>/jobs</code>): <strong>JOB ID · DOCUMENTS · PAGES · STATUS · REASON</strong> — the number of documents in the job (with how many are indexed when they differ) and the pages indexed across its COMPLETED documents (<code>total_documents</code>, <code>total_pages</code>, <code>total_chunks</code> in the API). Job status is
   derived from its documents every time it is read: <code>QUEUED</code> (nothing started), <code>PROCESSING</code>
   (any file still running), <code>COMPLETED</code> (all files finished and at least one indexed or
   duplicate; reason says "partially completed: …" when some files failed) or <code>FAILED</code> (all
   files finished, none indexed). Clicking a job in the UI filters the document listing to that
   job (<code>GET /api/documents?job_id=…</code>).</li>
-<li><strong>Documents</strong> (<code>GET /api/documents</code>, UI panel 3): <strong>DOC ID · NAME · STATUS · REASON</strong> for every
-  file ever uploaded, including rejected ones, with a link from a duplicate to its original.</li>
+<li><strong>Documents</strong> (<code>GET /api/documents</code>, UI panel 3 and <code>/documents</code>): <strong>DOC ID · NAME · PAGES · STATUS · REASON</strong> for every
+  file ever uploaded, including rejected ones, with a link from a duplicate to its original. The total pages
+  (and chunks) appear as soon as extraction has run; before that the column shows <code>–</code>.</li>
 </ul>
 <table>
 <thead>
@@ -250,31 +251,31 @@ citation it cannot open.</p>
 </tr>
 <tr>
 <td><code>/jobs</code></td>
-<td>dedicated job listing, <strong>20 per page</strong>, filter by collection; click a job → its documents</td>
+<td>dedicated job listing, <strong>20 per page</strong>, filter by collection; shows documents / pages / chunks per job; click a job → its documents</td>
 </tr>
 <tr>
 <td><code>/documents</code></td>
-<td>dedicated document listing, <strong>20 per page</strong>, filter by collection / status / job (<code>?job_id=&amp;status=</code>); click a row → show page</td>
+<td>dedicated document listing, <strong>20 per page</strong>, filter by collection / status / job (<code>?job_id=&amp;status=</code>); shows total pages and chunks per document; click a row → show page</td>
 </tr>
 <tr>
 <td><code>/documents/{doc_id}</code></td>
-<td><strong>show page</strong>: for <code>COMPLETED</code> documents the original file (inline for PDF, HTML, text, CSV, images; download for DOCX/RTF) side by side with the indexed content (pages → chunks). For any other status the page explains why a viewer is not applicable and shows the reason; a <code>DUPLICATE</code> links to the original document's show page; a <code>FAILED</code> document offers <em>Retry</em>.</td>
+<td><strong>show page</strong> = document viewer + chat. Left 55%: <strong>Text view</strong> of the indexed pages (plus <em>Original file</em> and <em>Details</em> tabs). Right 45%: a <strong>chat that asks only this document</strong> (<code>doc_ids=[id]</code>). Answers cite <strong>page numbers</strong> as blue chips; clicking a chip scrolls the viewer to that page and highlights the cited passage in light blue (the first citation is focused automatically). For any other status the page explains why the viewer/chat are not applicable and shows the reason; a <code>DUPLICATE</code> links to the original document's show page; a <code>FAILED</code> document offers <em>Retry</em>.</td>
 </tr>
 </tbody>
 </table>
 <p>The workbench (<code>/</code>):
 1. <strong>Upload</strong> — drop files, optionally name a <em>collection</em> (a document set); they are submitted as one job and the job id is shown.
-2. <strong>Jobs</strong> — JOB ID · FILES · STATUS · REASON, 5 per page with prev/next. Click a row to filter the documents to that job; tick a job to ask over it.
-3. <strong>Documents</strong> — DOC ID · NAME · STATUS · REASON for every file, 5 per page with prev/next (job id shown under the doc id); duplicates link to their original; tick <code>COMPLETED</code> documents to ask over them; delete finished ones with ✕.
+2. <strong>Jobs</strong> — JOB ID · DOCUMENTS · PAGES · STATUS · REASON, 5 per page with prev/next. Click a row to filter the documents to that job; tick a job to ask over it.
+3. <strong>Documents</strong> — DOC ID · NAME · PAGES · STATUS · REASON for every file, 5 per page with prev/next (job id shown under the doc id); duplicates link to their original; tick <code>COMPLETED</code> documents to ask over them; delete finished ones with ✕.
 4. <strong>Ask</strong> — the scope line shows what will be searched (whole collection or the ticked jobs/documents). The answer shows <code>[n]</code> markers, then a <strong>Citations</strong> list (file, page, section, doc id); click a marker to jump to the chunk.
 5. <strong>Sources</strong> — every retrieved chunk with file, page/section, doc id, whether it came from dense or BM25 (or both), its RRF score and a "cited" badge. OCR'd chunks are flagged.</p>
 <p><strong>Reset collection</strong> wipes a document set so you can load a different one.</p>
 <h3 id="cli">CLI</h3>
 <pre><code class="language-bash">rag ingest samples/*.md samples/*.pdf --collection demo   # one job; prints the job id, waits for it
-rag jobs                                                  # JOB ID · FILES · STATUS · REASON (page 0, size 5)
+rag jobs                                                  # JOB ID · DOCS · PAGES · STATUS · REASON (page 0, size 5)
 rag jobs --page 1 --size 10                               # next page / larger page
 rag job &lt;job_id&gt;                                          # one job and its documents
-rag status --watch                                        # DOC ID · NAME · STATUS · REASON (page 0, size 5)
+rag status --watch                                        # DOC ID · NAME · PAGES · STATUS · REASON (page 0, size 5)
 rag status --job &lt;job_id&gt; --page 0 --size 5               # documents of one job
 rag ask &quot;How many days of annual leave do employees get?&quot; -c demo          # whole collection
 rag ask &quot;What is the notice period?&quot; --doc &lt;doc_id&gt; --doc &lt;doc_id&gt;         # only these documents
@@ -330,6 +331,11 @@ rag serve
 <td>the stored original file (inline for PDF/HTML/text/CSV/images, attachment otherwise)</td>
 </tr>
 <tr>
+<td><code>GET</code></td>
+<td><code>/api/documents/{doc_id}/pages</code></td>
+<td>page text of a <code>COMPLETED</code> document with the chunk ids per page (stored at ingest, or reconstructed from chunk offsets) — powers the viewer</td>
+</tr>
+<tr>
 <td><code>POST</code></td>
 <td><code>/api/documents/{doc_id}/retry</code></td>
 <td>re-queue a <code>FAILED</code> document from its stored file → <strong>202</strong></td>
@@ -342,7 +348,7 @@ rag serve
 <tr>
 <td><code>GET</code></td>
 <td><code>/api/chunks?collection=&amp;doc_id=&amp;job_id=&amp;limit=&amp;offset=</code></td>
-<td>inspect the <code>document_chunks</code> store, filterable by document or job</td>
+<td>inspect the <code>document_chunks</code> store, filterable by document or job; each chunk carries <code>page</code>, <code>chunk_index</code>, <code>char_start</code>, <code>char_end</code></td>
 </tr>
 <tr>
 <td><code>POST</code></td>
@@ -433,7 +439,10 @@ curl -X POST localhost:8000/api/ask -H 'content-type: application/json' \
 </tbody>
 </table>
 <p>Every chunk carries <code>job_id</code> as well as <code>doc_id</code>, so filtering retrieval (or <code>/api/chunks</code>) by an
-upload job needs no join. Names are settings (<code>JOBS_STORE</code>, <code>DOCUMENTS_STORE</code>, <code>CHUNKS_STORE</code>).</p>
+upload job needs no join. Names are settings (<code>JOBS_STORE</code>, <code>DOCUMENTS_STORE</code>, <code>CHUNKS_STORE</code>).
+Alongside them, <code>data/pages/&lt;doc_id&gt;.json</code> keeps each document's cleaned page text (the text the chunk
+offsets refer to) so the show-page viewer can highlight cited passages exactly; it is written at ingest
+and removed with the document.</p>
 <p>Full description with diagrams: <a href="/documentation/architecture.html"><code>documentation/architecture.md</code></a>
 (browser version: <a href="/documentation/architecture.html"><code>architecture.html</code></a>). In short:</p>
 <pre><code>upload ─► job ─► per file: validate/hash ─► QUEUED ─► worker: extract (PyMuPDF/docx/bs4/stdlib → OCR fallback) ─► chunk ─► fastembed ─► ChromaDB + BM25 ─► COMPLETED

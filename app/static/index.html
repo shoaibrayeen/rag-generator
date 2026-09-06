@@ -78,7 +78,7 @@
     <div class="card">
       <h2>2 · Jobs <span class="hint">(one upload request = one job · click a row to see its documents · tick to ask over it · <a href="/jobs">full list</a>)</span></h2>
       <div class="scroll"><table>
-        <thead><tr><th></th><th>Job ID</th><th>Files</th><th>Status</th><th>Reason</th></tr></thead>
+        <thead><tr><th></th><th>Job ID</th><th>Documents</th><th>Pages</th><th>Status</th><th>Reason</th></tr></thead>
         <tbody id="jobs"><tr><td colspan="5" class="muted">No jobs yet.</td></tr></tbody>
       </table></div>
       <div class="pager" id="jobsPager"></div>
@@ -88,7 +88,7 @@
       <h2>3 · Documents <span class="hint">(tick COMPLETED documents to ask over them · click an id for its show page · <a href="/documents">full list</a>)</span>
         <span id="jobFilter"></span></h2>
       <div class="scroll"><table>
-        <thead><tr><th></th><th>Doc ID</th><th>Name</th><th>Status</th><th>Reason</th><th></th></tr></thead>
+        <thead><tr><th></th><th>Doc ID</th><th>Name</th><th>Pages</th><th>Status</th><th>Reason</th><th></th></tr></thead>
         <tbody id="docs"><tr><td colspan="6" class="muted">No documents yet.</td></tr></tbody>
       </table></div>
       <div class="pager" id="docsPager"></div>
@@ -209,12 +209,13 @@ async function refresh() {
 function renderJobs() {
   const tb = $('jobs');
   renderPager('jobs', 'jobsPager');
-  if (!jobsCache.length) { tb.innerHTML = '<tr><td colspan="5" class="muted">No jobs in this collection.</td></tr>'; return; }
+  if (!jobsCache.length) { tb.innerHTML = '<tr><td colspan="6" class="muted">No jobs in this collection.</td></tr>'; return; }
   tb.innerHTML = jobsCache.map(j => `
     <tr class="clickable ${j.job_id === activeJob ? 'active' : ''}" onclick="filterJob('${j.job_id}')">
       <td><input type="checkbox" ${selJobs.has(j.job_id) ? 'checked' : ''} ${j.counts.COMPLETED ? '' : 'disabled title="no COMPLETED document yet"'} onclick="event.stopPropagation(); toggleJob('${j.job_id}', this.checked)"></td>
       <td><code class="id">${esc(j.job_id)}</code></td>
-      <td>${j.files}</td>
+      <td title="documents in this job (${esc(Object.entries(j.counts).map(([k, v]) => v + ' ' + k.toLowerCase()).join(', '))})">${j.total_documents}${j.counts.COMPLETED && j.counts.COMPLETED !== j.total_documents ? ` <span class="muted">(${j.counts.COMPLETED} indexed)</span>` : ''}</td>
+      <td>${j.total_pages || (j.counts.COMPLETED ? 0 : '–')}</td>
       <td><span class="pill ${j.status}">${j.status}</span></td>
       <td class="muted" style="font-size:12px">${esc(j.reason)}</td>
     </tr>`).join('');
@@ -238,12 +239,13 @@ function renderDocs() {
   renderFilterChip();
   renderPager('docs', 'docsPager');
   const tb = $('docs');
-  if (!docsCache.length) { tb.innerHTML = `<tr><td colspan="6" class="muted">${activeJob ? 'This job has no documents.' : 'No documents in this collection.'}</td></tr>`; return; }
+  if (!docsCache.length) { tb.innerHTML = `<tr><td colspan="7" class="muted">${activeJob ? 'This job has no documents.' : 'No documents in this collection.'}</td></tr>`; return; }
   tb.innerHTML = docsCache.map(d => `
     <tr id="row-${d.doc_id}">
       <td><input type="checkbox" ${selDocs.has(d.doc_id) ? 'checked' : ''} ${d.status === 'COMPLETED' ? '' : 'disabled title="only COMPLETED documents can be searched"'} onclick="toggleDoc('${d.doc_id}', this.checked)"></td>
       <td><a href="/documents/${d.doc_id}" title="Open show page"><code class="id">${esc(d.doc_id)}</code></a><br><span class="muted" title="job">job ${esc(d.job_id)}</span></td>
       <td>${esc(d.filename)}<br><span class="muted">${esc(d.file_type || '')}${d.ocr_pages ? ` · <span class="pill ocr">OCR ×${d.ocr_pages}</span>` : ''}</span></td>
+      <td title="${d.pages ? `${d.pages} pages · ${d.chunks} chunks` : 'pages are known once extraction has run'}">${d.pages ? `${d.pages}<br><span class="muted">${d.chunks} chunks</span>` : '<span class="muted">–</span>'}</td>
       <td><span class="pill ${d.status}">${d.status}</span>${d.stage ? `<div class="muted">${esc(d.stage)}…</div>` : ''}</td>
       <td class="${BAD.includes(d.status) ? 'err' : 'muted'}" style="font-size:12px">${esc(d.reason || '')}${d.duplicate_of ? ` <a href="#" onclick="highlight('${d.duplicate_of}');return false;">→ original ${esc(d.duplicate_of)}</a>` : ''}</td>
       <td style="white-space:nowrap">${d.status === 'FAILED' ? `<button class="small secondary" title="Process the stored file again" onclick="retryDoc('${d.doc_id}')">retry</button> ` : ''}${TERMINAL.includes(d.status) ? `<button class="del" title="Delete" onclick="deleteDoc('${d.doc_id}')">✕</button>` : ''}</td>

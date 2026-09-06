@@ -93,14 +93,15 @@ max `LIST_MAX_PAGE_SIZE`). Every listing response is an envelope:
 {"items": [...], "page": 0, "size": 5, "total": 12, "pages": 3, "has_next": true, "has_prev": false}
 ```
 
-- **Jobs** (`GET /api/jobs`, UI panel 2): **JOB ID · FILES · STATUS · REASON**. Job status is
+- **Jobs** (`GET /api/jobs`, UI panel 2 and `/jobs`): **JOB ID · DOCUMENTS · PAGES · STATUS · REASON** — the number of documents in the job (with how many are indexed when they differ) and the pages indexed across its COMPLETED documents (`total_documents`, `total_pages`, `total_chunks` in the API). Job status is
   derived from its documents every time it is read: `QUEUED` (nothing started), `PROCESSING`
   (any file still running), `COMPLETED` (all files finished and at least one indexed or
   duplicate; reason says "partially completed: …" when some files failed) or `FAILED` (all
   files finished, none indexed). Clicking a job in the UI filters the document listing to that
   job (`GET /api/documents?job_id=…`).
-- **Documents** (`GET /api/documents`, UI panel 3): **DOC ID · NAME · STATUS · REASON** for every
-  file ever uploaded, including rejected ones, with a link from a duplicate to its original.
+- **Documents** (`GET /api/documents`, UI panel 3 and `/documents`): **DOC ID · NAME · PAGES · STATUS · REASON** for every
+  file ever uploaded, including rejected ones, with a link from a duplicate to its original. The total pages
+  (and chunks) appear as soon as extraction has run; before that the column shows `–`.
 
 | Status | Meaning | Processed? | REASON column |
 |---|---|---|---|
@@ -140,14 +141,14 @@ Three pages plus a show page:
 | URL | Purpose |
 |---|---|
 | `/` | workbench: upload · jobs (5 per page) · documents (5 per page) · ask · sources |
-| `/jobs` | dedicated job listing, **20 per page**, filter by collection; click a job → its documents |
-| `/documents` | dedicated document listing, **20 per page**, filter by collection / status / job (`?job_id=&status=`); click a row → show page |
-| `/documents/{doc_id}` | **show page**: for `COMPLETED` documents the original file (inline for PDF, HTML, text, CSV, images; download for DOCX/RTF) side by side with the indexed content (pages → chunks). For any other status the page explains why a viewer is not applicable and shows the reason; a `DUPLICATE` links to the original document's show page; a `FAILED` document offers *Retry*. |
+| `/jobs` | dedicated job listing, **20 per page**, filter by collection; shows documents / pages / chunks per job; click a job → its documents |
+| `/documents` | dedicated document listing, **20 per page**, filter by collection / status / job (`?job_id=&status=`); shows total pages and chunks per document; click a row → show page |
+| `/documents/{doc_id}` | **show page** = document viewer + chat. Left 55%: **Text view** of the indexed pages (plus *Original file* and *Details* tabs). Right 45%: a **chat that asks only this document** (`doc_ids=[id]`). Answers cite **page numbers** as blue chips; clicking a chip scrolls the viewer to that page and highlights the cited passage in light blue (the first citation is focused automatically). For any other status the page explains why the viewer/chat are not applicable and shows the reason; a `DUPLICATE` links to the original document's show page; a `FAILED` document offers *Retry*. |
 
 The workbench (`/`):
 1. **Upload** — drop files, optionally name a *collection* (a document set); they are submitted as one job and the job id is shown.
-2. **Jobs** — JOB ID · FILES · STATUS · REASON, 5 per page with prev/next. Click a row to filter the documents to that job; tick a job to ask over it.
-3. **Documents** — DOC ID · NAME · STATUS · REASON for every file, 5 per page with prev/next (job id shown under the doc id); duplicates link to their original; tick `COMPLETED` documents to ask over them; delete finished ones with ✕.
+2. **Jobs** — JOB ID · DOCUMENTS · PAGES · STATUS · REASON, 5 per page with prev/next. Click a row to filter the documents to that job; tick a job to ask over it.
+3. **Documents** — DOC ID · NAME · PAGES · STATUS · REASON for every file, 5 per page with prev/next (job id shown under the doc id); duplicates link to their original; tick `COMPLETED` documents to ask over them; delete finished ones with ✕.
 4. **Ask** — the scope line shows what will be searched (whole collection or the ticked jobs/documents). The answer shows `[n]` markers, then a **Citations** list (file, page, section, doc id); click a marker to jump to the chunk.
 5. **Sources** — every retrieved chunk with file, page/section, doc id, whether it came from dense or BM25 (or both), its RRF score and a "cited" badge. OCR'd chunks are flagged.
 
@@ -156,10 +157,10 @@ The workbench (`/`):
 ### CLI
 ```bash
 rag ingest samples/*.md samples/*.pdf --collection demo   # one job; prints the job id, waits for it
-rag jobs                                                  # JOB ID · FILES · STATUS · REASON (page 0, size 5)
+rag jobs                                                  # JOB ID · DOCS · PAGES · STATUS · REASON (page 0, size 5)
 rag jobs --page 1 --size 10                               # next page / larger page
 rag job <job_id>                                          # one job and its documents
-rag status --watch                                        # DOC ID · NAME · STATUS · REASON (page 0, size 5)
+rag status --watch                                        # DOC ID · NAME · PAGES · STATUS · REASON (page 0, size 5)
 rag status --job <job_id> --page 0 --size 5               # documents of one job
 rag ask "How many days of annual leave do employees get?" -c demo          # whole collection
 rag ask "What is the notice period?" --doc <doc_id> --doc <doc_id>         # only these documents
@@ -180,9 +181,10 @@ The CLI talks to the API at `RAG_API_URL` (default `http://localhost:8000`, over
 | `GET` | `/api/documents?collection=&job_id=&status=&page=0&size=5` | paginated document listing (newest first): doc id, name, status, reason, duplicate link; filter by job / status |
 | `GET` | `/api/documents/{doc_id}` | one document |
 | `GET` | `/api/documents/{doc_id}/file?download=` | the stored original file (inline for PDF/HTML/text/CSV/images, attachment otherwise) |
+| `GET` | `/api/documents/{doc_id}/pages` | page text of a `COMPLETED` document with the chunk ids per page (stored at ingest, or reconstructed from chunk offsets) — powers the viewer |
 | `POST` | `/api/documents/{doc_id}/retry` | re-queue a `FAILED` document from its stored file → **202** |
 | `DELETE` | `/api/documents/{doc_id}` | remove a finished document and its chunks |
-| `GET` | `/api/chunks?collection=&doc_id=&job_id=&limit=&offset=` | inspect the `document_chunks` store, filterable by document or job |
+| `GET` | `/api/chunks?collection=&doc_id=&job_id=&limit=&offset=` | inspect the `document_chunks` store, filterable by document or job; each chunk carries `page`, `chunk_index`, `char_start`, `char_end` |
 | `POST` | `/api/ask` | `{"question", "collection"?, "doc_ids"?, "job_ids"?, "top_k"?}` → `answer`, `citations`, `sources`, `scope`, `unresolved_citations` |
 | `DELETE` | `/api/collections/{name}` | reset a whole document set |
 
@@ -244,6 +246,9 @@ curl -X POST localhost:8000/api/ask -H 'content-type: application/json' \
 
 Every chunk carries `job_id` as well as `doc_id`, so filtering retrieval (or `/api/chunks`) by an
 upload job needs no join. Names are settings (`JOBS_STORE`, `DOCUMENTS_STORE`, `CHUNKS_STORE`).
+Alongside them, `data/pages/<doc_id>.json` keeps each document's cleaned page text (the text the chunk
+offsets refer to) so the show-page viewer can highlight cited passages exactly; it is written at ingest
+and removed with the document.
 
 Full description with diagrams: [`documentation/architecture.md`](documentation/architecture.md)
 (browser version: [`architecture.html`](documentation/architecture.html)). In short:

@@ -83,6 +83,11 @@ class Settings(BaseSettings):
         return self.DATA_DIR / f"{self.DOCUMENTS_STORE}.json"
 
     @property
+    def pages_dir(self) -> Path:
+        """Per-document page text (JSON) written at ingest; powers the show-page viewer."""
+        return self.DATA_DIR / "pages"
+
+    @property
     def jobs_file(self) -> Path:
         return self.DATA_DIR / f"{self.JOBS_STORE}.json"
 

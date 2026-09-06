@@ -1,7 +1,7 @@
 # Claude Code transcript — session `a88920a3-6212-4085-ad05-80ba0afca34d`
 
 Project: `/Users/shoaib.rayeen/my_space/rag-generator`  
-Exported: 2026-09-06T16:22:04  
+Exported: 2026-09-06T16:29:57  
 Source log: `/Users/shoaib.rayeen/.claude/projects/-Users-shoaib-rayeen-my-space-rag-generator/a88920a3-6212-4085-ad05-80ba0afca34d.jsonl`
 
 ---
@@ -4916,5 +4916,435 @@ Tab Context:
 2026-09-06 16:21:37,606 INFO    rag.pipeline: [bm25-rebuild] done in 12 ms collection=default job=06f759f949bb doc=c85e1bbaba8c file=2P CRA dated 17_12_2025 (1) (2).docx
 2026-09-06 16:21:37,606 INFO    rag.pipeline: [bm25-rebuild] job=06f759f949bb doc=c85e1bbaba8c file=2P CRA dated 17_12_2025 (1) (2).docx collection=default indexed_chunks=247
 2026-09-06 16:21:37,607 INFO    rag.pipeline: [pipeline] COMPLETED job=06f759f949bb doc=c85e1bbaba8c file=2P CRA dated 17_12_2025 (1) (2).docx
+
+```
+
+## Tool  <sub>2026-09-06T10:52:04.977Z</sub>
+
+**Tool result**
+
+```
+compile-ok
+33 passed, 6 warnings in 0.83s
+rules in sync
+docs-ok
+version="0.7.0"
+<h2>0.7.0
+exported 265 messages from a88920a3-6212-4085-ad05-80ba0afca34d.jsonl -> transcripts/2026-09-06-rag-generator-build.md
+    4920 transcripts/2026-09-06-rag-generator-build.md
+      31
+```
+
+## Assistant  <sub>2026-09-06T10:52:22.193Z</sub>
+
+Everything is done and verified.
+
+**Root cause of the failure**: the file `2P CRA dated 17_12_2025 (1) (2).docx` is not a DOCX at all. Its bytes start with `{\rtf1`: it is an RTF document saved with a `.docx` extension. python-docx could not open it, and the fallback then reported a misleading OCR message.
+
+**Fixes shipped (v0.6.0 → v0.7.0)**
+- Content sniffing: the reader is chosen from the file's magic bytes (zip with `word/` → DOCX, `{\rtf` → RTF, `%PDF`, OLE2 legacy `.doc`, HTML, image), overriding a wrong extension. RTF is now a supported format (`.rtf`, via striprtf).
+- Legacy binary `.doc` files get a precise "save as .docx or PDF" reason instead of an OCR message.
+- Failure reasons now name the actual reader error first (paths stripped, capped), e.g. `the docx reader failed (BadZipFile: …)`, then what the fallback said.
+- Retry for FAILED documents from the stored file: `POST /api/documents/{id}/retry`, UI button, `rag retry`. Your document was retried and is now `COMPLETED` with 3 pages and 30 chunks; the reason notes "extension '.docx' but content is RTF". A scoped question over it returned a cited answer through your LLM.
+- Upload order is now validate → store file and compute SHA-256 (kept on every record) → duplicate check → QUEUED, as you asked.
+- Step logging everywhere: `[upload] [extract] [chunk] [embed] [store] [bm25-rebuild] [pipeline] [retrieve-dense] [retrieve-bm25] [fuse] [llm] [ask]`, each tagged with `job=` and `doc=` plus timings. `grep doc=<id>` on the server log follows one file end to end; `LOG_LEVEL=DEBUG` adds detail.
+- Dedicated pages: `/jobs` and `/documents` list 20 per page with filters and URL state; `/documents/{doc_id}` is the show page with metadata, the original file (inline for PDF, HTML, text, CSV, images; download for DOCX/RTF) and the indexed content grouped by page. Non-COMPLETED documents see why the viewer is not applicable; a DUPLICATE shows the original's show-page URL; FAILED offers Retry. The home page keeps its 5-per-page panels.
+
+**Validation**: compile clean, 33 tests pass (new tests cover sniffing, RTF-as-DOCX, legacy `.doc`, reason wording, retry, the pages and the file endpoint), rule copies in sync, docs rebuilt, changelog and version at 0.7.0, pages verified in the browser, and your failed document confirmed COMPLETED live.
+
+**Transcript** re-exported to `transcripts/2026-09-06-rag-generator-build.md` (265 messages). Run `/export transcripts/2026-09-06-rag-generator-build.md` when you close the session to include these last messages. Nothing was committed; 31 changed files await your review.
+
+## User  <sub>2026-09-06T10:54:26.397Z</sub>
+
+for the document show page
+
+provide ask button there as well
+but that ask button will work for only that document
+
+for show page, provide ask button in chat format, like gpt, claude chat format
+55% left side as document viewer, right side chat format, when answer comes, user click on citations , it should redirects on the viewer to that locations, if multiple reefrence show in [1], [2], [3] format (where 1,2,3 is the page number), highlight in the light blue text so that etxt is visible, do this properly, amy help user ot knowthe flow properly
+
+## Assistant  <sub>2026-09-06T10:55:03.310Z</sub>
+
+I'll rebuild the show page as a 55/45 split: a text viewer of the document's pages on the left (with the original file as a second tab) and a chat panel on the right that asks only over this document. Citations will be shown as page numbers, and clicking one scrolls the viewer to that page and highlights the cited passage in light blue. To make the jump-and-highlight exact, I'll persist page text at ingest and expose it via a pages endpoint.
+
+## Assistant  <sub>2026-09-06T10:55:37.026Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "set -e; cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\n\n# ---------------- config: pages dir\np = Path(\"app/config.py\"); s = p.read_text()\ns = s.replace('''    @property\n    def jobs_file(self) -> Path:''', '''    @property\n    def pages_dir(self) -> Path:\n        \"\"\"Per-document page text (JSON) written at ingest; powers the show-page viewer.\"\"\"\n        return self.DATA_DIR / \"pages\"\n\n    @property\n    def jobs_file(self) -> Path:''')\np.write_text(s)\n\n# ---------------- models\np = Path(\"app/models.py\"); s = p.read_text()\ns = s.replace('''class ChunkOut(BaseModel):\n    chunk_id: str\n    doc_id: str\n    job_id: str\n    collection: str\n    source: str\n    page: int\n    section: Optional[str] = None\n    text: str\n''', '''class ChunkOut(BaseModel):\n    chunk_id: str\n    doc_id: str\n    job_id: str\n    collection: str\n    source: str\n    page: int\n    section: Optional[str] = None\n    chunk_index: int = 0\n    char_start: int = 0              # offsets into the page text (see /api/documents/{id}/pages)\n    char_end: int = 0\n    extraction: str = \"text\"\n    text: str\n\n\nclass PageOut(BaseModel):\n    page: int\n    section: Optional[str] = None\n    extraction: str = \"text\"\n    text: str\n    chunk_ids: list[str] = Field(default_factory=list)\n\n\nclass DocumentPages(BaseModel):\n    doc_id: str\n    filename: str\n    pages: list[PageOut]\n    source: Literal[\"stored\", \"reconstructed\"]   # stored at ingest, or rebuilt from chunk offsets\n''')\np.write_text(s)\n\n# ---------------- pipeline: persist page text\np = Path(\"app/ingest/pipeline.py\"); s = p.read_text()\ns = s.replace(\"import logging\\nfrom pathlib import Path\\n\", \"import json\\nimport logging\\nfrom pathlib import Path\\n\")\ns = s.replace(\"from app.config import settings\\n\", \"\")\ns = s.replace(\"from app import jobs\\n\", \"from app import jobs\\nfrom app.config import settings\\n\")\ns = s.replace('''        with timed(log, \"store\", **ids):\n            vector_store.add_chunks([c.chunk_id for c in chunks], [c.text for c in chunks], vectors,\n                                    [c.metadata for c in chunks])''', '''        with timed(log, \"store\", **ids):\n            vector_store.add_chunks([c.chunk_id for c in chunks], [c.text for c in chunks], vectors,\n                                    [c.metadata for c in chunks])\n            save_pages(doc_id, pages, chunks)''')\ns = s.replace('''def run(doc_id: str, path: Path) -> None:''', '''def save_pages(doc_id: str, pages, chunks) -> Path:\n    \"\"\"Write the cleaned page text (the same text the chunk offsets refer to) for the show-page viewer.\"\"\"\n    from app.ingest.chunker import normalise\n\n    settings.pages_dir.mkdir(parents=True, exist_ok=True)\n    by_page: dict[int, list[str]] = {}\n    for c in chunks:\n        by_page.setdefault(int(c.metadata[\"page\"]), []).append(c.chunk_id)\n    data = [{\"page\": pg.page_no, \"section\": pg.section, \"extraction\": pg.extraction, \"text\": normalise(pg.text),\n             \"chunk_ids\": by_page.get(pg.page_no, [])} for pg in pages]\n    out = settings.pages_dir / f\"{doc_id}.json\"\n    out.write_text(json.dumps(data, ensure_ascii=False))\n    log.debug(\"[store] pages json written %s pages=%d\", out, len(data))\n    return out\n\n\ndef run(doc_id: str, path: Path) -> None:''')\np.write_text(s)\n\n# chunker: expose normalise() so page text and offsets agree\np = Path(\"app/ingest/chunker.py\"); s = p.read_text()\ns = s.replace('''def chunk_pages(pages: list[Page], *, doc_id: str, source: str, file_type: str,\n                collection: str, job_id: str = \"\") -> list[Chunk]:\n    chunks: list[Chunk] = []\n    idx = 0\n    for page in pages:\n        text = re.sub(r\"[ \\\\t]+\\\\n\", \"\\\\n\", page.text).strip()''', '''def normalise(text: str) -> str:\n    \"\"\"The exact page text chunk offsets are measured against.\"\"\"\n    return re.sub(r\"[ \\\\t]+\\\\n\", \"\\\\n\", text).strip()\n\n\ndef chunk_pages(pages: list[Page], *, doc_id: str, source: str, file_type: str,\n                collection: str, job_id: str = \"\") -> list[Chunk]:\n    chunks: list[Chunk] = []\n    idx = 0\n    for page in pages:\n        text = normalise(page.text)''')\np.write_text(s)\n\n# ---------------- main.py: chunk fields, pages endpoint, cleanup of pages file\np = Path(\"app/main.py\"); s = p.read_text()\ns = s.replace(\"from app.models import (TERMINAL_STATUSES, AskRequest, AskResponse, ChunkOut, DocStatus, DocumentInfo,\\n                        DocumentPage, HealthResponse, JobDetail, JobPage, UploadResponse)\",\n              \"from app.models import (TERMINAL_STATUSES, AskRequest, AskResponse, ChunkOut, DocStatus, DocumentInfo,\\n                        DocumentPage, DocumentPages, HealthResponse, JobDetail, JobPage, PageOut, UploadResponse)\")\ns = s.replace('''    return [ChunkOut(chunk_id=c[\"chunk_id\"], doc_id=c[\"metadata\"].get(\"doc_id\", \"\"),\n                     job_id=c[\"metadata\"].get(\"job_id\", \"\"), collection=c[\"metadata\"].get(\"collection\", col),\n                     source=c[\"metadata\"].get(\"source\", \"\"), page=int(c[\"metadata\"].get(\"page\", 0)),\n                     section=c[\"metadata\"].get(\"section\") or None, text=c[\"text\"]) for c in chunks]''',\n'''    return [_chunk_out(c, col) for c in chunks]\n\n\ndef _chunk_out(c: dict, col: str) -> ChunkOut:\n    m = c[\"metadata\"]\n    return ChunkOut(chunk_id=c[\"chunk_id\"], doc_id=m.get(\"doc_id\", \"\"), job_id=m.get(\"job_id\", \"\"),\n                    collection=m.get(\"collection\", col), source=m.get(\"source\", \"\"), page=int(m.get(\"page\", 0)),\n                    section=m.get(\"section\") or None, chunk_index=int(m.get(\"chunk_index\", 0)),\n                    char_start=int(m.get(\"char_start\", 0)), char_end=int(m.get(\"char_end\", 0)),\n                    extraction=m.get(\"extraction\", \"text\"), text=c[\"text\"])\n\n\n@app.get(\"/api/documents/{doc_id}/pages\", response_model=DocumentPages)\ndef document_pages(doc_id: str):\n    \"\"\"Page text of a COMPLETED document for the show-page viewer, with the chunk ids per page.\n\n    Uses the page text stored at ingest; documents indexed before that existed are reconstructed\n    from chunk offsets (`source: \"reconstructed\"`).\"\"\"\n    import json\n\n    doc = jobs.get(doc_id)\n    if doc is None:\n        raise HTTPException(404, \"document not found\")\n    if doc.status != \"COMPLETED\":\n        raise HTTPException(409, f\"document is {doc.status}, not COMPLETED\")\n    stored = settings.pages_dir / f\"{doc_id}.json\"\n    if stored.exists():\n        pages = [PageOut(**pg) for pg in json.loads(stored.read_text())]\n        return DocumentPages(doc_id=doc_id, filename=doc.filename, pages=pages, source=\"stored\")\n    # Reconstruct: lay every chunk's text at its char_start; overlaps carry identical text.\n    by_page: dict[int, list[ChunkOut]] = {}\n    for c in vector_store.get_all_chunks(doc.collection, [doc_id]):\n        out = _chunk_out(c, doc.collection)\n        by_page.setdefault(out.page, []).append(out)\n    pages = []\n    for page_no in sorted(by_page):\n        cs = sorted(by_page[page_no], key=lambda x: x.chunk_index)\n        buf: list[str] = []\n        for x in cs:\n            while len(buf) < x.char_start:\n                buf.append(\" \")\n            buf[x.char_start:x.char_start + len(x.text)] = list(x.text)\n        pages.append(PageOut(page=page_no, section=cs[0].section, extraction=cs[0].extraction,\n                             text=\"\".join(buf), chunk_ids=[x.chunk_id for x in cs]))\n    return DocumentPages(doc_id=doc_id, filename=doc.filename, pages=pages, source=\"reconstructed\")''')\ns = s.replace('''    for p in settings.uploads_dir.glob(f\"{doc_id}_*\"):\n        p.unlink(missing_ok=True)\n    jobs.delete(doc_id)\n    log.info(\"[delete] %s\", ctx(job=doc.job_id, doc=doc_id, file=doc.filename))''', '''    for p in settings.uploads_dir.glob(f\"{doc_id}_*\"):\n        p.unlink(missing_ok=True)\n    (settings.pages_dir / f\"{doc_id}.json\").unlink(missing_ok=True)\n    jobs.delete(doc_id)\n    log.info(\"[delete] %s\", ctx(job=doc.job_id, doc=doc_id, file=doc.filename))''')\ns = s.replace('''    for doc in jobs.list_docs(col):\n        for p in settings.uploads_dir.glob(f\"{doc.doc_id}_*\"):\n            p.unlink(missing_ok=True)\n        jobs.delete(doc.doc_id)''', '''    for doc in jobs.list_docs(col):\n        for p in settings.uploads_dir.glob(f\"{doc.doc_id}_*\"):\n            p.unlink(missing_ok=True)\n        (settings.pages_dir / f\"{doc.doc_id}.json\").unlink(missing_ok=True)\n        jobs.delete(doc.doc_id)''')\ns = s.replace('version=\"0.7.0\"', 'version=\"0.8.0\"')\np.write_text(s)\nprint(\"backend ok\")\nEOF\n.venv/bin/python -m compileall -q app && echo compile-ok",
+  "description": "Persist page text at ingest, expose pages endpoint and chunk offsets"
+}
+```
+
+## Tool  <sub>2026-09-06T10:55:37.107Z</sub>
+
+**Tool result**
+
+```
+backend ok
+compile-ok
+```
+
+## Assistant  <sub>2026-09-06T10:57:16.402Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "set -e; cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\nCSS = \"\"\"\n  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c1f26; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --ok:#15803d; --bad:#b91c1c; --warn:#b45309; --info:#0369a1; --hl:#bfdbfe; --hl2:#dbeafe; }\n  * { box-sizing:border-box; }\n  html, body { height:100%; }\n  body { margin:0; font:14px/1.5 -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif; background:var(--bg); color:var(--ink); display:flex; flex-direction:column; }\n  header { padding:10px 22px; background:var(--card); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:14px; flex-wrap:wrap; }\n  header h1 { margin:0; font-size:17px; } header h1 a { color:inherit; text-decoration:none; }\n  header nav { margin-left:auto; font-size:13px; } header nav a { color:var(--accent); text-decoration:none; margin-left:12px; }\n  .crumb { font-size:12px; color:var(--muted); } .crumb a { color:var(--accent); text-decoration:none; }\n  main { flex:1; display:grid; grid-template-columns:55fr 45fr; gap:0; min-height:0; }\n  @media (max-width:900px) { main { grid-template-columns:1fr; } }\n  .pane { min-height:0; display:flex; flex-direction:column; }\n  .pane.left { border-right:1px solid var(--line); background:var(--card); }\n  .pane-head { padding:8px 14px; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:12px; color:var(--muted); background:#fafafa; }\n  .pane-head b { color:var(--ink); }\n  .tabs button { padding:4px 10px; border:1px solid var(--line); background:var(--card); border-radius:6px; font:inherit; font-size:12px; cursor:pointer; }\n  .tabs button.on { background:var(--accent); color:#fff; border-color:var(--accent); }\n  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:600; background:#eef2ff; color:var(--accent); white-space:nowrap; }\n  .pill.COMPLETED { background:#dcfce7; color:var(--ok); } .pill.DUPLICATE { background:#fef3c7; color:var(--warn); } .pill.PROCESSING { background:#e0f2fe; color:var(--info); }\n  .pill.FAILED, .pill.UPLOAD_FAILED, .pill.EXTRACTION_NOT_SUPPORTED, .pill.EMPTY_FILE { background:#fee2e2; color:var(--bad); } .pill.ocr { background:#fef3c7; color:var(--warn); }\n  code.id { font:12px ui-monospace, Menlo, monospace; color:var(--muted); }\n  button { padding:7px 12px; border:0; border-radius:6px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; } button.secondary { background:#eef2ff; color:var(--accent); } button.small { padding:3px 8px; font-size:12px; } button:disabled { opacity:.5; cursor:default; }\n  .muted { color:var(--muted); font-size:12px; } .err { color:var(--bad); font-size:13px; white-space:pre-wrap; }\n  .banner { border-radius:8px; padding:12px 14px; margin:14px; font-size:13px; }\n  .banner.warn { background:#fef3c7; color:#78350f; } .banner.bad { background:#fee2e2; color:#7f1d1d; } .banner.info { background:#e0f2fe; color:#0c4a6e; }\n  dl { display:grid; grid-template-columns:130px 1fr; gap:4px 10px; margin:12px 14px; font-size:12.5px; } dt { color:var(--muted); } dd { margin:0; word-break:break-all; }\n  /* viewer */\n  .viewer { flex:1; overflow:auto; padding:14px 18px; scroll-behavior:smooth; }\n  .vpage { border:1px solid var(--line); border-radius:8px; margin-bottom:14px; background:#fff; }\n  .vpage.target { box-shadow:0 0 0 3px var(--hl2); border-color:var(--accent); }\n  .vpage-head { padding:6px 12px; border-bottom:1px solid var(--line); background:#f8fafc; font-size:12px; color:var(--muted); display:flex; gap:10px; align-items:center; border-radius:8px 8px 0 0; }\n  .vpage-head b { color:var(--ink); }\n  .vtext { padding:12px 14px; white-space:pre-wrap; font:13px/1.65 Georgia, \"Times New Roman\", serif; }\n  mark.cite { background:var(--hl); color:var(--ink); border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-box-decoration-break:clone; }\n  mark.cite.strong { background:#93c5fd; }\n  iframe.orig { flex:1; width:100%; border:0; background:#fff; } img.orig { max-width:100%; padding:14px; }\n  /* chat */\n  .chat { flex:1; overflow:auto; padding:14px 16px; display:flex; flex-direction:column; gap:12px; }\n  .msg { max-width:92%; padding:10px 14px; border-radius:14px; font-size:13.5px; line-height:1.55; white-space:pre-wrap; word-wrap:break-word; }\n  .msg.user { align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:4px; }\n  .msg.bot { align-self:flex-start; background:var(--card); border:1px solid var(--line); border-bottom-left-radius:4px; }\n  .msg.bot.notfound { background:#fffbeb; border-color:#fde68a; }\n  .msg.sys { align-self:center; background:transparent; color:var(--muted); font-size:12px; text-align:center; max-width:100%; }\n  .msg .meta { font-size:11px; color:var(--muted); margin-top:6px; }\n  .msg .err { margin-top:4px; }\n  cite.c { display:inline-block; font-style:normal; font-weight:700; color:var(--accent); background:var(--hl2); border-radius:5px; padding:0 6px; margin:0 1px; cursor:pointer; font-size:12px; line-height:1.4; vertical-align:baseline; }\n  cite.c:hover { background:var(--hl); } cite.c.active { background:#93c5fd; }\n  .cites { margin-top:8px; display:flex; flex-direction:column; gap:4px; }\n  .cites .row { font-size:12px; color:var(--muted); display:flex; gap:8px; align-items:flex-start; }\n  .cites .row span.q { flex:1; font-style:italic; color:#374151; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n  .typing { display:inline-flex; gap:4px; align-items:center; } .typing i { width:6px; height:6px; border-radius:50%; background:var(--muted); animation:b 1s infinite; } .typing i:nth-child(2) { animation-delay:.2s } .typing i:nth-child(3) { animation-delay:.4s }\n  @keyframes b { 0%,80%,100% { opacity:.2 } 40% { opacity:1 } }\n  .composer { border-top:1px solid var(--line); padding:10px 14px; background:var(--card); }\n  .composer .box { display:flex; gap:8px; align-items:flex-end; }\n  .composer textarea { flex:1; resize:none; min-height:42px; max-height:140px; padding:9px 11px; border:1px solid var(--line); border-radius:10px; font:inherit; }\n  .composer .hint { font-size:11px; color:var(--muted); margin-top:6px; }\n  .help { margin:12px 14px 0; padding:10px 12px; border:1px dashed var(--line); border-radius:8px; font-size:12px; color:#374151; background:#fafafa; }\n  .help ol { margin:6px 0 0; padding-left:18px; } .help li { margin:2px 0; }\n\"\"\"\nHTML = \"\"\"<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>RAG Generator · Document</title>\n<style>__CSS__</style></head>\n<body>\n<header>\n  <h1><a href=\"/\">RAG Generator</a></h1>\n  <span class=\"crumb\" id=\"crumb\"></span>\n  <nav><a href=\"/\">Home</a><a href=\"/jobs\">Jobs</a><a href=\"/documents\">Documents</a><a href=\"/documentation/flow.html\" target=\"_blank\">How it works</a></nav>\n</header>\n<main>\n  <section class=\"pane left\">\n    <div class=\"pane-head\">\n      <b id=\"fname\">Loading…</b> <span id=\"status\"></span>\n      <span class=\"tabs\" id=\"tabs\" style=\"margin-left:auto\"><button class=\"on\" data-tab=\"text\">Text view</button><button data-tab=\"original\">Original file</button><button data-tab=\"details\">Details</button></span>\n    </div>\n    <div id=\"banner\"></div>\n    <div class=\"viewer\" id=\"viewer\"></div>\n    <div id=\"original\" class=\"pane\" style=\"display:none;flex:1;min-height:0\"></div>\n    <div id=\"details\" style=\"display:none;overflow:auto\"></div>\n  </section>\n  <section class=\"pane right\">\n    <div class=\"pane-head\"><b>Ask this document</b> <span class=\"muted\" id=\"scope\"></span><span class=\"muted\" style=\"margin-left:auto\" id=\"model\"></span></div>\n    <div class=\"chat\" id=\"chat\"></div>\n    <div class=\"composer\">\n      <div class=\"box\"><textarea id=\"q\" placeholder=\"Ask a question about this document…\" rows=\"1\"></textarea><button id=\"send\">Ask</button></div>\n      <div class=\"hint\">Answers use only this document. Citations like <cite class=\"c\">2</cite> are <b>page numbers</b> — click one to jump to the page and highlight the passage in blue. Enter to send, Shift+Enter for a new line.</div>\n    </div>\n  </section>\n</main>\n<script>\nconst $ = (id) => document.getElementById(id);\nconst esc = (s) => String(s ?? '').replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));\nconst TERMINAL = ['DUPLICATE','COMPLETED','FAILED','EMPTY_FILE','EXTRACTION_NOT_SUPPORTED','UPLOAD_FAILED'];\nconst BAD = ['FAILED','UPLOAD_FAILED','EXTRACTION_NOT_SUPPORTED','EMPTY_FILE'];\nconst INLINE = ['pdf', 'html', 'text', 'csv', 'image'];\nconst docId = location.pathname.split('/').filter(Boolean).pop();\nconst NOT_APPLICABLE = {\n  QUEUED: 'The document is waiting for the background worker; nothing has been indexed yet. This page refreshes automatically.',\n  PROCESSING: 'The document is being processed; the viewer and chat become available when it is COMPLETED. This page refreshes automatically.',\n  FAILED: 'Processing failed, so there is no indexed content to show or ask about. Fix the cause described in the reason, then retry.',\n  DUPLICATE: 'This file has the same content as an already indexed document, so it was not processed. Use the original document\\\\'s show page instead.',\n  EMPTY_FILE: 'The uploaded file was empty; there is nothing to show.',\n  EXTRACTION_NOT_SUPPORTED: 'This file type is not supported, so it was never processed.',\n  UPLOAD_FAILED: 'The upload itself failed; the file was not stored or processed.',\n};\nlet doc = null, pages = [], chunksById = new Map(), timer = null, turn = 0;\n\nasync function api(path, opts = {}) {\n  const r = await fetch(path, opts);\n  if (r.status === 204) return null;\n  const body = await r.json().catch(() => ({}));\n  if (!r.ok) throw new Error(typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail || body));\n  return body;\n}\n\n/* ---------------- tabs ---------------- */\ndocument.querySelectorAll('#tabs button').forEach(b => b.onclick = () => showTab(b.dataset.tab));\nfunction showTab(name) {\n  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x.dataset.tab === name));\n  $('viewer').style.display = name === 'text' ? '' : 'none';\n  $('original').style.display = name === 'original' ? 'flex' : 'none';\n  $('details').style.display = name === 'details' ? 'block' : 'none';\n}\n\n/* ---------------- load document ---------------- */\nasync function load() {\n  clearTimeout(timer);\n  try { doc = await api(`/api/documents/${docId}`); }\n  catch (e) { $('banner').innerHTML = `<div class=\"banner bad\">Document <code>${esc(docId)}</code> not found.</div>`; $('fname').textContent = 'Not found'; disableChat('No document.'); return; }\n  document.title = `RAG Generator · ${doc.filename}`;\n  $('fname').textContent = doc.filename;\n  $('status').innerHTML = `<span class=\"pill ${doc.status}\">${doc.status}</span>${doc.ocr_pages ? ` <span class=\"pill ocr\">OCR ×${doc.ocr_pages}</span>` : ''}`;\n  $('crumb').innerHTML = `<a href=\"/documents\">Documents</a> › <a href=\"/documents?job_id=${doc.job_id}\">job ${esc(doc.job_id)}</a> › <code class=\"id\">${esc(doc.doc_id)}</code>`;\n  $('scope').textContent = `scope: only \"${doc.filename}\" (doc ${doc.doc_id})`;\n  renderDetails();\n\n  if (doc.status !== 'COMPLETED') {\n    const cls = doc.status === 'DUPLICATE' ? 'warn' : (BAD.includes(doc.status) ? 'bad' : 'info');\n    let extra = '';\n    if (doc.status === 'DUPLICATE' && doc.duplicate_of) extra = `<br><b>Original document:</b> <a href=\"/documents/${doc.duplicate_of}\">${location.origin}/documents/${esc(doc.duplicate_of)}</a> (${esc(doc.duplicate_of_name || '')}) — ask your questions there.`;\n    if (doc.status === 'FAILED') extra = `<br><button class=\"small\" id=\"retry\">Retry processing</button>`;\n    $('banner').innerHTML = `<div class=\"banner ${cls}\"><b>Show page not applicable — status ${doc.status}.</b> ${esc(NOT_APPLICABLE[doc.status] || '')}<br><span class=\"muted\">Reason: ${esc(doc.reason || '–')}</span>${extra}</div>`;\n    if (doc.status === 'FAILED') $('retry').onclick = async () => { try { await api(`/api/documents/${docId}/retry`, {method: 'POST'}); load(); } catch (e) { alert(e.message); } };\n    $('viewer').innerHTML = '';\n    disableChat(`Chat is available only for COMPLETED documents (this one is ${doc.status}).`);\n    if (!TERMINAL.includes(doc.status)) timer = setTimeout(load, 2000);\n    return;\n  }\n  $('banner').innerHTML = '';\n  enableChat();\n  try {\n    const [pg, ch] = await Promise.all([\n      api(`/api/documents/${docId}/pages`),\n      api(`/api/chunks?collection=${encodeURIComponent(doc.collection)}&doc_id=${docId}&limit=1000`),\n    ]);\n    pages = pg.pages; ch.forEach(c => chunksById.set(c.chunk_id, c));\n    renderViewer(pg.source);\n  } catch (e) { $('viewer').innerHTML = `<div class=\"err\">${esc(e.message)}</div>`; }\n  renderOriginal();\n  if (!$('chat').children.length) sysMsg(`Ready. ${pages.length} page(s) indexed from \"${doc.filename}\". Ask anything about this document — I will only use its content and cite the pages I used.`);\n}\n\nfunction renderDetails() {\n  $('details').innerHTML = `<dl>\n    <dt>Doc ID</dt><dd><code class=\"id\">${esc(doc.doc_id)}</code></dd><dt>File</dt><dd>${esc(doc.filename)}</dd><dt>Type</dt><dd>${esc(doc.file_type || '–')}</dd>\n    <dt>Collection</dt><dd>${esc(doc.collection)}</dd><dt>Job</dt><dd><a href=\"/documents?job_id=${doc.job_id}\"><code class=\"id\">${esc(doc.job_id)}</code></a></dd>\n    <dt>Status</dt><dd><span class=\"pill ${doc.status}\">${doc.status}</span></dd><dt>Reason</dt><dd>${esc(doc.reason || '–')}</dd>\n    <dt>SHA-256</dt><dd><code class=\"id\">${esc(doc.sha256 || '–')}</code></dd>\n    <dt>Pages / chunks</dt><dd>${doc.status === 'COMPLETED' ? `${doc.pages} pages${doc.ocr_pages ? ` (${doc.ocr_pages} via OCR)` : ''} · ${doc.chunks} chunks` : '–'}</dd>\n    <dt>Created / updated</dt><dd>${esc(doc.created_at)} · ${esc(doc.updated_at)}</dd></dl>\n    <div style=\"margin:0 14px 14px\"><a href=\"/api/documents/${doc.doc_id}/file?download=true\"><button class=\"secondary small\">Download original</button></a></div>`;\n}\n\n/* ---------------- viewer ---------------- */\nfunction renderViewer(source, highlights = new Map()) {\n  // highlights: Map<page, [{start,end,strong}]>\n  $('viewer').innerHTML = pages.map(p => {\n    const hs = (highlights.get(p.page) || []).sort((a, b) => a.start - b.start);\n    return `<div class=\"vpage\" id=\"vpage-${p.page}\"><div class=\"vpage-head\"><b>Page ${p.page}</b>${p.section ? `<span>· ${esc(p.section)}</span>` : ''}${p.extraction === 'ocr' ? '<span class=\"pill ocr\">OCR</span>' : ''}<span style=\"margin-left:auto\">${p.chunk_ids.length} chunk(s)</span></div><div class=\"vtext\">${markup(p.text, hs)}</div></div>`;\n  }).join('') + (source === 'reconstructed' ? `<div class=\"muted\" style=\"margin:6px 2px\">Page text reconstructed from indexed chunks (document was indexed before page text was stored).</div>` : '');\n}\nfunction markup(text, hs) {\n  if (!hs.length) return esc(text);\n  let out = '', pos = 0;\n  for (const h of hs) {\n    const s = Math.max(h.start, pos), e = Math.min(h.end, text.length);\n    if (s >= e) continue;\n    out += esc(text.slice(pos, s)) + `<mark class=\"cite ${h.strong ? 'strong' : ''}\" ${h.strong ? 'id=\"hl-target\"' : ''}>${esc(text.slice(s, e))}</mark>`;\n    pos = e;\n  }\n  return out + esc(text.slice(pos));\n}\nfunction locate(chunk) {\n  // Find the chunk text inside the page text (exact, else offsets) -> {start,end}\n  const page = pages.find(p => p.page === chunk.page);\n  if (!page) return null;\n  const i = page.text.indexOf(chunk.text);\n  if (i >= 0) return {start: i, end: i + chunk.text.length};\n  return {start: chunk.char_start, end: Math.min(chunk.char_end, page.text.length)};\n}\nfunction jumpTo(pageNo, chunkIds, turnId) {\n  showTab('text');\n  const hl = new Map();\n  chunkIds.forEach(id => { const c = chunksById.get(id); if (!c) return; const loc = locate(c); if (loc) { if (!hl.has(c.page)) hl.set(c.page, []); hl.get(c.page).push({...loc, strong: c.page === pageNo}); } });\n  renderViewer(null, hl);\n  document.querySelectorAll('.vpage').forEach(el => el.classList.toggle('target', el.id === `vpage-${pageNo}`));\n  document.querySelectorAll('cite.c').forEach(el => el.classList.toggle('active', el.dataset.turn == turnId && +el.dataset.page === pageNo));\n  const target = document.getElementById('hl-target') || document.getElementById(`vpage-${pageNo}`);\n  if (target) target.scrollIntoView({behavior: 'smooth', block: 'center'});\n}\nwindow.jumpTo = jumpTo;\n\nfunction renderOriginal() {\n  const url = `/api/documents/${docId}/file`;\n  $('original').innerHTML = doc.file_type === 'image' ? `<div style=\"overflow:auto\"><img class=\"orig\" src=\"${url}\" alt=\"${esc(doc.filename)}\"></div>`\n    : INLINE.includes(doc.file_type) ? `<iframe class=\"orig\" src=\"${url}\" title=\"${esc(doc.filename)}\"></iframe>`\n    : `<div class=\"banner info\">Browsers cannot render <b>${esc(doc.file_type)}</b> files inline. <a href=\"${url}?download=true\">Download the original</a>, or use the Text view, which shows exactly the content that was indexed.</div>`;\n}\n\n/* ---------------- chat ---------------- */\nfunction disableChat(why) { $('q').disabled = true; $('send').disabled = true; $('q').placeholder = why; }\nfunction enableChat() { $('q').disabled = false; $('send').disabled = false; $('q').placeholder = 'Ask a question about this document…'; }\nfunction sysMsg(text) { const el = document.createElement('div'); el.className = 'msg sys'; el.textContent = text; $('chat').appendChild(el); scrollChat(); }\nfunction scrollChat() { $('chat').scrollTop = $('chat').scrollHeight; }\n$('send').onclick = ask;\n$('q').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); } };\n$('q').oninput = () => { $('q').style.height = 'auto'; $('q').style.height = Math.min($('q').scrollHeight, 140) + 'px'; };\n\nasync function ask() {\n  const q = $('q').value.trim();\n  if (!q || !doc || doc.status !== 'COMPLETED') return;\n  $('q').value = ''; $('q').style.height = 'auto';\n  const t = ++turn;\n  const u = document.createElement('div'); u.className = 'msg user'; u.textContent = q; $('chat').appendChild(u);\n  const b = document.createElement('div'); b.className = 'msg bot'; b.innerHTML = '<span class=\"typing\"><i></i><i></i><i></i></span>'; $('chat').appendChild(b); scrollChat();\n  $('send').disabled = true;\n  try {\n    const res = await api('/api/ask', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({question: q, doc_ids: [docId]})});\n    renderAnswer(b, res, t);\n  } catch (e) { b.innerHTML = `<div class=\"err\">Could not get an answer: ${esc(e.message)}</div>`; }\n  $('send').disabled = false; scrollChat(); $('q').focus();\n}\n\nfunction renderAnswer(el, res, t) {\n  const byN = new Map(res.sources.map(s => [s.n, s]));\n  // [n] chunk markers -> [page] markers; group the chunks cited per page\n  const perPage = new Map();\n  res.citations.forEach(s => { if (!perPage.has(s.page)) perPage.set(s.page, []); perPage.get(s.page).push(s); });\n  let html = esc(res.answer).replace(/((?:\\\\[\\\\d+\\\\])+)/g, (run) => {\n    const pagesInRun = [];\n    run.match(/\\\\d+/g).forEach(n => { const s = byN.get(+n); if (s && !pagesInRun.includes(s.page)) pagesInRun.push(s.page); });\n    return pagesInRun.map(p => citeTag(p, perPage.get(p) || [], t)).join('');\n  });\n  const notFound = res.answer.startsWith('I could not find');\n  el.classList.toggle('notfound', notFound);\n  const cites = [...perPage.entries()].sort((a, b) => a[0] - b[0]).map(([p, ss]) =>\n    `<div class=\"row\">${citeTag(p, ss, t)}<span class=\"q\" title=\"${esc(ss[0].text)}\">${esc(ss[0].text.slice(0, 140))}${ss[0].text.length > 140 ? '…' : ''}</span><span class=\"muted\">${ss.length > 1 ? `${ss.length} passages` : ''}</span></div>`).join('');\n  el.innerHTML = html + (cites ? `<div class=\"cites\">${cites}</div>` : '') +\n    `<div class=\"meta\">${esc(res.model)} · ${res.latency_ms} ms · ${res.citations.length} cited passage(s) on ${perPage.size} page(s) · ${res.sources.length} chunks retrieved from this document only${res.unresolved_citations.length ? ` · removed unmatched markers ${res.unresolved_citations.map(n => '[' + n + ']').join('')}` : ''}</div>`;\n  el.querySelectorAll('cite.c').forEach(c => c.onclick = () => jumpTo(+c.dataset.page, c.dataset.chunks.split(','), c.dataset.turn));\n  // auto-focus the first cited page so the user immediately sees where the answer came from\n  const first = [...perPage.keys()].sort((a, b) => a - b)[0];\n  if (first !== undefined) jumpTo(first, perPage.get(first).map(s => s.chunk_id), t);\n}\nfunction citeTag(page, sources, t) {\n  return `<cite class=\"c\" title=\"Jump to page ${page} and highlight the passage\" data-page=\"${page}\" data-turn=\"${t}\" data-chunks=\"${sources.map(s => s.chunk_id).join(',')}\">${page}</cite>`;\n}\napi('/api/health').then(h => $('model').textContent = `LLM: ${h.llm_model}`).catch(() => {});\nload();\n</script>\n</body></html>\n\"\"\"\nPath(\"app/static/document.html\").write_text(HTML.replace(\"__CSS__\", CSS))\nprint(\"document.html written\", len(HTML))\nEOF",
+  "description": "Rewrite the document show page as viewer + per-document chat with page citations"
+}
+```
+
+## Tool  <sub>2026-09-06T10:57:16.456Z</sub>
+
+**Tool result**
+
+```
+document.html written 14441
+```
+
+## Assistant  <sub>2026-09-06T10:57:26.507Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "set -e; cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"tests/test_api.py\"); s = p.read_text()\ns += '''\n\ndef test_pages_endpoint_stored_and_reconstructed(client):\n    from app.config import settings\n\n    body = (b\"# Refund policy\\\\nCustomers may request a refund within 30 days of purchase.\\\\n\\\\n\"\n            b\"# Shipping\\\\nOrders ship within 2 business days.\\\\n\")\n    job = _upload(client, [(\"policy.md\", body)], \"pagesx\")\n    doc = _wait_job(client, job[\"job_id\"])[\"documents\"][0]\n    assert doc[\"status\"] == \"COMPLETED\"\n    pg = client.get(f\"/api/documents/{doc['doc_id']}/pages\").json()\n    assert pg[\"source\"] == \"stored\" and [p[\"page\"] for p in pg[\"pages\"]] == [1, 2]\n    assert pg[\"pages\"][0][\"section\"] == \"Refund policy\" and \"30 days\" in pg[\"pages\"][0][\"text\"]\n    assert pg[\"pages\"][0][\"chunk_ids\"] == [f\"{doc['doc_id']}:0\"]\n\n    # chunk offsets refer to the stored page text, so the viewer can highlight exactly\n    chunks = client.get(\"/api/chunks\", params={\"collection\": \"pagesx\", \"doc_id\": doc[\"doc_id\"]}).json()\n    for c in chunks:\n        page = next(p for p in pg[\"pages\"] if p[\"page\"] == c[\"page\"])\n        assert page[\"text\"][c[\"char_start\"]:c[\"char_end\"]].strip() == c[\"text\"]\n\n    # documents indexed before page text was stored are reconstructed from chunk offsets\n    (settings.pages_dir / f\"{doc['doc_id']}.json\").unlink()\n    pg2 = client.get(f\"/api/documents/{doc['doc_id']}/pages\").json()\n    assert pg2[\"source\"] == \"reconstructed\" and \"30 days\" in pg2[\"pages\"][0][\"text\"]\n\n    # not applicable for non-COMPLETED documents / unknown ids\n    bad = _upload(client, [(\"x.exe\", b\"MZ\")], \"pagesx\")[\"documents\"][0]\n    assert client.get(f\"/api/documents/{bad['doc_id']}/pages\").status_code == 409\n    assert client.get(\"/api/documents/nope/pages\").status_code == 404\n    # deleting the document removes its page text\n    client.delete(f\"/api/documents/{doc['doc_id']}\")\n    assert not (settings.pages_dir / f\"{doc['doc_id']}.json\").exists()\n    client.delete(\"/api/collections/pagesx\")\n'''\np.write_text(s)\nEOF\n.venv/bin/python -m compileall -q app cli evaluation scripts tests && .venv/bin/python -m pytest -q 2>&1 | grep -E \"^(FAILED|ERROR)|passed|failed|assert\" | head",
+  "description": "Add pages-endpoint tests and run the suite",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T10:57:27.660Z</sub>
+
+**Tool result**
+
+```
+34 passed, 6 warnings in 0.86s
+```
+
+## Assistant  <sub>2026-09-06T10:58:13.286Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\n\np = Path(\"README.md\"); s = p.read_text()\ns = s.replace(\"\"\"| `/documents/{doc_id}` | **show page**: for `COMPLETED` documents the original file (inline for PDF, HTML, text, CSV, images; download for DOCX/RTF) side by side with the indexed content (pages → chunks). For any other status the page explains why a viewer is not applicable and shows the reason; a `DUPLICATE` links to the original document's show page; a `FAILED` document offers *Retry*. |\"\"\",\n\"\"\"| `/documents/{doc_id}` | **show page** = document viewer + chat. Left 55%: **Text view** of the indexed pages (plus *Original file* and *Details* tabs). Right 45%: a **chat that asks only this document** (`doc_ids=[id]`). Answers cite **page numbers** as blue chips; clicking a chip scrolls the viewer to that page and highlights the cited passage in light blue (the first citation is focused automatically). For any other status the page explains why the viewer/chat are not applicable and shows the reason; a `DUPLICATE` links to the original document's show page; a `FAILED` document offers *Retry*. |\"\"\")\ns = s.replace(\"| `GET` | `/api/documents/{doc_id}/file?download=` | the stored original file (inline for PDF/HTML/text/CSV/images, attachment otherwise) |\",\n              \"| `GET` | `/api/documents/{doc_id}/file?download=` | the stored original file (inline for PDF/HTML/text/CSV/images, attachment otherwise) |\\n| `GET` | `/api/documents/{doc_id}/pages` | page text of a `COMPLETED` document with the chunk ids per page (stored at ingest, or reconstructed from chunk offsets) — powers the viewer |\")\ns = s.replace(\"| `GET` | `/api/chunks?collection=&doc_id=&job_id=&limit=&offset=` | inspect the `document_chunks` store, filterable by document or job |\",\n              \"| `GET` | `/api/chunks?collection=&doc_id=&job_id=&limit=&offset=` | inspect the `document_chunks` store, filterable by document or job; each chunk carries `page`, `chunk_index`, `char_start`, `char_end` |\")\ns = s.replace(\"\"\"Every chunk carries `job_id` as well as `doc_id`, so filtering retrieval (or `/api/chunks`) by an\nupload job needs no join. Names are settings (`JOBS_STORE`, `DOCUMENTS_STORE`, `CHUNKS_STORE`).\"\"\",\n\"\"\"Every chunk carries `job_id` as well as `doc_id`, so filtering retrieval (or `/api/chunks`) by an\nupload job needs no join. Names are settings (`JOBS_STORE`, `DOCUMENTS_STORE`, `CHUNKS_STORE`).\nAlongside them, `data/pages/<doc_id>.json` keeps each document's cleaned page text (the text the chunk\noffsets refer to) so the show-page viewer can highlight cited passages exactly; it is written at ingest\nand removed with the document.\"\"\")\np.write_text(s)\n\np = Path(\"documentation/architecture.md\"); s = p.read_text()\ns = s.replace(\"| UI | `app/static/index.html`, `jobs.html`, `documents.html`, `document.html` | workbench (upload · jobs · documents · ask · sources); dedicated listings (20/page); document show page (original file + indexed chunks, or the reason a viewer is not applicable) |\",\n              \"| UI | `app/static/index.html`, `jobs.html`, `documents.html`, `document.html` | workbench (upload · jobs · documents · ask · sources); dedicated listings (20/page); document show page = 55% page viewer + 45% per-document chat with page-number citations that jump and highlight |\")\ns = s.replace(\"`GET /api/documents/{doc_id}/file` serves the stored original (inline where browsers can render it) for the show page.\",\n              \"\"\"`GET /api/documents/{doc_id}/file` serves the stored original (inline where browsers can render it) for the show page.\n\n### Show page: viewer + chat + citation jump\n\n1. Ingest writes `data/pages/<doc_id>.json`: for each page the normalised text (exactly what\n   `chunk_pages()` measured `char_start` / `char_end` against), section, extraction and chunk ids.\n2. `GET /api/documents/{id}/pages` returns it (or reconstructs pages from chunk offsets for\n   documents indexed before v0.8.0).\n3. The chat posts `/api/ask` with `doc_ids=[id]`, so retrieval is restricted to that document.\n4. The answer's `[n]` chunk markers are rewritten to **page-number chips** using the `citations`\n   payload (several chunks on one page collapse into one chip). Clicking a chip switches to the\n   Text view, scrolls to that page and wraps the cited chunk text in `<mark>` (light blue; the\n   clicked page's passage darker). The text is located with `indexOf` on the page text and falls\n   back to the stored offsets.\"\"\")\np.write_text(s)\n\np = Path(\"documentation/changelog.html\"); s = p.read_text()\nentry = \"\"\"<section class=\"rel\">\n  <h2>0.8.0 <time>2026-09-06</time></h2>\n  <p><span class=\"tag added\">Added</span> The document show page is now a viewer + chat: ask only that document, click a page citation to jump and highlight.</p>\n  <ul>\n    <li><span class=\"tag changed\">Changed</span> <code>/documents/{doc_id}</code> layout: left 55% <b>Text view</b> of the indexed pages (tabs: Original file, Details); right 45% a chat (GPT/Claude style) whose questions are sent with <code>doc_ids=[id]</code>, so answers use only this document.</li>\n    <li><span class=\"tag added\">Added</span> Citations rendered as <b>page-number chips</b> ([1], [2] = page numbers); clicking scrolls the viewer to the page and highlights the cited passage in light blue (clicked page darker). The first citation is focused automatically; the answer also lists each cited page with an excerpt.</li>\n    <li><span class=\"tag added\">Added</span> <code>GET /api/documents/{id}/pages</code> and per-document page text stored at ingest (<code>data/pages/&lt;doc_id&gt;.json</code>); older documents are reconstructed from chunk offsets. <code>/api/chunks</code> now includes <code>chunk_index</code>, <code>char_start</code>, <code>char_end</code>, <code>extraction</code>.</li>\n    <li><span class=\"tag docs\">Docs</span> README, architecture (show-page flow) updated.</li>\n  </ul>\n</section>\n\n<section class=\"rel\">\n  <h2>0.7.0 <time>2026-09-06</time></h2>\"\"\"\ns = s.replace('<section class=\"rel\">\\n  <h2>0.7.0 <time>2026-09-06</time></h2>', entry, 1)\np.write_text(s)\n\np = Path(\"memory.md\"); s = p.read_text()\ns = s.replace(\"  v0.7.0 `/jobs`, `/documents` (20/page) and `/documents/{id}` show page (+ `/api/documents/{id}/file`).\",\n              \"  v0.7.0 `/jobs`, `/documents` (20/page) and `/documents/{id}` show page (+ `/api/documents/{id}/file`);\\n  v0.8.0 show page = 55% text viewer + 45% per-document chat, page-number citations that jump + highlight, `data/pages/`.\")\ns = s.replace(\"## Environment gotchas\", \"- Show-page highlighting depends on `data/pages/<doc_id>.json` holding the *normalised* page text\\n  (`chunker.normalise`) so `char_start/char_end` line up; the viewer also tries `indexOf(chunk.text)`.\\n  Citations shown to the user on that page are **page numbers**, not chunk numbers.\\n\\n## Environment gotchas\")\np.write_text(s)\np = Path(\"plans/2026-09-06-rag-generator-plan.md\"); s = p.read_text()\ns = s.replace(\"| 10 | **Pagination**\", \"| 13 | Show page as viewer (55%) + per-document chat (45%); page-number citations that jump to the page and highlight the passage; page text stored at ingest (`/api/documents/{id}/pages`) | `app/static/document.html`, `app/ingest/pipeline.py`, `app/main.py` |\\n| 10 | **Pagination**\")\np.write_text(s)\nprint(\"docs ok\")\nEOF\n.venv/bin/python scripts/build_docs.py >/dev/null && .venv/bin/python scripts/sync_rules.py --check",
+  "description": "Document the show-page viewer/chat, pages endpoint; changelog 0.8.0; rebuild docs"
+}
+```
+
+## Tool  <sub>2026-09-06T10:58:13.411Z</sub>
+
+**Tool result**
+
+```
+docs ok
+rules in sync
+```
+
+## Assistant  <sub>2026-09-06T10:58:13.915Z</sub>
+
+**Tool call — `mcp__Claude_Browser__preview_stop`**
+
+```json
+{
+  "serverId": "a665fb24-5a8b-4eac-9a26-411f7293de47"
+}
+```
+
+## Tool  <sub>2026-09-06T10:58:16.593Z</sub>
+
+**Tool result**
+
+```
+Server a665fb24-5a8b-4eac-9a26-411f7293de47 stopped
+```
+
+## Assistant  <sub>2026-09-06T10:58:23.518Z</sub>
+
+**Tool call — `mcp__Claude_Browser__preview_start`**
+
+```json
+{
+  "name": "rag-api"
+}
+```
+
+## Assistant  <sub>2026-09-06T10:58:27.334Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator; for i in $(seq 1 40); do curl -sf localhost:8000/api/health >/dev/null && break; sleep 1; done\ncurl -s localhost:8000/api/documents/c85e1bbaba8c/pages | .venv/bin/python -c \"\nimport sys,json; d=json.load(sys.stdin); print('source:', d['source'], '| pages:', [(p['page'], len(p['text']), len(p['chunk_ids'])) for p in d['pages']])\"\ncurl -s -o /dev/null -w \"show page %{http_code}\\n\" localhost:8000/documents/c85e1bbaba8c",
+  "description": "Wait for the server and check the pages endpoint for the user's document",
+  "timeout": 120000
+}
+```
+
+## Tool  <sub>2026-09-06T10:58:28.651Z</sub>
+
+**Tool result**
+
+```
+{
+  "serverId": "dd5a8522-7638-425b-b196-8a547f5e7aaa",
+  "port": 8000,
+  "name": "rag-api",
+  "reused": false,
+  "previewId": "preview-local_ed8547aa-7d57-4f03-9aba-91798b56bd6d",
+  "tabId": "seed"
+}
+Server started successfully on port 8000. Opened tab "seed" at http://localhost:8000. Use tabId "seed" with read_page / computer / navigate; serverId is for preview_stop and preview_logs only.
+```
+
+## Tool  <sub>2026-09-06T10:58:28.725Z</sub>
+
+**Tool result**
+
+```
+source: reconstructed | pages: [(1, 17062, 20), (2, 6781, 8), (3, 1324, 2)]
+show page 200
+```
+
+## Assistant  <sub>2026-09-06T10:58:43.210Z</sub>
+
+**Tool call — `mcp__Claude_Browser__browser_batch`**
+
+```json
+{
+  "actions": [
+    {
+      "name": "navigate",
+      "input": {
+        "url": "http://localhost:8000/documents/c85e1bbaba8c",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "wait",
+        "duration": 3,
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "screenshot",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "javascript_tool",
+      "input": {
+        "action": "javascript_exec",
+        "tabId": "seed",
+        "text": "document.getElementById('q').value = 'What are the warranty terms and how can the agreement be terminated?'; document.getElementById('send').click(); await new Promise(r => setTimeout(r, 9000)); const bot = [...document.querySelectorAll('.msg.bot')].pop(); ({answer: bot.innerText.slice(0, 400), chips: [...bot.querySelectorAll('cite.c')].map(c => ({page: c.dataset.page, chunks: c.dataset.chunks.split(',').length})), marks: document.querySelectorAll('mark.cite').length, strong: !!document.getElementById('hl-target'), targetPage: document.querySelector('.vpage.target')?.id, viewerScrollTop: document.getElementById('viewer').scrollTop})"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "screenshot",
+        "tabId": "seed"
+      }
+    }
+  ]
+}
+```
+
+## Tool  <sub>2026-09-06T10:58:58.168Z</sub>
+
+**Tool result**
+
+```
+[navigate] navigated to http://localhost:8000
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · Document" (http://localhost:8000)
+[computer:wait] waited 3s
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · 2P CRA dated 17_12_2025 (1) (2).docx" (http://localhost:8000)
+[computer:screenshot] Screenshot size: 800x571
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · 2P CRA dated 17_12_2025 (1) (2).docx" (http://localhost:8000)
+
+[javascript_tool:javascript_exec] {
+  "answer": "The warranty terms are as follows: IBM warrants that it provides Services using commercially reasonable care and skill and as described in an applicable Attachment or TD, including any completion criteria. The warranty for a Service ends when the Services end. These warranties are the exclusive warranties from IBM and replace all other warranties, including implied warranties or conditions of sati",
+  "chips": [
+    {
+      "chunks": 4,
+      "page": "1"
+    },
+    {
+      "chunks": 4,
+      "page": "1"
+    },
+    {
+      "chunks": 4,
+      "page": "1"
+    }
+  ],
+  "marks": 4,
+  "strong": true,
+  "targetPage": "vpage-1",
+  "viewerScrollTop": 0
+}
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · 2P CRA dated 17_12_2025 (1) (2).docx" (http://localhost:8000)
+[computer:screenshot] Screenshot size: 800x571
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · 2P CRA dated 17_12_2025 (1) (2).docx" (http://localhost:8000)
+
+```
+
+## Assistant  <sub>2026-09-06T10:59:25.336Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"app/static/document.html\"); s = p.read_text()\ns = s.replace(\"main { flex:1; display:grid; grid-template-columns:55fr 45fr; gap:0; min-height:0; }\",\n              \"main { flex:1; display:grid; grid-template-columns:minmax(0,55fr) minmax(0,45fr); gap:0; min-height:0; min-width:0; }\")\ns = s.replace(\".pane { min-height:0; display:flex; flex-direction:column; }\",\n              \".pane { min-height:0; min-width:0; display:flex; flex-direction:column; overflow:hidden; }\")\ns = s.replace(\".msg { max-width:92%; padding:10px 14px;\", \".msg { max-width:92%; min-width:0; overflow-wrap:anywhere; padding:10px 14px;\")\ns = s.replace(\"\"\"  const target = document.getElementById('hl-target') || document.getElementById(`vpage-${pageNo}`);\n  if (target) target.scrollIntoView({behavior: 'smooth', block: 'center'});\"\"\",\n\"\"\"  const viewer = $('viewer');\n  const target = document.getElementById('hl-target') || document.getElementById(`vpage-${pageNo}`);\n  if (target) {\n    // scroll the viewer pane itself (robust even when scrollIntoView is a no-op, e.g. hidden tab)\n    const top = target.getBoundingClientRect().top - viewer.getBoundingClientRect().top + viewer.scrollTop;\n    viewer.scrollTo({top: Math.max(0, top - viewer.clientHeight / 3), behavior: 'smooth'});\n  }\"\"\")\np.write_text(s); print(\"patched\")\nEOF\n.venv/bin/python -m pytest -q 2>&1 | grep -E \"passed|failed\"",
+  "description": "Fix pane overflow and make the citation scroll explicit; rerun tests",
+  "timeout": 120000
+}
+```
+
+## Tool  <sub>2026-09-06T10:59:26.402Z</sub>
+
+**Tool result**
+
+```
+patched
+34 passed, 6 warnings in 0.81s
+```
+
+## Assistant  <sub>2026-09-06T10:59:33.691Z</sub>
+
+Re-verifying the show page in the browser after the layout fix, and running the final validation plus transcript export in parallel.
+
+## Assistant  <sub>2026-09-06T10:59:40.385Z</sub>
+
+**Tool call — `mcp__Claude_Browser__browser_batch`**
+
+```json
+{
+  "actions": [
+    {
+      "name": "navigate",
+      "input": {
+        "url": "http://localhost:8000/documents/c85e1bbaba8c",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "wait",
+        "duration": 3,
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "javascript_tool",
+      "input": {
+        "action": "javascript_exec",
+        "tabId": "seed",
+        "text": "document.getElementById('q').value = 'What happens to Project Materials and who owns the copyright?'; document.getElementById('send').click(); await new Promise(r => setTimeout(r, 9000)); const bot = [...document.querySelectorAll('.msg.bot')].pop(); const chip = bot.querySelector('cite.c'); chip && chip.click(); await new Promise(r => setTimeout(r, 1200)); const v = document.getElementById('viewer'); const m = document.getElementById('hl-target'); ({pages: [...bot.querySelectorAll('cite.c')].map(c => c.dataset.page), marks: document.querySelectorAll('mark.cite').length, viewerScrollTop: Math.round(v.scrollTop), markVisible: m ? (m.getBoundingClientRect().top > v.getBoundingClientRect().top && m.getBoundingClientRect().top < v.getBoundingClientRect().bottom) : null, leftWidth: document.querySelector('.pane.left').getBoundingClientRect().width, rightWidth: document.querySelector('.pane.right').getBoundingClientRect().width, overflow: document.documentElement.scrollWidth > window.innerWidth})"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "screenshot",
+        "tabId": "seed"
+      }
+    }
+  ]
+}
+```
+
+## Assistant  <sub>2026-09-06T10:59:44.943Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python -m compileall -q app cli evaluation scripts tests && echo compile-ok\n.venv/bin/python scripts/sync_rules.py --check && .venv/bin/python scripts/build_docs.py >/dev/null && echo docs-ok\ngrep -o 'version=\"[0-9.]*\"' app/main.py; grep -o '<h2>0\\.[0-9]\\.[0-9]' documentation/changelog.html | head -1\n.venv/bin/python scripts/export_transcript.py --session a88920a3-6212-4085-ad05-80ba0afca34d && wc -l transcripts/2026-09-06-rag-generator-build.md\ngit status --short | wc -l",
+  "description": "Final compile, rules, docs, version check, transcript export, git status",
+  "timeout": 120000
+}
+```
+
+## Tool  <sub>2026-09-06T10:59:57.163Z</sub>
+
+**Tool result**
+
+```
+[navigate] navigated to http://localhost:8000
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · Document" (http://localhost:8000)
+[computer:wait] waited 3s
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · 2P CRA dated 17_12_2025 (1) (2).docx" (http://localhost:8000)
+[javascript_tool:javascript_exec] {
+  "leftWidth": 667.6953125,
+  "markVisible": true,
+  "marks": 2,
+  "overflow": false,
+  "pages": [
+    "1",
+    "1"
+  ],
+  "rightWidth": 546.3046875,
+  "viewerScrollTop": 0
+}
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · 2P CRA dated 17_12_2025 (1) (2).docx" (http://localhost:8000)
+[computer:screenshot] Screenshot size: 800x571
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · 2P CRA dated 17_12_2025 (1) (2).docx" (http://localhost:8000)
 
 ```

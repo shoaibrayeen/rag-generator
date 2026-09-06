@@ -20,6 +20,26 @@
 <div class="sub">All notable changes to RAG Generator. Versions follow <code>app/main.py</code>'s FastAPI version.</div>
 
 <section class="rel">
+  <h2>0.9.0 <time>2026-09-06</time></h2>
+  <p><span class="tag added">Added</span> Totals in the listings, on the home page and the dedicated pages alike.</p>
+  <ul>
+    <li><span class="tag added">Added</span> Document listings show <b>Pages</b> (and chunks) as soon as extraction has run; <code>–</code> until then.</li>
+    <li><span class="tag added">Added</span> Job listings show <b>Documents</b> (total in the job, plus how many are indexed when they differ), <b>Pages</b> and chunks summed over the job's COMPLETED documents. API: <code>total_documents</code>, <code>total_pages</code>, <code>total_chunks</code> on job records; CLI <code>rag jobs</code>, <code>rag job</code>, <code>rag status</code> print the same.</li>
+  </ul>
+</section>
+
+<section class="rel">
+  <h2>0.8.0 <time>2026-09-06</time></h2>
+  <p><span class="tag added">Added</span> The document show page is now a viewer + chat: ask only that document, click a page citation to jump and highlight.</p>
+  <ul>
+    <li><span class="tag changed">Changed</span> <code>/documents/{doc_id}</code> layout: left 55% <b>Text view</b> of the indexed pages (tabs: Original file, Details); right 45% a chat (GPT/Claude style) whose questions are sent with <code>doc_ids=[id]</code>, so answers use only this document.</li>
+    <li><span class="tag added">Added</span> Citations rendered as <b>page-number chips</b> ([1], [2] = page numbers); clicking scrolls the viewer to the page and highlights the cited passage in light blue (clicked page darker). The first citation is focused automatically; the answer also lists each cited page with an excerpt.</li>
+    <li><span class="tag added">Added</span> <code>GET /api/documents/{id}/pages</code> and per-document page text stored at ingest (<code>data/pages/&lt;doc_id&gt;.json</code>); older documents are reconstructed from chunk offsets. <code>/api/chunks</code> now includes <code>chunk_index</code>, <code>char_start</code>, <code>char_end</code>, <code>extraction</code>.</li>
+    <li><span class="tag docs">Docs</span> README, architecture (show-page flow) updated.</li>
+  </ul>
+</section>
+
+<section class="rel">
   <h2>0.7.0 <time>2026-09-06</time></h2>
   <p><span class="tag added">Added</span> Dedicated listing pages and a document show page.</p>
   <ul>

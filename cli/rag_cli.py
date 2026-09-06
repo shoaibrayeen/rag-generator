@@ -88,11 +88,12 @@ def status(collection: Optional[str] = COL, api: Optional[str] = API,
                 typer.echo("no documents")
             else:
                 typer.secho(f"page {body['page'] + 1}/{body['pages']} · {body['total']} document(s) · size {body['size']}", fg="bright_black")
-                typer.secho(f"{'DOC ID':12} {'NAME':32} {'STATUS':26} REASON", fg="bright_black")
+                typer.secho(f"{'DOC ID':12} {'NAME':32} {'PAGES':5} {'STATUS':26} REASON", fg="bright_black")
             for d in docs:
                 dup = f" -> original {d['duplicate_of']}" if d.get("duplicate_of") else ""
                 stage = f" ({d['stage']})" if d.get("stage") else ""
-                typer.echo(f"{d['doc_id']:12} {d['filename'][:32]:32} {d['status'] + stage:26} "
+                pages = str(d["pages"]) if d.get("pages") else "-"
+                typer.echo(f"{d['doc_id']:12} {d['filename'][:32]:32} {pages:5} {d['status'] + stage:26} "
                            f"{d.get('reason') or ''}{dup}")
             busy = any(d["status"] not in TERMINAL for d in docs)
             if not watch or not busy:
@@ -118,9 +119,11 @@ def jobs(collection: Optional[str] = COL, api: Optional[str] = API,
             typer.echo("no jobs")
             return
         typer.secho(f"page {body['page'] + 1}/{body['pages']} · {body['total']} job(s) · size {body['size']}", fg="bright_black")
-        typer.secho(f"{'JOB ID':12} {'FILES':5} {'STATUS':10} {'COLLECTION':12} REASON", fg="bright_black")
+        typer.secho(f"{'JOB ID':12} {'DOCS':5} {'PAGES':5} {'STATUS':10} {'COLLECTION':12} REASON", fg="bright_black")
         for j in rows:
-            typer.echo(f"{j['job_id']:12} {j['files']:<5} {j['status']:10} {j['collection']:12} {j['reason']}")
+            pages = j["total_pages"] if j["counts"].get("COMPLETED") else "-"
+            typer.echo(f"{j['job_id']:12} {j['total_documents']:<5} {str(pages):5} {j['status']:10} "
+                       f"{j['collection']:12} {j['reason']}")
 
 
 @app.command(name="job")
@@ -131,10 +134,12 @@ def job(job_id: str, api: Optional[str] = API):
         if r.status_code >= 400:
             _die(r)
         j = r.json()
-        typer.echo(f"job {j['job_id']}  {j['status']}  {j['reason']}  (collection {j['collection']})")
+        typer.echo(f"job {j['job_id']}  {j['status']}  {j['reason']}  (collection {j['collection']}, "
+                   f"{j['total_documents']} documents, {j['total_pages']} pages, {j['total_chunks']} chunks)")
         for d in j["documents"]:
             dup = f" -> original {d['duplicate_of']}" if d.get("duplicate_of") else ""
-            typer.echo(f"  {d['doc_id']:12} {d['filename'][:32]:32} {d['status']:26} {d.get('reason') or ''}{dup}")
+            pages = f"{d['pages']}p" if d.get("pages") else "-"
+            typer.echo(f"  {d['doc_id']:12} {d['filename'][:32]:32} {pages:5} {d['status']:26} {d.get('reason') or ''}{dup}")
 
 
 @app.command()

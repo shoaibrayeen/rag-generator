@@ -59,12 +59,17 @@ def split_text(text: str, size: int | None = None, overlap: int | None = None) -
     return spans
 
 
+def normalise(text: str) -> str:
+    """The exact page text chunk offsets are measured against."""
+    return re.sub(r"[ \t]+\n", "\n", text).strip()
+
+
 def chunk_pages(pages: list[Page], *, doc_id: str, source: str, file_type: str,
                 collection: str, job_id: str = "") -> list[Chunk]:
     chunks: list[Chunk] = []
     idx = 0
     for page in pages:
-        text = re.sub(r"[ \t]+\n", "\n", page.text).strip()
+        text = normalise(page.text)
         if not text:
             continue
         for start, end in split_text(text):

@@ -46,6 +46,10 @@ evaluation script.
 - UI pages: `/` workbench keeps 5-per-page panels (user asked to keep it); `/jobs` and `/documents` are 20-per-page;
   show page is `/documents/{doc_id}` (static HTML reads the id from the path).
 
+- Show-page highlighting depends on `data/pages/<doc_id>.json` holding the *normalised* page text
+  (`chunker.normalise`) so `char_start/char_end` line up; the viewer also tries `indexOf(chunk.text)`.
+  Citations shown to the user on that page are **page numbers**, not chunk numbers.
+
 ## Environment gotchas
 - The dev Mac has no Docker, Homebrew or Tesseract; Python is 3.9 system-wide. Use
   `uv venv --python 3.11 .venv`. Docker image must be built/verified elsewhere.
@@ -78,4 +82,6 @@ evaluation script.
   v0.4.0 jobs as first-class objects, job→document filter, scoped ask, validated citations, `plans/`;
   v0.5.0 paginated listings (page 0, size 5), `documentation/enhancements.md`;
   v0.6.0 content sniffing + RTF, precise failure reasons, retry endpoint, store-then-hash upload order, step logging;
-  v0.7.0 `/jobs`, `/documents` (20/page) and `/documents/{id}` show page (+ `/api/documents/{id}/file`).
+  v0.7.0 `/jobs`, `/documents` (20/page) and `/documents/{id}` show page (+ `/api/documents/{id}/file`);
+  v0.8.0 show page = 55% text viewer + 45% per-document chat, page-number citations that jump + highlight, `data/pages/`;
+  v0.9.0 listings show pages per document and documents/pages per job (home page and dedicated pages).

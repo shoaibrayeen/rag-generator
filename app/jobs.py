@@ -82,7 +82,10 @@ def _job_view(raw: dict, with_docs: bool) -> JobInfo | JobDetail:
         reason = "no file could be indexed: " + reason
     updated = max([raw["created_at"]] + [d.updated_at for d in docs])
     data = dict(job_id=raw["job_id"], collection=raw["collection"], status=status, reason=reason,
-                files=len(docs), counts=counts, doc_ids=list(raw["doc_ids"]),
+                files=len(docs), total_documents=len(docs),
+                total_pages=sum(d.pages for d in docs if d.status == "COMPLETED"),
+                total_chunks=sum(d.chunks for d in docs if d.status == "COMPLETED"),
+                counts=counts, doc_ids=list(raw["doc_ids"]),
                 created_at=raw["created_at"], updated_at=updated)
     return JobDetail(**data, documents=docs) if with_docs else JobInfo(**data)
 

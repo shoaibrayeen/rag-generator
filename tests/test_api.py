@@ -66,13 +66,18 @@ def test_job_lifecycle_listing_and_filter(client):
     assert done["status"] == "COMPLETED", done
     assert done["counts"] == {"COMPLETED": 2, "EXTRACTION_NOT_SUPPORTED": 1}
     assert done["reason"].startswith("partially completed")
+    # job totals: documents in the job, pages/chunks summed over its COMPLETED documents
+    assert done["total_documents"] == 3 == done["files"]
+    completed = [d for d in done["documents"] if d["status"] == "COMPLETED"]
+    assert done["total_pages"] == sum(d["pages"] for d in completed) == 3  # policy.md has 2 pages, security.txt 1
+    assert done["total_chunks"] == sum(d["chunks"] for d in completed) > 0
 
     page = client.get("/api/jobs", params={"collection": "col1"}).json()
     assert page["page"] == 0 and page["size"] == 5 and page["total"] == 1 and page["pages"] == 1
     assert page["has_next"] is False and page["has_prev"] is False
     jobs = page["items"]
     assert [j["job_id"] for j in jobs] == [job["job_id"]]
-    assert {"job_id", "files", "status", "reason"} <= set(jobs[0])
+    assert {"job_id", "files", "total_documents", "total_pages", "total_chunks", "status", "reason"} <= set(jobs[0])
 
     # job -> document listing filter
     docs = client.get("/api/documents", params={"job_id": job["job_id"]}).json()["items"]
@@ -268,3 +273,37 @@ def test_dedicated_pages_and_file_endpoint(client):
     assert client.get(f"/api/documents/{rejected['doc_id']}/file").status_code == 410  # never stored
     assert client.get("/api/documents/nope/file").status_code == 404
     client.delete("/api/collections/pages")
+
+
+def test_pages_endpoint_stored_and_reconstructed(client):
+    from app.config import settings
+
+    body = (b"# Refund policy\nCustomers may request a refund within 30 days of purchase.\n\n"
+            b"# Shipping\nOrders ship within 2 business days.\n")
+    job = _upload(client, [("policy.md", body)], "pagesx")
+    doc = _wait_job(client, job["job_id"])["documents"][0]
+    assert doc["status"] == "COMPLETED"
+    pg = client.get(f"/api/documents/{doc['doc_id']}/pages").json()
+    assert pg["source"] == "stored" and [p["page"] for p in pg["pages"]] == [1, 2]
+    assert pg["pages"][0]["section"] == "Refund policy" and "30 days" in pg["pages"][0]["text"]
+    assert pg["pages"][0]["chunk_ids"] == [f"{doc['doc_id']}:0"]
+
+    # chunk offsets refer to the stored page text, so the viewer can highlight exactly
+    chunks = client.get("/api/chunks", params={"collection": "pagesx", "doc_id": doc["doc_id"]}).json()
+    for c in chunks:
+        page = next(p for p in pg["pages"] if p["page"] == c["page"])
+        assert page["text"][c["char_start"]:c["char_end"]].strip() == c["text"]
+
+    # documents indexed before page text was stored are reconstructed from chunk offsets
+    (settings.pages_dir / f"{doc['doc_id']}.json").unlink()
+    pg2 = client.get(f"/api/documents/{doc['doc_id']}/pages").json()
+    assert pg2["source"] == "reconstructed" and "30 days" in pg2["pages"][0]["text"]
+
+    # not applicable for non-COMPLETED documents / unknown ids
+    bad = _upload(client, [("x.exe", b"MZ")], "pagesx")["documents"][0]
+    assert client.get(f"/api/documents/{bad['doc_id']}/pages").status_code == 409
+    assert client.get("/api/documents/nope/pages").status_code == 404
+    # deleting the document removes its page text
+    client.delete(f"/api/documents/{doc['doc_id']}")
+    assert not (settings.pages_dir / f"{doc['doc_id']}.json").exists()
+    client.delete("/api/collections/pagesx")

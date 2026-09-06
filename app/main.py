@@ -24,7 +24,7 @@ from app.ingest import pipeline
 from app.ingest.extractors import file_type_for, ocr_available
 from app.llm.client import LLMError
 from app.models import (TERMINAL_STATUSES, AskRequest, AskResponse, ChunkOut, DocStatus, DocumentInfo,
-                        DocumentPage, HealthResponse, JobDetail, JobPage, UploadResponse)
+                        DocumentPage, DocumentPages, HealthResponse, JobDetail, JobPage, PageOut, UploadResponse)
 from app.rag import answer
 from app.retrieval import bm25_index, embedder, vector_store
 
@@ -68,7 +68,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="RAG Generator", version="0.7.0", lifespan=lifespan)
+app = FastAPI(title="RAG Generator", version="0.9.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 if DOCS_DIR.exists():
     app.mount("/documentation", StaticFiles(directory=DOCS_DIR), name="documentation")
@@ -279,6 +279,7 @@ def delete_document(doc_id: str):
         bm25_index.rebuild(doc.collection)
     for p in settings.uploads_dir.glob(f"{doc_id}_*"):
         p.unlink(missing_ok=True)
+    (settings.pages_dir / f"{doc_id}.json").unlink(missing_ok=True)
     jobs.delete(doc_id)
     log.info("[delete] %s", ctx(job=doc.job_id, doc=doc_id, file=doc.filename))
 
@@ -292,6 +293,7 @@ def reset_collection(name: str):
     for doc in jobs.list_docs(col):
         for p in settings.uploads_dir.glob(f"{doc.doc_id}_*"):
             p.unlink(missing_ok=True)
+        (settings.pages_dir / f"{doc.doc_id}.json").unlink(missing_ok=True)
         jobs.delete(doc.doc_id)
     for job in jobs.list_jobs(col):
         jobs.delete_job(job.job_id)
@@ -304,10 +306,51 @@ def list_chunks(collection: str | None = Query(default=None),
     """Inspect the document_chunks store; filter by document set, document and/or upload job."""
     col = _collection(collection)
     chunks = vector_store.get_all_chunks(col, [doc_id] if doc_id else None, job_id)[offset:offset + limit]
-    return [ChunkOut(chunk_id=c["chunk_id"], doc_id=c["metadata"].get("doc_id", ""),
-                     job_id=c["metadata"].get("job_id", ""), collection=c["metadata"].get("collection", col),
-                     source=c["metadata"].get("source", ""), page=int(c["metadata"].get("page", 0)),
-                     section=c["metadata"].get("section") or None, text=c["text"]) for c in chunks]
+    return [_chunk_out(c, col) for c in chunks]
+
+
+def _chunk_out(c: dict, col: str) -> ChunkOut:
+    m = c["metadata"]
+    return ChunkOut(chunk_id=c["chunk_id"], doc_id=m.get("doc_id", ""), job_id=m.get("job_id", ""),
+                    collection=m.get("collection", col), source=m.get("source", ""), page=int(m.get("page", 0)),
+                    section=m.get("section") or None, chunk_index=int(m.get("chunk_index", 0)),
+                    char_start=int(m.get("char_start", 0)), char_end=int(m.get("char_end", 0)),
+                    extraction=m.get("extraction", "text"), text=c["text"])
+
+
+@app.get("/api/documents/{doc_id}/pages", response_model=DocumentPages)
+def document_pages(doc_id: str):
+    """Page text of a COMPLETED document for the show-page viewer, with the chunk ids per page.
+
+    Uses the page text stored at ingest; documents indexed before that existed are reconstructed
+    from chunk offsets (`source: "reconstructed"`)."""
+    import json
+
+    doc = jobs.get(doc_id)
+    if doc is None:
+        raise HTTPException(404, "document not found")
+    if doc.status != "COMPLETED":
+        raise HTTPException(409, f"document is {doc.status}, not COMPLETED")
+    stored = settings.pages_dir / f"{doc_id}.json"
+    if stored.exists():
+        pages = [PageOut(**pg) for pg in json.loads(stored.read_text())]
+        return DocumentPages(doc_id=doc_id, filename=doc.filename, pages=pages, source="stored")
+    # Reconstruct: lay every chunk's text at its char_start; overlaps carry identical text.
+    by_page: dict[int, list[ChunkOut]] = {}
+    for c in vector_store.get_all_chunks(doc.collection, [doc_id]):
+        out = _chunk_out(c, doc.collection)
+        by_page.setdefault(out.page, []).append(out)
+    pages = []
+    for page_no in sorted(by_page):
+        cs = sorted(by_page[page_no], key=lambda x: x.chunk_index)
+        buf: list[str] = []
+        for x in cs:
+            while len(buf) < x.char_start:
+                buf.append(" ")
+            buf[x.char_start:x.char_start + len(x.text)] = list(x.text)
+        pages.append(PageOut(page=page_no, section=cs[0].section, extraction=cs[0].extraction,
+                             text="".join(buf), chunk_ids=[x.chunk_id for x in cs]))
+    return DocumentPages(doc_id=doc_id, filename=doc.filename, pages=pages, source="reconstructed")
 
 
 # ----------------------------------------------------------------------- ask
