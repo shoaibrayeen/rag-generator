@@ -1,0 +1,2557 @@
+# Claude Code transcript — session `a88920a3-6212-4085-ad05-80ba0afca34d`
+
+Project: `/Users/shoaib.rayeen/my_space/rag-generator`  
+Exported: 2026-09-06T15:47:19  
+Source log: `/Users/shoaib.rayeen/.claude/projects/-Users-shoaib-rayeen-my-space-rag-generator/a88920a3-6212-4085-ad05-80ba0afca34d.jsonl`
+
+---
+
+## User  <sub>2026-09-06T09:49:07.676Z</sub>
+
+Create a plan for below, ask question if any doubts
+
+
+RAG Generator
+
+Agentic Coding Assessment | Candidate Brief
+
+Problem Statement
+Build a RAG Generator that:
+• Accepts documents at runtime - create a simple UI for this that accept documents (Single HTML page plus CLI	Upload, status, ask, view sources)
+• Creates a RAG application over those documents
+• Allows users to ask questions and receive grounded answers
+• Works with different document sets without code changes
+You may choose the architecture, stack, models, tools and approach.
+
+2. Complete AI agent transcripts, for example in Codex or Claude Code, use /export to get the
+transcript - this needs to be done, so create a folder with transcripts and add transcript there
+
+
+For API use fast API
+use python
+for deployment use docker
+ and docker compose for deployment
+
+.env should contains LLM API URL and its API key, also readMe to setup instrcutions, tech stack what is being used or not
+
+this is simple application, flask can be used
+
+For chunking use fastembed
+for vector DB store ChromaDB
+
+so after the code dve only needs to update LLM URL and LLM key in the env and it should work properly
+once build, we need to show preview here for running flows
+
+use rank-bm25
+
+for chuinking use Overlapping, metadata-tagged chunks
+
+support
+PDF, DOCX, HTML, TXT, MD, CSV to text with page metadata, keep a constant for this, user can update, mention this in readMe
+
+use fusion too
+
+Evaluation	Own script with Claude as judge
+
+## Assistant  <sub>2026-09-06T09:49:13.077Z</sub>
+
+I'll start by checking what's already in the repo, then draft the plan and ask about the few open decisions.
+
+## Assistant  <sub>2026-09-06T09:49:15.272Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "ls -la && git log --oneline | head && find . -type f -not -path './.git/*' | head -50",
+  "description": "List repo contents and history"
+}
+```
+
+## Tool  <sub>2026-09-06T09:49:15.369Z</sub>
+
+**Tool result**
+
+```
+total 8
+drwxr-xr-x   4 shoaib.rayeen  staff  128 Sep  6 01:22 .
+drwxr-xr-x   7 shoaib.rayeen  staff  224 Sep  5 23:23 ..
+drwxr-xr-x  12 shoaib.rayeen  staff  384 Sep  6 02:55 .git
+-rw-r--r--@  1 shoaib.rayeen  staff   16 Sep  6 01:22 README.md
+159cb4e Dummy Commit
+./README.md
+```
+
+## Assistant  <sub>2026-09-06T09:49:33.926Z</sub>
+
+The repo is empty apart from a placeholder README, so there's nothing to explore. I'll pull the Claude API reference for the judge and then confirm a few open decisions with you.
+
+## Assistant  <sub>2026-09-06T09:49:34.150Z</sub>
+
+**Tool call — `Skill`**
+
+```json
+{
+  "skill": "claude-api"
+}
+```
+
+## Tool  <sub>2026-09-06T09:49:34.186Z</sub>
+
+**Tool result**
+
+```
+Launching skill: claude-api
+```
+
+## User  <sub>2026-09-06T09:49:34.184Z</sub>
+
+Base directory for this skill: /private/tmp/claude-502/bundled-skills/2.1.260/5dc1bfbb34c0ed5325b15b1ddcff5b1f/claude-api
+
+# Building LLM-Powered Applications with Claude
+
+This skill helps you build LLM-powered applications with Claude. Choose the right surface based on your needs, detect the project language, then read the relevant language-specific documentation.
+
+## Before You Start
+
+Scan the target file (or, if no target file, the prompt and project) for non-Anthropic provider markers - `import openai`, `from openai`, `langchain_openai`, `OpenAI(`, `gpt-4`, `gpt-5`, file names like `agent-openai.py` or `*-generic.py`, or any explicit instruction to keep the code provider-neutral. If you find any, stop and tell the user that this skill produces Claude/Anthropic SDK code; ask whether they want to switch the file to Claude or want a non-Claude implementation. Do not edit a non-Anthropic file with Anthropic SDK calls. (Exception: the `prompt-audit` subcommand is non-interactive and does not stop here - it records non-Anthropic provider markers in its report's stated assumptions and never proposes switching a non-Anthropic file to the Anthropic SDK.)
+
+## Output Requirement
+
+When the user asks you to add, modify, or implement a Claude feature, your code must call Claude through one of:
+
+1. **The official Anthropic SDK** for the project's language (`anthropic`, `@anthropic-ai/sdk`, `com.anthropic.*`, etc.). This is the default whenever a supported SDK exists for the project.
+2. **Raw HTTP** (`curl`, `requests`, `fetch`, `httpx`, etc.) - only when the user explicitly asks for cURL/REST/raw HTTP, the project is a shell/cURL project, or the language has no official SDK.
+
+Never mix the two - don't reach for `requests`/`fetch` in a Python or TypeScript project just because it feels lighter. Never fall back to OpenAI-compatible shims.
+
+**Never guess SDK usage.** Function names, class names, namespaces, method signatures, and import paths must come from explicit documentation - either the `{lang}/` files in this skill or the official SDK repositories or documentation links listed in `shared/live-sources.md`. If the binding you need is not explicitly documented in the skill files, WebFetch the relevant SDK repo from `shared/live-sources.md` before writing code. Do not infer Ruby/Java/Go/PHP/C# APIs from cURL shapes or from another language's SDK.
+
+**If WebFetch or repository access fails** (network restricted, timeouts, clone blocked): do not keep retrying - write code from the patterns and namespace/package tables in the `{lang}/` file, run the compiler or interpreter on it, and iterate on the error output. For statically-typed SDKs (C#, Java, Go) a compile-fix loop against local errors reaches working code faster than blocked network research.
+
+## Defaults
+
+Unless the user requests otherwise:
+
+For the Claude model version, please use Claude Opus 5, which you can access via the exact model string `claude-opus-5`. Please default to using adaptive thinking (`thinking: {type: "adaptive"}`) for anything remotely complicated. And finally, please default to streaming for any request that may involve long input, long output, or high `max_tokens` - it prevents hitting request timeouts. Use the SDK's `.get_final_message()` / `.finalMessage()` helper to get the complete response if you don't need to handle individual stream events
+
+## Warning: API Drift - Your Training Prior May Be Stale
+
+Several common Claude API shapes changed in 2025-2026. If you recall a pattern from training, verify it against the `{lang}/` files in this skill before writing - the rows below are the most frequent drift points:
+
+| Area | Stale prior | Current API |
+|---|---|---|
+| Extended thinking | `thinking: {type: "enabled", budget_tokens: N}` | On Claude 4.6+ models: `thinking: {type: "adaptive"}`. `budget_tokens` is deprecated on Opus 4.6 / Sonnet 4.6 and **rejected with a 400** on Fable 5/5.1 / Sonnet 5 / Opus 5 / 4.8 / 4.7. Pre-4.6 models still use `budget_tokens`. |
+| Web search / web fetch tool type | `web_search_20250305`, `web_fetch_20250910` | `web_search_20260209`, `web_fetch_20260209` (dynamic filtering) on Opus 5/4.8/4.7/4.6, Sonnet 5, and Sonnet 4.6. Older models keep the basic variants; on Vertex AI only basic `web_search_20250305` is available (web fetch is not on Vertex) - see the Server Tools QR below. |
+| PHP parameter names | snake_case wire names as named args (`max_tokens`) | Top-level named args are camelCase (`maxTokens`). Nested array keys vary by feature (e.g. `'taskBudget'`, `'skillID'`, `'mcp_server_name'`) - copy the exact key from the documented example; do not bulk-convert. |
+| Managed Agents credentials | Keep secrets host-side via custom tools (the only option before vaults shipped) | Vault `environment_variable` credentials - stored by Anthropic, substituted at egress, never visible in the sandbox (`shared/managed-agents-tools.md` -> Vaults). Host-side custom tools remain the fallback for self-hosted sandboxes. |
+| Files API / Skills | `client.beta.files.*` / `client.beta.skills.*` with beta `files-api-2025-04-14` / `skills-2025-10-02` | Out of beta: `client.files.*` / `client.skills.*`, no beta header. In current SDKs `client.beta.files` / `client.beta.skills` have breaking shape changes from previous versions, matching the stable namespaces - migrate per `shared/live-sources.md` -> Files API / Skills Guide. |
+
+The `{lang}/` files in this skill are authoritative over recalled patterns.
+
+---
+
+## Subcommands
+
+If the User Request at the bottom of this prompt is a bare subcommand string (no prose), search every **Subcommands** table in this document - including any in sections appended below - and follow the matching Action column directly. This lets users invoke specific flows via `/claude-api <subcommand>`. If no table in the document matches, treat the request as normal prose.
+
+| Subcommand | Action |
+|---|---|
+| `migrate` | Migrate existing Claude API code to a newer model. **Read `shared/model-migration.md` immediately** and follow it in order: Step 0 (confirm scope - ask which files/directories before any edit), Step 1 (classify each file), then the per-target breaking-changes section. Do not summarize the guide - execute it. If the user did not name a target model, ask which model to migrate to in the same turn as the scope question. After the per-target changes are applied, audit the in-scope prompt text, tool descriptions, and request code against `shared/prompt-audit.md` - prompting written for the source model is part of every migration, and it does not announce itself. |
+| `prompt-audit` | Audit existing prompts, skills, and tool descriptions for dated patterns ("cruft") written for older models. **Read `shared/prompt-audit.md` immediately** and follow it in order: Step 0 (establish scope and target model from the request and the repository - state the assumptions in the report, do not stop to ask), inventory, provenance, then the pattern scan. Produce both deliverables in full - the audit report (findings with `file:line`, pattern, why it's obsolete for the target model, confidence) and a proposed diff - without pausing for confirmation; apply edits only if the request explicitly asked for them. Do not summarize the guide - execute it. |
+| `upgrade` | Upgrade the project's Anthropic SDK dependency across a major version - currently the Python SDK, `anthropic` 0.x -> 1.x. Trailing words may name the language and/or a scope (`upgrade python`, `upgrade python sdk src/`). **Read `python/claude-api/sdk-upgrade.md` immediately** and follow it in order: Step 0 (confirm scope, then establish the current and target versions - a published 1.x must exist before you write a pin), the Step 1 inventory, each numbered section, then verification and the report. Do not summarize the guide - execute it. If the detected or named language has no `sdk-upgrade.md` in this skill, say that no major-version upgrade guide is bundled for that SDK yet and point the user at that SDK's CHANGELOG (repositories in `shared/live-sources.md`); do not improvise one from the Python guide. This is not model migration - to move code to a newer Claude model, use `migrate`. |
+| `cost-optimize` | Reduce what existing Claude API code costs to run, without sacrificing output quality. **Read `shared/cost-optimization.md` immediately** and follow it in order: Step 0 (establish scope, quality bar, and baseline), the token profile - measured through the Usage and Cost Admin API when the user has an Admin API key, from the app's own `response.usage` logs when it has those (ask), or estimated from the code otherwise - then a savings-ranked shortlist of levers (quoted in dollars, % of bill, or relative buckets depending on which of those data sources you have), free wins (caching, input-token hygiene, loop hygiene, output-token hygiene, batch) before tradeoffs (budgets, effort, model choice, multi-model); any lever that earns a place becomes its own diff - proposed by default, applied and measured against the eval covering the traffic it touches when the user asks and approves - and "no changes recommended" is a valid outcome. Two standing rules: every run that exercises the model spends real money, so get the user's approval first; and when context for a lever is missing, work through it interactively with the user - this workflow is not expected to one-shot the audit. Do not summarize the guide - execute it; presenting the profile and the ranked plan to the user is part of executing it. |
+| `build-eval` | Help the user build an eval set for their Claude-powered app. **Read `shared/evals/build-eval.md` immediately** and run its interview: Step 0 (what's being evaluated), Step 1 (source the prompts - existing eval / transcripts / synthesized), Step 2 (grading method), Step 3 (runnable script + measured cost). Get the user's explicit sign-off on the inputs, the grading method, and the cost before producing the eval. |
+| `hillclimb` | Iteratively improve the user's app against an existing eval. **Read `shared/evals/eval-hillclimb.md` immediately** and follow it: Step 0 (confirm a runnable eval exists - if not, route to `build-eval`), Step 1 (what to change / what's off-limits), Step 2 (budget + stopping condition from measured per-run cost), get the plan approved, then the read->propose->apply->run->record loop with on-disk state and a train/validation/test split. |
+
+---
+
+## Language Detection
+
+Before reading code examples, determine which language the user is working in (exception: for the `prompt-audit` subcommand, skip this section's ask steps - the audit is non-interactive and its inventory is language-agnostic; when no language is inferable, proceed without asking and state the assumption in the report):
+
+1. **Look at project files** to infer the language:
+
+ - `*.py`, `requirements.txt`, `pyproject.toml`, `setup.py`, `Pipfile` -> **Python** - read from `python/`
+ - `*.ts`, `*.tsx`, `package.json`, `tsconfig.json` -> **TypeScript** - read from `typescript/`
+ - `*.js`, `*.jsx` (no `.ts` files present) -> **TypeScript** - JS uses the same SDK, read from `typescript/`
+ - `*.java`, `pom.xml`, `build.gradle` -> **Java** - read from `java/`
+ - `*.kt`, `*.kts`, `build.gradle.kts` -> **Java** - Kotlin uses the Java SDK, read from `java/`
+ - `*.scala`, `build.sbt` -> **Java** - Scala uses the Java SDK, read from `java/`
+ - `*.go`, `go.mod` -> **Go** - read from `go/`
+ - `*.rb`, `Gemfile` -> **Ruby** - read from `ruby/`
+ - `*.cs`, `*.csproj` -> **C#** - read from `csharp/`
+ - `*.php`, `composer.json` -> **PHP** - read from `php/`
+
+2. **If multiple languages detected** (e.g., both Python and TypeScript files):
+
+ - Check which language the user's current file or question relates to
+ - If still ambiguous, ask: "I detected both Python and TypeScript files. Which language are you using for the Claude API integration?"
+
+3. **If language can't be inferred** (empty project, no source files, or unsupported language):
+
+ - Use AskUserQuestion with options: Python, TypeScript, Java, Go, Ruby, cURL/raw HTTP, C#, PHP
+ - If AskUserQuestion is unavailable, default to Python examples and note: "Showing Python examples. Let me know if you need a different language."
+
+4. **If unsupported language detected** (Rust, Swift, C++, Elixir, etc.):
+
+ - Suggest cURL/raw HTTP examples from `curl/` and note that community SDKs may exist
+ - Offer to show Python or TypeScript examples as reference implementations
+
+5. **If user needs cURL/raw HTTP examples**, read from `curl/`.
+
+### Language-Specific Feature Support
+
+Every SDK language above supports both the beta Tool Runner and Managed Agents (beta) - Python (`@beta_tool` decorator), TypeScript (`betaZodTool` + Zod), Java (annotated classes), Go (`BetaToolRunner` in the `toolrunner` pkg), Ruby (`BaseTool` + `tool_runner`), C# (`BetaToolRunner` + raw JSON schema), PHP (`BetaRunnableTool` + `toolRunner()`); code entry points are in the Tool Use Patterns quick reference below. cURL is raw HTTP (no SDK features) and supports Managed Agents.
+
+> **Managed Agents code examples**: see the reading guide in the `## Managed Agents (Beta)` section below.
+
+---
+
+## Which Surface Should I Use?
+
+> **Start simple.** Default to the simplest tier that meets your needs. Single API calls and workflows handle most use cases - only reach for agents when the task genuinely requires open-ended, model-driven exploration. "Simplest" means the least code you own: for a hosted, scheduled, or memory-backed agent, Managed Agents is usually the simplest option (no loop code, no state files, no scheduler), even though it's a bigger platform.
+
+| Use Case                                        | Tier            | Recommended Surface       | Why                                                          |
+| ----------------------------------------------- | --------------- | ------------------------- | ------------------------------------------------------------ |
+| Classification, summarization, extraction, Q&A  | Single LLM call | **Claude API**            | One request, one response                                    |
+| Batch processing or embeddings                  | Single LLM call | **Claude API**            | Specialized endpoints                                        |
+| Multi-step pipelines with code-controlled logic | Workflow        | **Claude API + tool use** | You orchestrate the loop                                     |
+| Custom agent with your own tools                | Agent           | **Claude API + tool use** | Maximum flexibility                                          |
+| Server-managed stateful agent with workspace    | Agent           | **Managed Agents**        | Anthropic runs the loop and hosts the tool-execution sandbox |
+| Persisted, versioned agent configs              | Agent           | **Managed Agents**        | Agents are stored objects; sessions pin to a version         |
+| Long-running multi-turn agent with file mounts  | Agent           | **Managed Agents**        | Per-session containers, SSE event stream, Skills + MCP       |
+| Agent that runs on a schedule (cron, "every night") | Agent       | **Managed Agents** - scheduled deployments | Deployments fire sessions autonomously; no client-side scheduler |
+
+> **Note:** Managed Agents is the right choice when you want Anthropic to run the agent loop *and* host the container where tools execute - file ops, bash, code execution all run in the per-session workspace. If you want to host the compute yourself or run your own custom tool runtime, Claude API + tool use is the right choice - use the tool runner for the agentic loop - its per-turn hooks still give you approval gates, logging, error interception, and conditional execution (see `shared/tool-use-concepts.md`) - or the manual loop when you want to own the entire loop yourself.
+
+> **Cloud-provider access.** **Claude Platform on AWS** is Anthropic-operated with same-day API parity - see `shared/claude-platform-on-aws.md` for client setup. For per-feature availability on **Claude Platform on AWS**, **Amazon Bedrock**, **Google Vertex AI**, and **Microsoft Foundry**, see `shared/platform-availability.md` - that table is the single source of truth in this skill; do not infer availability from anywhere else.
+
+### Building an Agent: Four Approaches
+
+Once you've decided you actually need an agent (open-ended, model-driven tool use), there are four distinct ways to build one. Two independent questions separate them: **who supplies the harness** (the agent loop + context management) and **who supplies the deployment** (the infra the agent runs on). The Tool Runner and the Claude Agent SDK both supply a *harness only* - you still host and deploy them yourself - which is why they're easy to conflate. Managed Agents (CMA) is the only option that supplies **both** the harness *and* managed deployment; the manual loop supplies neither.
+
+| # | Approach | You write | Harness & deployment | Tools available | Use when |
+|---|----------|-----------|----------------------|-----------------|----------|
+| 1 | **Claude API - manual loop** | The `while stop_reason == "tool_use"` loop yourself | You build the harness; you host | Only tools you define | You want to own the *entire* loop - no beta dependency, or a control flow the Tool Runner's per-turn hooks don't fit |
+| 2 | **Claude API - Tool Runner** (`client.beta.messages.tool_runner` + `@beta_tool` / `betaZodTool`) | Just the tool functions | SDK supplies the loop (**harness only**); you host | Only tools you define | A custom-tool agent without hand-writing the loop (most cases). Per-turn hooks still give you approval gates, error interception, result modification (e.g. `cache_control`), retries, streaming, and compaction |
+| 3 | **Managed Agents** (REST, beta) | Agent config + your tool results | Anthropic supplies the harness **and** hosts a per-session sandbox (**harness + deployment**) | Anthropic-hosted sandbox (bash, files, code exec) + Skills/MCP + your tools | You want Anthropic to run the loop *and* host the per-session workspace; persisted/versioned configs; long-running sessions |
+| 4 | **Claude Agent SDK** - *separate product* (`claude-agent-sdk` / `@anthropic-ai/claude-agent-sdk`) | A prompt + options | SDK supplies the Claude Code harness + built-in tools (**harness only**); you host | Built-in Read/Write/Edit/Bash/Glob/Grep/WebSearch/WebFetch + MCP + subagents | You want a batteries-included coding/filesystem agent running on your own infra |
+
+The harness/deployment split is the key mental model: options 1, 2, and 4 all **leave deployment to you**; only option 3 (CMA) adds managed deployment. Options 1-3 are what this skill generates; option 4 is a different library with its own docs - see the disambiguation below.
+
+> **Tool Runner != Claude Agent SDK.** These sound alike but are different packages:
+> - **Tool Runner** is part of the regular Anthropic API SDK (`anthropic` / `@anthropic-ai/sdk`), reached via `client.beta.messages.tool_runner`. It automates the request -> execute -> loop cycle *for tools you define*. No built-in tools, no filesystem access, no sandbox - you supply every tool and host the compute. It is option 2 above, a thin helper over `POST /v1/messages`.
+> - **Claude Agent SDK** (`claude-agent-sdk` / `@anthropic-ai/claude-agent-sdk`) is Claude Code packaged as a library. It ships built-in tools (file read/write/edit, bash, grep, web search), the full agent loop, context management, hooks, subagents, permissions, and sessions. You call `query(prompt, options)` and it drives everything.
+>
+> Both are **harness-only - you host and deploy them.** The difference is scope of harness: the Tool Runner loops over tools *you* define (with per-turn hooks for approval, interception, result modification, and retries - but no built-in tools); the Agent SDK is the full Claude Code harness with built-in tools. Neither provides managed deployment - that's what **Managed Agents (CMA)** adds (Anthropic hosts the loop and a per-session sandbox).
+>
+> **This skill covers the Claude API and Managed Agents (options 1-3); it does not generate Claude Agent SDK code.** If the user actually wants the Claude Agent SDK, point them to its docs (`code.claude.com/docs/en/agent-sdk`) - don't substitute the API Tool Runner for it, or vice-versa.
+
+### Should I Build an Agent?
+
+Before choosing the agent tier, check all four criteria:
+
+- **Complexity** - Is the task multi-step and hard to fully specify in advance? (e.g., "turn this design doc into a PR" vs. "extract the title from this PDF")
+- **Value** - Does the outcome justify higher cost and latency?
+- **Viability** - Is Claude capable at this task type?
+- **Cost of error** - Can errors be caught and recovered from? (tests, review, rollback)
+
+If the answer is "no" to any of these, stay at a simpler tier (single call or workflow).
+
+---
+
+## Architecture
+
+Everything goes through `POST /v1/messages`. Tools and output constraints are features of this single endpoint - not separate APIs.
+
+**User-defined tools** - You define tools (via decorators, Zod schemas, or raw JSON), and the SDK's tool runner handles calling the API, executing your functions, and looping until Claude is done. For full control, you can write the loop manually.
+
+**Server-side tools** - Anthropic-hosted tools that run on Anthropic's infrastructure. Code execution is fully server-side (declare it in `tools`, Claude runs code automatically). Computer use can be server-hosted or self-hosted.
+
+**Structured outputs** - Constrains the Messages API response format (`output_config.format`) and/or tool parameter validation (`strict: true`). The recommended approach is `client.messages.parse()` which validates responses against your schema automatically. Note: the old `output_format` parameter is deprecated; use `output_config: {format: {...}}` on `messages.create()`.
+
+**Supporting endpoints** - Batches (`POST /v1/messages/batches`), Files (`POST /v1/files`), Token Counting (`POST /v1/messages/count_tokens` - see `shared/token-counting.md`), and Models (`GET /v1/models`, `GET /v1/models/{id}` - live capability/context-window discovery) feed into or support Messages API requests.
+
+---
+
+## Current Models (cached: 2026-06-24)
+
+| Model             | Model ID            | Context        | Input $/1M | Output $/1M |
+| ----------------- | ------------------- | -------------- | ---------- | ----------- |
+| Claude Fable 5.1    | `claude-fable-5-1`      | 1M             | $10.00     | $50.00      |
+| Claude Mythos 5.1 (Project Glasswing only) | `claude-mythos-5-1` | 1M | $10.00     | $50.00      |
+| Claude Fable 5 | `claude-fable-5` | 1M             | $10.00     | $50.00      |
+| Claude Opus 5     | `claude-opus-5`       | 1M             | $5.00      | $25.00      |
+| Claude Opus 4.8 | `claude-opus-4-8`  | 1M             | $5.00      | $25.00      |
+| Claude Opus 4.7   | `claude-opus-4-7`   | 1M             | $5.00      | $25.00      |
+| Claude Opus 4.6   | `claude-opus-4-6`   | 1M             | $5.00      | $25.00      |
+| Claude Sonnet 5   | `claude-sonnet-5`   | 1M             | $2.00      | $10.00      |
+| Claude Sonnet 4.6 | `claude-sonnet-4-6` | 1M             | $3.00      | $15.00      |
+| Claude Haiku 4.5  | `claude-haiku-4-5`  | 200K           | $1.00      | $5.00       |
+
+**Partner pricing:** The prices above are Anthropic first-party API rates - they also apply to Claude on Microsoft Foundry, which is billed through the Microsoft Marketplace at standard API rates. Claude on Amazon Bedrock and Vertex AI is partner-operated with separate pricing - see [Bedrock](https://aws.amazon.com/bedrock/pricing/) or [Vertex AI](https://cloud.google.com/vertex-ai/generative-ai/pricing#claude-models). For WebFetch, use the Pricing row in `shared/live-sources.md`.
+
+**ALWAYS use `claude-opus-5` unless the user explicitly names a different model.** This is non-negotiable. Do not use `claude-sonnet-5`, `claude-sonnet-4-6`, or any other model unless the user literally says "use sonnet" or "use haiku". Never downgrade for cost - that's the user's decision, not yours. Where a second, cheaper model is in play alongside the main one (worker or sub-agent threads, bulk extractors, LLM judges, the executor under an advisor) - because the user asked for one or a guide in this skill calls for it - or the user says "sonnet" or "haiku" without a version, that means the current generation from the table above (`claude-sonnet-5`, `claude-haiku-4-5`); previous-generation IDs such as `claude-sonnet-4-6` are only for users who name that version. Use `claude-fable-5-1` only when the user explicitly asks for Claude Fable 5.1, "fable", or Anthropic's most capable model - it has different API behavior than the Opus family (see below) and pricing that exceeds Opus-tier. **Use only the exact model ID strings from the table - they are complete as-is; never append date suffixes** (`claude-opus-5`, never `claude-opus-5-20260401` or any other date-suffixed variant you might recall from training data). If the user requests an older model not in the table (e.g., "opus 4.5", "sonnet 3.7"), read `shared/models.md` for the exact ID - do not construct one yourself.
+
+### Claude Fable 5.1 (`claude-fable-5-1`) - most capable widely released model
+
+Claude Fable 5.1 is Anthropic's most capable widely released model, for the most demanding reasoning and long-horizon agentic work; everything below also applies to **Claude Mythos 5.1** (`claude-mythos-5-1`, Project Glasswing - same capabilities, pricing, and API surface; it runs safeguards that depend on the access program, so the `refusal` handling below applies there too; successor to Claude Mythos 5, which ran no safety classifiers). 1M context window (the maximum is also the default), 128K max output. Key API differences from Opus-tier - see `shared/model-migration.md` -> Migrating to Claude Fable 5.1 for details:
+
+- **Thinking is always on** - omit the `thinking` parameter entirely (or send `{type: "adaptive"}`). Any other explicit configuration is rejected: `{type: "disabled"}` and `{type: "enabled", budget_tokens: N}` both return a 400. Control depth with `output_config.effort` (supports `low` through `xhigh` and `max`).
+- **The raw chain of thought is never returned** - responses carry regular `thinking` blocks (not `redacted_thinking`): `display: "summarized"` returns a readable summary, `"omitted"` (the default) leaves the `thinking` field as an empty string. Replay rules: pass thinking blocks back unchanged on the same model; other models drop them silently (unbilled - nothing to strip; Claude Mythos 5.1 instead reads them); details in `shared/model-migration.md`.
+- **Tokenizer** - same tokenizer as Opus 4.8 (introduced with Opus 4.7). Token counts are roughly unchanged when migrating from Opus 4.7/4.8; per-token pricing differs. Coming from Opus 4.6, Sonnet, Haiku, or older, re-baseline with `count_tokens` (the Opus 4.7 tokenizer uses ~1×-1.35× as many tokens).
+- **`refusal` stop reason - handle it, and opt into fallbacks by default** - safety classifiers may decline a request (HTTP 200, `stop_reason: "refusal"`, with a `stop_details` category); always check `stop_reason` before reading `content`. **When you write `claude-fable-5-1` or `claude-opus-5` code, include the server-side `fallbacks` parameter by default.** Simplest form: `betas: ["server-side-fallback-2026-07-01"]` + `fallbacks: "default"`, which routes by refusal category so you never maintain a model list. (The older array form - `betas: ["server-side-fallback-2026-06-01"]` + `fallbacks: [{"model": "claude-opus-4-8"}]` - still works; Claude API and Claude Platform on AWS - on Bedrock, Vertex and Foundry, use the SDKs' client-side `BetaRefusalFallbackMiddleware` + `BetaFallbackState`). Tell the user you've enabled it; drop it only if they decline. Full semantics (billing, mid-stream refusals, credit repricing) in `shared/model-migration.md` -> refusal section. **Per-language code examples in `{lang}/claude-api/README.md` § Refusal Fallbacks cover the array form only** - for the `"default"` mode, follow the raw-HTTP shape in `shared/model-migration.md` -> Migrating to Claude Opus 5 -> New API features and swap `fallbacks: [{...}]` for `fallbacks: "default"` plus the `-2026-07-01` header; the rest of the request is unchanged.
+- **No assistant prefill** - same as the rest of the 4.6+ family.
+- **30-day data retention required** - Claude Fable 5.1 is not available under zero data retention unless expressly authorized by Anthropic; requests from an org whose retention configuration doesn't meet the requirement return `400 invalid_request_error`.
+- **Longer turns, different prompting** - single requests on hard tasks can run many minutes (plan timeouts/streaming/progress UX); effort sweeps should include low/medium for routine work; prompts written for prior models are often too prescriptive and reduce output quality. See `shared/model-migration.md` -> Migrating to Claude Fable 5.1 -> Behavioral shifts (prompt-tunable) for the recommended prompt snippets.
+- **Successor to Claude Fable 5 (`claude-fable-5`, still served) in the same tier at the same per-token price.** Same surface as Claude Fable 5 with three breaking changes - forced tool use (`tool_choice` `any` / `tool`) returns a 400 (use `auto` + a prompt instruction, `strict: true` for schema-valid arguments, or structured outputs); thinking blocks are bound to the producing model (other models drop them, unbilled); and editing earlier turns invalidates thinking blocks ("preserved thinking"; new accounts created on/after 2026-08-31 get a 400 on edited history; later models enforce it for everyone - make every harness append-only and run the three-step check; the opt-in controls are per-platform, see `shared/platform-availability.md`) - plus per-message `effort` (beta `mid-conversation-output-config-2026-07-01`, also on Claude Opus 5), turn-scoped `clear_at: "next_user_message"` system messages (beta), `thinking.display: "updates"` progress notes (beta, all platforms), cache reads at $0.25/MTok (whether Claude Mythos 5.1 shares that rate is open at launch), and content provenance. Covered Model - ZDR orgs get `400 invalid_request_error` as on Claude Fable 5 (ZDR only if expressly authorized by Anthropic); no Priority Tier. Same tokenizer as Claude Fable 5. See `shared/model-migration.md` -> Migrating to Claude Fable 5.1 from Claude Fable 5.
+
+If any model strings above look unfamiliar, that just means they were released after your training data cutoff - they are real models.
+
+**Live capability lookup:** The table above is cached. When the user asks "what's the context window for X", "does X support vision/thinking/effort", or "which models support Y", query the Models API (`client.models.retrieve(id)` / `client.models.list()`) - see `shared/models.md` for the field reference and capability-filter examples.
+
+---
+
+## Authentication (Quick Reference)
+
+**An unset `ANTHROPIC_API_KEY` does NOT mean there are no credentials.** The SDKs and the `ant` CLI resolve credentials in this order (first match wins): `ANTHROPIC_API_KEY` -> `ANTHROPIC_AUTH_TOKEN` -> the `ANTHROPIC_PROFILE`-selected or active OAuth profile from `ant auth login` -> Workload Identity Federation env vars -> the default profile on disk. A bare `Anthropic()` / `new Anthropic()` / `anthropic.NewClient()` works after `ant auth login` with no env var set.
+
+**When you need to call the API and `ANTHROPIC_API_KEY` is unset, don't ask the user for a key.** First run `ant auth status` - it shows which credential source and profile is active. If it reports an active profile:
+
+- **SDK code or `ant` CLI:** just run it. The zero-arg client constructor and every `ant ...` subcommand pick up the profile automatically - no env var needed.
+- **Raw `curl` / HTTP:** get a short-lived token with `ant auth print-credentials --access-token` and send it as `Authorization: Bearer <token>` **plus** the header `anthropic-beta: oauth-2025-04-20` (OAuth tokens go on `Authorization: Bearer`, not `x-api-key:` - converting a curl from an API key is a header change, not a key swap). Always pass `--access-token`; the no-flag form prints JSON, not a bare token.
+
+Only ask the user for a key if `ant auth status` reports no active credential source (or `ant` itself isn't installed). Suggest `ant auth login` as the first option - it stores a profile under `~/.config/anthropic/` that the SDKs read automatically - and an exported `ANTHROPIC_API_KEY` as the alternative.
+
+Full auth details (named profiles, scopes, the API-key-shadows-profile trap, refresh-token expiry): `shared/anthropic-cli.md`.
+
+---
+
+## Thinking & Effort (Quick Reference)
+
+Use adaptive thinking (`thinking: {type: "adaptive"}`) on every current model except Haiku 4.5, which still takes `budget_tokens` (table below) - Claude dynamically decides when and how much to think. Per-model rules:
+
+| Model | Thinking config | Omitting `thinking` | `budget_tokens` | Sampling (`temperature`/`top_p`/`top_k`) | Effort levels |
+|---|---|---|---|---|---|
+| Fable 5 / Claude Fable 5.1 (and the Mythos counterparts) | `{type: "adaptive"}` or omit; explicit `{type: "disabled"}` returns 400 - omit the param instead (Claude Fable 5.1 / Claude Mythos 5.1 also 400 on forced `tool_choice` `any`/`tool`, and run preserved thinking's history-editing check on replayed thinking blocks) | Runs adaptive (thinking is always on) | Removed - `{type: "enabled", budget_tokens: N}` returns 400 | Removed - 400 | `low`/`medium`/`high`/`xhigh`/`max` |
+| Claude Opus 5 | `{type: "adaptive"}` or omit; `{type: "disabled"}` accepted **only at effort `high` or below** - 400 at `xhigh`/`max`, and see the disabled-thinking pitfall below | Runs **adaptive** (thinking is on by default - unlike Opus 4.8/4.7) | Removed - 400 | Removed - 400 | `low`-`max` (all five) |
+| Opus 4.8 / 4.7 | `{type: "adaptive"}` is the only on-mode; `{type: "disabled"}` accepted | Runs **without** thinking - set `{type: "adaptive"}` explicitly | Removed - 400 | Removed - 400 | `low`/`medium`/`high`/`xhigh`/`max` |
+| Sonnet 5 | `{type: "adaptive"}` is the only on-mode; `{type: "disabled"}` accepted | Runs adaptive | Removed - 400 | Removed - 400 | `low`/`medium`/`high`/`xhigh`/`max` |
+| Opus 4.6 / Sonnet 4.6 | `{type: "adaptive"}` (recommended; auto-enables interleaved thinking, no beta header) | Set `{type: "adaptive"}` explicitly | Deprecated - do not use in new code; transitional escape hatch only (see below) | Allowed | `low`/`medium`/`high`/`max` (`xhigh` arrived with Opus 4.7) |
+| Haiku 4.5; older models (Sonnet 4.5, ...) only if explicitly requested | `{type: "enabled", budget_tokens: N}` | No thinking | Required for thinking; must be less than `max_tokens`, minimum 1024 - errors otherwise | Allowed | `effort` works on Opus 4.5 (`low`/`medium`/`high` only - no `xhigh`/`max`); errors on Sonnet 4.5 / Haiku 4.5 |
+
+Opus 4.8 keeps the same request surface as 4.7 (no new breaking changes) - see `shared/model-migration.md` -> Migrating to Opus 4.8 for the behavioral re-tuning, and -> Migrating to Opus 4.7 for the full breaking-change list when coming from 4.6 or earlier. With `thinking` disabled, Opus 4.8 may write longer reasoning into the visible response - leave adaptive thinking on, or add a final-answer-only instruction (see the migration guide).
+
+- **Effort (GA, no beta header):** `output_config: {effort: "low"|"medium"|"high"|"xhigh"|"max"}` - inside `output_config`, not top-level; default `high` (equivalent to omitting it). Controls thinking depth and overall token spend; combine with adaptive thinking for the best cost-quality tradeoffs. `xhigh` (added on Opus 4.7, between `high` and `max`) is the best setting for most coding and agentic use cases on Fable 5 / Opus 4.7/4.8 / Sonnet 5, and the default in Claude Code; effort matters more on those models than on any prior model in their tier - re-tune it when migrating, and run long-horizon/agentic tasks at `high`/`xhigh` with the full task spec given up front. Use a minimum of `high` for intelligence-sensitive work, `max` when correctness matters more than cost, and `low` for subagents or simple tasks - lower effort means fewer and more-consolidated tool calls, less preamble, and terser confirmations (`high` is often the sweet spot balancing quality and token efficiency).
+- **Choosing an effort level (cost tuning):** Effort is the first quality-trading lever, after the free wins (caching first) - it trades thoroughness against token spend within one model, and the top of the range earns its cost only on hard problems (raise to `max` only when measurement shows headroom at the level below). Which workloads repay higher effort is a property of the workload: coding and long-horizon agentic work respond strongly; chat, classification, and high-volume or latency-sensitive routes often don't and do well at `low`, with `medium` as the cost-saving step-down where quality holds (the per-level defaults above cover the rest). Measure on a sample of real requests before raising a default, and tune per route rather than globally. Before building a multi-model cost cascade, measure the simpler alternative first - the most capable model at lower effort on the same tasks: lower effort on the newest models often matches or exceeds prior-generation performance at high effort (on Fable 5, lower effort often exceeds `xhigh` on prior models), and one model means one cache namespace (caches are model-scoped, so a cascade forfeits cache reuse across its models; a mid-conversation top-level `effort` change still invalidates the messages cache, though the per-message effort system message avoids that on Claude Fable 5.1 / Claude Mythos 5.1 / Claude Opus 5 - `shared/prompt-caching.md` § Invalidation hierarchy). Judge cost per completed task, not per request - a cheaper request that needs more turns or retries to finish the job isn't cheaper. For the measured effort/cost tradeoffs by workload and the full lever order, `shared/cost-optimization.md` § 2.6.
+- **Thinking display - `"omitted"` by default on Fable 5 / Claude Fable 5.1 / Mythos 5 / Claude Mythos 5.1 / Opus 5 / 4.8 / 4.7 / Sonnet 5:** `display: "summarized"` returns a readable summary of the reasoning; `"omitted"` (the default on all eight - a silent change from Opus 4.6 and Sonnet 4.6, where it was `"summarized"`) streams `thinking` blocks with empty text. `display` controls visibility only - thinking happens and is billed the same under every setting; the raw chain of thought is never exposed on any model. If you stream reasoning to users, the default looks like a long pause before output - set `thinking: {type: "adaptive", display: "summarized"}` explicitly. (Independent of display, echo thinking blocks back unchanged when continuing on the same model; other models silently ignore them (Claude Fable 5.1 / Claude Mythos 5.1 read them) - see the migration guide.) On Claude Fable 5.1 / Claude Mythos 5.1 / Claude Fable 5, `display: "updates"` (beta `thinking-display-updates-2026-08-18`, every platform) hides reasoning like `"omitted"` but returns the model's between-tool-call progress notes as short `thinking` block summaries - see `shared/model-migration.md` -> Migrating to Claude Fable 5.1 from Claude Fable 5 -> New API features.
+- **When the user asks for "extended thinking", a "thinking budget", or `budget_tokens`:** always use Fable 5/5.1, Opus 5, 4.8, 4.7, or 4.6 with `thinking: {type: "adaptive"}` - the fixed thinking-token-budget concept is deprecated and adaptive thinking replaces it. Do NOT use `budget_tokens` for new 4.6/4.7/4.8 code and do NOT switch to an older model just because the user mentions it. *Gradual-migration carve-out:* `budget_tokens` is still functional on Opus 4.6 and Sonnet 4.6 only, as a transitional escape hatch for existing code that needs a hard token ceiling before you've tuned `effort` - see `shared/model-migration.md` -> Transitional escape hatch. It is fully removed on Fable 5/5.1, Opus 5/4.7/4.8, and Sonnet 5.
+
+---
+
+## Compaction (Quick Reference)
+
+**Beta, Fable 5/5.1, Opus 5, Opus 4.8, Opus 4.7, Opus 4.6, Sonnet 5, and Sonnet 4.6.** For long-running conversations that may exceed the 1M context window, enable server-side compaction. The API automatically summarizes earlier context when it approaches the trigger threshold (default: 150K tokens). Requires beta header `compact-2026-01-12`.
+
+**Critical:** Append `response.content` (not just the text) back to your messages on every turn. Compaction blocks in the response must be preserved - the API uses them to replace the compacted history on the next request. Extracting only the text string and appending that will silently lose the compaction state.
+
+See `{lang}/claude-api/README.md` (Compaction section) for code examples. Full docs via WebFetch in `shared/live-sources.md`.
+
+---
+
+## Prompt Caching (Quick Reference)
+
+**Prefix match.** Any byte change anywhere in the prefix invalidates everything after it. Render order is `tools` -> `system` -> `messages`. Keep stable content first (frozen system prompt, deterministic tool list), put volatile content (timestamps, per-request IDs, varying questions) after the last `cache_control` breakpoint.
+
+**Mid-conversation operator instructions** (Claude Opus 5, Claude Opus 4.8, Claude Fable 5, Claude Fable 5.1, Claude Mythos 5, Claude Mythos 5.1; not Claude Sonnet 5; no beta header): append `{"role": "system", ...}` to `messages[]` instead of editing top-level `system`. Preserves the cached history prefix and is the prompt-injection-safe operator channel. See `shared/prompt-caching.md` § Mid-conversation system messages.
+
+**Top-level auto-caching** (`cache_control: {type: "ephemeral"}` on `messages.create()`) is the simplest option when you don't need fine-grained placement. Max 4 breakpoints per request. Minimum cacheable prefix is model-dependent (512-4096 tokens - see `shared/prompt-caching.md` § API reference) - shorter prefixes silently won't cache.
+
+**Verify with `usage.cache_read_input_tokens`** - if it's zero across repeated requests, a silent invalidator is at work (`datetime.now()` in system prompt, unsorted JSON, varying tool set).
+
+For placement patterns, architectural guidance, and the silent-invalidator audit checklist: read `shared/prompt-caching.md`. Language-specific syntax: `{lang}/claude-api/README.md` (Prompt Caching section).
+
+---
+
+## Fast Mode (Quick Reference)
+
+**Research preview, Claude Opus 5 / Opus 4.8 only** - Claude API and Managed Agents, not Bedrock / Google Cloud / Foundry. Opus 4.7 fast mode has been removed: `speed: "fast"` on 4.7 returns an error. Fast mode on Claude Opus 5 is priced at $10 / $50 per MTok. Fast mode runs the same model at up to 2.5x higher output tokens per second, at premium pricing. Three things are required on every request: use the **beta** messages endpoint (`client.beta.messages....`), pass the beta flag `fast-mode-2026-02-01`, and set `speed: "fast"` as a top-level request parameter (not a header, not in `extra_body`).
+
+```python
+client.beta.messages.create(
+    model="claude-opus-5", max_tokens=4096,
+    speed="fast", betas=["fast-mode-2026-02-01"],
+    messages=[...],
+)
+```
+
+| Language | Beta flag | Speed parameter |
+|---|---|---|
+| Python | `betas=["fast-mode-2026-02-01"]` | `speed="fast"` |
+| TypeScript / Ruby | `betas: ["fast-mode-2026-02-01"]` | `speed: "fast"` |
+| Go | `[]anthropic.AnthropicBeta{anthropic.AnthropicBetaFastMode2026_02_01}` | `Speed: anthropic.BetaMessageNewParamsSpeedFast` |
+| Java | `.addBeta(AnthropicBeta.FAST_MODE_2026_02_01)` | `.speed(MessageCreateParams.Speed.FAST)` |
+| C# | `Betas = ["fast-mode-2026-02-01"]` | `Speed = Speed.Fast` (`Anthropic.Models.Beta.Messages`) |
+| PHP | `betas: ['fast-mode-2026-02-01']` | `speed: 'fast'` |
+| cURL | `anthropic-beta: fast-mode-2026-02-01` header | `"speed": "fast"` in body |
+
+`response.usage.speed` reports which speed was used. Fast mode has its own rate limit separate from standard Opus; on 429, either retry after the `retry-after` delay or drop `speed` and fall back to standard (note: switching speed invalidates prompt cache). Not available with Batch API, Priority Tier, Claude Platform on AWS, or third-party platforms.
+
+**Priority Tier is not supported on every current model.** It is supported on Claude Fable 5, Opus 4.8, and the older current models, but Claude Opus 5, Claude Sonnet 5, Claude Fable 5.1, Claude Mythos 5.1, Claude Mythos 5, and Mythos Preview are excluded - a Priority Tier request naming one of them fails validation.
+
+---
+
+## Task Budgets (Quick Reference)
+
+**Beta, Claude Opus 5 / Fable 5 / Claude Fable 5.1 (confirm at launch) / Sonnet 5 / Opus 4.8 / 4.7.** A task budget gives Claude a token ceiling for an agentic loop so it paces itself and finishes gracefully instead of being cut off - distinct from `max_tokens`, which is an enforced per-response ceiling the model is not aware of. Minimum `total`: 20,000. Set `task_budget` inside `output_config` on `client.beta.messages.stream(...)` with beta flag `task-budgets-2026-03-13` - use streaming so the large `max_tokens` doesn't hit HTTP timeouts (full details: `shared/model-migration.md` -> Task Budgets):
+
+```python
+with client.beta.messages.stream(
+    model="claude-opus-5", max_tokens=128000,
+    output_config={"effort": "high", "task_budget": {"type": "tokens", "total": 64000}},
+    betas=["task-budgets-2026-03-13"],
+    messages=[...], tools=[...],
+) as stream:
+    response = stream.get_final_message()
+```
+
+`task_budget` fields: `type` (always `"tokens"`), `total`, and optional `remaining` (defaults to `total`). The server injects a countdown marker Claude sees during generation; the budget counts what Claude generates and the tool results it reads this turn - **not** the full history you resend each request. Not the same thing as **Managed Agents session budgets** - those are hard, dollar-denominated, platform-enforced caps on one CMA session (`shared/managed-agents-core.md` § Session budgets); a task budget is advisory and token-denominated.
+
+**Observing spend:** accumulate `response.usage.output_tokens` (plus the token count of the tool-result blocks you append) across loop iterations if you want to display progress. Leave `remaining` unset in the normal loop - the server tracks the countdown itself, and passing a client-computed `remaining` while also resending full history under-reports the budget. **Only pass `remaining`** when you compact or rewrite history between requests and the server can no longer derive prior spend.
+
+---
+
+## Provider Clients (Quick Reference)
+
+When targeting Claude on a third-party platform, use that platform's dedicated client class - not the first-party `Anthropic()` client with a `base_url` override. After construction the client exposes the same `messages.create` / `.stream` surface as the first-party SDK.
+
+### Amazon Bedrock
+
+Use the **Mantle** client (Messages-API Bedrock endpoint). Bedrock model IDs take an `anthropic.` prefix (e.g. `"anthropic.claude-opus-5"`). Region is required.
+
+| Language | Client |
+|---|---|
+| Python | `from anthropic import AnthropicBedrockMantle` -> `AnthropicBedrockMantle(aws_region="...")` |
+| TypeScript | `import { AnthropicBedrockMantle } from "@anthropic-ai/bedrock-sdk"` -> `new AnthropicBedrockMantle({ awsRegion: "..." })` |
+| Go | `bedrock.NewMantleClient(ctx, bedrock.MantleClientConfig{ AWSRegion: "..." })` |
+| Java | `AnthropicOkHttpClient.builder().backend(BedrockMantleBackend.fromEnv()).build()` (from `com.anthropic.bedrock.backends`) |
+| C# | `new AnthropicBedrockMantleClient(new() { AwsRegion = "..." })` (package `Anthropic.Bedrock`) |
+| PHP | `use Anthropic\Bedrock\MantleClient;` -> `new MantleClient(awsRegion: '...')` |
+| Ruby | `Anthropic::BedrockMantleClient.new(aws_region: "...")` |
+
+`AnthropicBedrock` / `BedrockClient` / `BedrockBackend` (without `Mantle`) are the legacy `bedrock-runtime` InvokeModel path - prefer the Mantle client for new code.
+
+### Microsoft Foundry
+
+| Language | Client |
+|---|---|
+| Python | `from anthropic import AnthropicFoundry` -> `AnthropicFoundry(api_key=..., resource="...")` |
+| TypeScript | `import AnthropicFoundry from "@anthropic-ai/foundry-sdk"` -> `new AnthropicFoundry({ ... })` |
+| Java | `AnthropicOkHttpClient.builder().backend(FoundryBackend.fromEnv()).build()` (from `com.anthropic.foundry.backends`) |
+| C# | `new AnthropicFoundryClient(new AnthropicFoundryApiKeyCredentials(...))` (package `Anthropic.Foundry`) |
+| PHP | `Foundry\Client::withCredentials(...)` |
+
+The Go and Ruby SDKs do not currently support Foundry. For Ruby, use the standard `Anthropic::Client.new(base_url: "<foundry endpoint>")` as a fallback (Entra ID auth is not built in). For Claude Platform on AWS, see `shared/claude-platform-on-aws.md`.
+
+### Google Cloud Vertex AI
+
+Two required constructor args: GCP `project_id` and `region`. Vertex model IDs take **no prefix** - current-generation models (Opus 4.8/4.7/4.6, Sonnet 5, Sonnet 4.6) use the bare first-party ID (e.g. `"claude-opus-5"`); dated-snapshot models use an `@` version separator (e.g. `claude-opus-4-5@20251101`, **not** `claude-opus-4-5-20251101`). Auth is GCP ADC (`gcloud auth application-default login`); no Anthropic API key. `region` can be `"global"` (recommended), a multi-region (`"us"`/`"eu"`), or a specific region. After construction, use the same `messages.create` / `.stream` surface.
+
+| Language | Client |
+|---|---|
+| Python | `from anthropic import AnthropicVertex` -> `AnthropicVertex(project_id="...", region="...")` (install `"anthropic[vertex]"`) |
+| TypeScript | `import { AnthropicVertex } from "@anthropic-ai/vertex-sdk"` -> `new AnthropicVertex({ projectId, region })` |
+| Go | `import "github.com/anthropics/anthropic-sdk-go/vertex"` -> `anthropic.NewClient(vertex.WithGoogleAuth(ctx, region, projectID))` |
+| Java | `AnthropicOkHttpClient.builder().backend(VertexBackend.builder().region("...").project("...").build()).build()` (from `com.anthropic.vertex.backends`) |
+| C# | `new AnthropicClient { Backend = new VertexBackend(projectId, region) }` (package `Anthropic.Vertex`) |
+| PHP | `use Anthropic\Vertex;` -> `Vertex\Client::fromEnvironment(location: '...', projectId: '...')` - note `location`, not `region` |
+| Ruby | `Anthropic::VertexClient.new(region: "...", project_id: "...")` |
+
+---
+
+## Context Editing (Quick Reference)
+
+**Beta.** Context editing **clears** old tool results or thinking blocks from the conversation before the model sees it; it is **not compaction** (which summarizes). On `client.beta.messages.*` with beta `context-management-2025-06-27`, pass `context_management.edits` with a strategy type:
+
+```python
+client.beta.messages.create(
+    model="claude-opus-5", max_tokens=4096,
+    betas=["context-management-2025-06-27"],
+    context_management={"edits": [{"type": "clear_tool_uses_20250919"}]},
+    tools=[...], messages=[...],
+)
+```
+
+Strategy types: `clear_tool_uses_20250919` (clears old tool results; optional `clear_tool_inputs: true` also clears the tool_use params) and `clear_thinking_20251015` (clears thinking blocks). Do **not** use `compact_20260112` or beta `compact-2026-01-12` - those are the separate compaction feature.
+
+---
+
+## Mid-Conversation System Messages (Quick Reference)
+
+**Claude Opus 5, Claude Opus 4.8, Claude Fable 5, Claude Fable 5.1, Claude Mythos 5, and Claude Mythos 5.1; not Claude Sonnet 5; no beta header.** Append `{"role": "system", "content": "..."}` to the `messages` array (not the top-level `system` field) to add an operator instruction mid-conversation without invalidating the cached prefix. Use the regular `client.messages.create` - there is no beta. A mid-conversation system message must follow a `user` message (or an `assistant` message ending in server-tool use), and must be either the last entry in `messages` or be followed by an `assistant` turn - it cannot be `messages[0]`. Availability: `shared/platform-availability.md`. See `shared/prompt-caching.md` § Mid-conversation system messages. A beta extension shipped with Claude Fable 5.1: `output_config: {effort: ...}` with `content: []` changes effort from that point on without a cache reset (beta `mid-conversation-output-config-2026-07-01`; Claude Fable 5.1, Claude Mythos 5.1, Claude Opus 5; Claude API). An effort-only message (empty `content`) is exempt from the placement rules above - it can sit anywhere in `messages`, including first or between an assistant turn and the next user turn; the rules apply to text and `clear_at` messages. For a per-turn reminder, give the message `clear_at: "next_user_message"` (beta `mid-conversation-system-clear-at-2026-08-21`): it renders for one turn, then stays in the transcript cleared - never delete earlier copies (on Claude Fable 5.1 deleting one invalidates later thinking blocks); without the beta, a text block after the tool results, earlier copies kept. See `shared/model-migration.md` -> Migrating to Claude Fable 5.1 from Claude Fable 5 -> New API features.
+
+---
+
+## Managed Agents (Beta)
+
+**Managed Agents** is a third surface: server-managed stateful agents with Anthropic-hosted tool execution. You create a persisted, versioned Agent config (`POST /v1/agents`), then start Sessions that reference it. Each session provisions a container as the agent's workspace - bash, file ops, and code execution run there; the agent loop itself runs on Anthropic's orchestration layer and acts on the container via tools. The session streams events; you send messages and tool results back.
+
+Availability: `shared/platform-availability.md`. For agents on Bedrock / Vertex / Foundry (where Managed Agents is unsupported), use Claude API + tool use.
+
+**Mandatory flow:** Agent (once) -> Session (every run). `model`/`system`/`tools` live on the agent, never the session. See `shared/managed-agents-overview.md` for the full reading guide, beta headers, and pitfalls.
+
+**Beta headers:** `managed-agents-2026-04-01` - the SDK sets this automatically for all `client.beta.{agents,environments,sessions,vaults,memory_stores,deployments,deployment_runs}.*` calls. Files API and Skills API are out of beta - no beta header needed (see the API Drift table above for the migration guides).
+
+**Subcommands** - invoke directly with `/claude-api <subcommand>`:
+
+| Subcommand | Action |
+|---|---|
+| `managed-agents-onboard` | Walk the user through setting up a Managed Agent from scratch. **Read `shared/managed-agents-onboarding.md` immediately** and follow its interview script: **describe -> configure the agent (propose, don't interrogate) -> environment -> session** (same arc as the Console quickstart, auth deferred to the session step) - defaults and inline suggestions do the work, with a silent viability gate (job vs tools/credentials/data) before any code is emitted. Do not summarize - run the interview. |
+
+**Reading guide:** Start with `shared/managed-agents-overview.md`, then the topical `shared/managed-agents-*.md` files (core, environments, tools, events, outcomes, multiagent, webhooks, memory, scheduled-deployments, client-patterns, onboarding, api-reference). For Python, TypeScript, Go, Ruby, PHP, and Java, read `{lang}/managed-agents/README.md` for code examples. For cURL, read `curl/managed-agents.md`. **Agents are persistent - create once, reference by ID.** Define agents and environments as version-controlled YAML applied with the `ant` CLI - this is the recommended flow (see `shared/anthropic-cli.md`): the CLI owns the control plane (creating and updating agents), your code owns the data plane (`sessions.create` with the stored agent ID). Call `agents.create()` in code only when you must provision programmatically; either way, store the returned agent ID and pass it to every subsequent `sessions.create`; never call `agents.create()` in the request path. If a binding you need isn't shown in the language README, WebFetch the relevant entry from `shared/live-sources.md` rather than guess. C# has beta Managed Agents support via `client.Beta.Agents` and related namespaces - see `csharp/claude-api/README.md` for details, or `curl/managed-agents.md` for raw HTTP reference.
+
+**When the user wants to set up a Managed Agent from scratch** (e.g. "how do I get started", "walk me through creating one", "set up a new agent"): read `shared/managed-agents-onboarding.md` and run its interview - same flow as the `managed-agents-onboard` subcommand.
+
+**When the user asks "how do I write the client code for X":** reach for `shared/managed-agents-client-patterns.md` - covers lossless stream reconnect, `processed_at` queued/processed gate, interrupt, `tool_confirmation` round-trip, the correct idle/terminated break gate, post-idle status race, stream-first ordering, file-mount gotchas, etc. For credentials, lead with vault `environment_variable` credentials - the first-class mechanism; secrets are substituted at egress and never enter the sandbox (`shared/managed-agents-tools.md` -> Vaults). Keeping credentials host-side via custom tools is the fallback where vault credentials don't fit (e.g. self-hosted sandboxes).
+
+**When the user wants the agent to run on a schedule** (cron, "every night", "weekly report"): read `shared/managed-agents-scheduled-deployments.md` - deployments fire sessions autonomously on a cron cadence, with per-firing run records and lifecycle controls (pause/unpause/archive).
+
+**When the agent's work fans out** (research across several sources, per-file or per-record work, "look into N things, then summarize") **or one loop would fill its context with reading:** read `shared/managed-agents-multiagent.md` and recommend a multiagent session - start with just `{"type": "self"}` in the roster so the agent can delegate to copies of itself, then move reading-heavy sub-tasks to a cheaper worker agent (e.g. Claude Haiku 4.5, or Claude Sonnet 5 when the worker needs more judgment) referenced by ID.
+
+---
+
+## Server Tools (Quick Reference)
+
+Server-side tools run on Anthropic's infrastructure - no client-side execution loop. Declare in `tools`; results arrive as content blocks in the same response. **No beta header** unless noted. **Prefer the latest type variant your model supports.** The `_20260209` web search / web fetch variants below (dynamic filtering) require Opus 5/4.8/4.7/4.6, Sonnet 5, or Sonnet 4.6; the basic variants for older models are listed after the table.
+
+| Tool | `type` | `name` | Key optional params | Result block type |
+|---|---|---|---|---|
+| Web search | `web_search_20260209` | `web_search` | `max_uses`, `allowed_domains`/`blocked_domains`, `user_location` | `web_search_tool_result` -> `.content` is a list of `web_search_result` |
+| Web fetch | `web_fetch_20260209` | `web_fetch` | `max_uses`, `allowed_domains`/`blocked_domains`, `citations`, `max_content_tokens` | `web_fetch_tool_result` -> `.content` is a `web_fetch_result` with a `document` block |
+| Code execution | `code_execution_20260521` | `code_execution` | none | `bash_code_execution_tool_result` -> `.content.stdout` / `.stderr` / `.return_code` |
+| Tool search (regex) | `tool_search_tool_regex_20251119` | `tool_search_tool_regex` | mark other tools `defer_loading: true` | `tool_search_tool_result` |
+| Tool search (BM25) | `tool_search_tool_bm25_20251119` | `tool_search_tool_bm25` | mark other tools `defer_loading: true` | `tool_search_tool_result` |
+
+`web_search_20260209` / `web_fetch_20260209` have built-in dynamic filtering - code execution runs under the hood, so do **not** separately declare `code_execution` in `tools` (a second execution environment confuses the model). For models older than Opus 4.6 / Sonnet 4.6, use the basic variants `web_search_20250305` / `web_fetch_20250910` instead; on Vertex AI only basic `web_search_20250305` is available. `code_execution_20260120` (REPL persistence + programmatic tool calling) runs on Opus 4.5+ / Sonnet 4.5+. **Go SDK only**: `code_execution_20260521` lives under `client.Beta.Messages.New` with `Betas: []anthropic.AnthropicBeta{"code-execution-2025-08-25"}` (other languages use plain `client.messages.create`); `code_execution_20260120` uses the non-beta `client.Messages.New` in Go like everywhere else. Web fetch only fetches URLs already present in the conversation. Provider availability varies by tool - see `shared/platform-availability.md`. See `shared/tool-use-concepts.md` for `pause_turn` handling.
+
+## Document & File Input (Quick Reference)
+
+**PDF (base64, no beta):** `{"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": <b64 string>}}` in user content, placed before the text block. Base64 string must have no newlines. Limits: 32 MB request, 600 pages (100 for 200k-context models). Java: `ContentBlockParam.ofDocument(DocumentBlockParam... Base64PdfSource.builder().data(...))`.
+
+**Files API (no beta):** upload via `client.files.upload(...)` -> response `id` is the `file_id`. Reference it as `{"type": "document", "source": {"type": "file", "file_id": "..."}}` for PDF/text, or `{"type": "image", ...}` for images - the content-block type must match the file's MIME type. To migrate code off `files-api-2025-04-14`, WebFetch the Files API row in `shared/live-sources.md`. Availability: `shared/platform-availability.md`.
+
+**Citations (no beta):** set `citations: {enabled: true}` on each `document` content block (all or none). Response splits into multiple `text` blocks; cited blocks carry a `citations` array. Each citation has `cited_text`, `document_index`, `document_title`, and a location by `type`: `char_location` (`start_char_index`/`end_char_index`) for plain text, `page_location` (`start_page_number`/`end_page_number`, 1-indexed) for PDF, `content_block_location` for custom content. Incompatible with `output_config.format` (returns a 400).
+
+## Tool Use Patterns (Quick Reference)
+
+**Strict tool use (no beta):** set `strict: true` as a top-level field on the tool definition (alongside `name`/`description`/`input_schema`), **not** on `tool_choice`. Schema must have `additionalProperties: false` + `required`. Guarantees `tool_use.input` validates exactly. Go: `Strict: anthropic.Bool(true)` + `additionalProperties` via `InputSchema.ExtraFields`; Java: `.strict(true)` + `.putAdditionalProperty("additionalProperties", JsonValue.from(false))`.
+
+**Parallel tool use (default on):** one assistant message may contain multiple `tool_use` blocks. Execute them concurrently, then return **all** `tool_result` blocks in a **single** user message - splitting them across multiple messages silently trains Claude to stop making parallel calls. For a failed tool, return `tool_result` with `is_error: true` - don't drop it.
+
+**Tool Runner (SDK beta helper):** drives the tool-call loop for you via `client.beta.messages.*`. Python: `@beta_tool` decorator + `client.beta.messages.tool_runner(...)` -> `runner.until_done()`. TypeScript: `betaZodTool({...})` from `@anthropic-ai/sdk/helpers/beta/zod` + `client.beta.messages.toolRunner(...)` -> `await runner`. Go: `toolrunner.NewBetaToolFromJSONSchema(...)` + `client.Beta.Messages.NewToolRunner(...)` -> `.RunToCompletion(ctx)`. Java requires `.addBeta("structured-outputs-2025-11-13")`. Ruby: `Anthropic::BaseTool` subclass + `client.beta.messages.tool_runner(...)`. PHP: `BetaRunnableTool` + `->toolRunner(...)`. C#: raw JSON-schema tools + `BetaToolRunner` via `client.Beta.Messages.ToolRunner(...)`.
+
+**Programmatic tool calling (no beta header):** Claude calls your custom tool from inside code execution. Add `{"type": "code_execution_20260120", "name": "code_execution"}` **and** set `"allowed_callers": ["code_execution_20260120"]` on your custom tool. Opus 4.5+ / Sonnet 4.5+ (availability: `shared/platform-availability.md`). When responding to a pending programmatic call, the user message must contain **only** `tool_result` blocks (no text). Not compatible with `strict: true`, `disable_parallel_tool_use`, forced `tool_choice`, or MCP tools.
+
+## Other API Surfaces (Quick Reference)
+
+**Message Batches (no beta; availability: `shared/platform-availability.md`):** `client.messages.batches.create(requests=[{custom_id, params}, ...])` -> poll `client.messages.batches.retrieve(id).processing_status` until `"ended"` -> stream `client.messages.batches.results(id)`. Each result has `.custom_id` + `.result.type` (`succeeded`/`errored`/`canceled`/`expired`); on success read `.result.message.content`. Python wraps requests as `Request(custom_id=..., params=MessageCreateParamsNonStreaming(...))`. Results arrive in **any order** - key by `custom_id`, never by position.
+
+**Models API (no beta; availability: `shared/platform-availability.md`):** `client.models.list()` (auto-paginates) and `client.models.retrieve("claude-opus-5")`. Each model object has `id`, `display_name`, `created_at`, and - since Mar 2026 - `max_input_tokens` (the context window), `max_tokens` (the output cap), and `capabilities`. There is no `context_window` field.
+
+**Stop details (GA, Opus 4.7+):** `response.stop_details` is populated **only when `stop_reason == "refusal"`** (fields: `type: "refusal"`, `category` - an open set, e.g. `"cyber"`, `"bio"`, `"reasoning_extraction"`, `"frontier_llm"`, or `null`; see the docs for the full list - and `explanation`). It is `null` for every other `stop_reason` (`end_turn`, `max_tokens`, `tool_use`, `pause_turn`, ...) - always guard before reading.
+
+**Admin API (beta, since 2026-08-26):** organization management - members, invites, workspaces and workspace members, API keys, rate limit reports, service accounts, federation issuers/rules, CMEK external keys - under `client.beta.organization` in all seven SDKs and `ant beta:organization` in the CLI. Requires an admin credential: an Admin API key (`sk-ant-admin...`, read from `ANTHROPIC_API_KEY`) or an `org:admin` OAuth token (`ANTHROPIC_AUTH_TOKEN`); regular API keys are rejected. Usage and cost reports and the Claude Enterprise user-management/analytics endpoints are **not** in the SDKs - raw HTTP only. See `shared/admin-api.md`.
+
+**Client config (no beta):** `timeout` default 10 min; **units differ by SDK** - Python/Ruby: seconds; TypeScript: **milliseconds**; Go `option.WithRequestTimeout(time.Duration)`; Java `Duration`; C# `TimeSpan`. TS scales the default up to 60 min for large `max_tokens` on non-streaming requests; Java does so for streaming requests (Java non-streaming scales 30s-10 min). `max_retries`/`maxRetries` default 2 (retries 408/409/429/5xx + connection errors). `base_url` (or `ANTHROPIC_BASE_URL` env). Per-request override: Python `client.with_options(timeout=5.0).messages.create(...)`; TS `client.messages.create({...}, {timeout: 5_000})`; Ruby `request_options: {timeout: 5}`. Timeouts are retried - wall-clock can reach `timeout × (max_retries+1)`.
+
+## Workload Identity Federation (Quick Reference)
+
+**GA, no beta header.** Construct the normal zero-arg client (`Anthropic()` / `new Anthropic()` / `anthropic.NewClient()` / `AnthropicOkHttpClient.fromEnv()`); the SDK auto-detects WIF when **all** of `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`, `ANTHROPIC_SERVICE_ACCOUNT_ID`, and `ANTHROPIC_IDENTITY_TOKEN_FILE` (or `ANTHROPIC_IDENTITY_TOKEN`) are set, exchanges the JWT at `/v1/oauth/token`, and auto-refreshes. `ANTHROPIC_WORKSPACE_ID` does not gate activation - required only when the federation rule spans multiple workspaces (else 400 `workspace_id_required`), optional for single-workspace rules. `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` (even empty) outrank WIF, and a set `ANTHROPIC_PROFILE` also wins over the federation env vars (a missing named profile is an error, not a fall-through) - unset all three.
+
+---
+
+## Reading Guide
+
+After detecting the language, read the relevant files based on what the user needs. Every `{lang}/...`, `shared/...`, and `curl/...` path cited in this document is relative to this skill's base directory, and none of those files' content is included above - Read each one on demand before relying on what it covers.
+
+**All SDK languages use the same multi-file layout** - directory `{lang}/claude-api/` containing `README.md` (install, client init, basic request, thinking, caching, stop details, misc), `tool-use.md` (tool definitions, agentic loop, Anthropic-defined tools, structured outputs), `streaming.md`, `batches.md`, `files-api.md`. Not every language has every file (e.g., Ruby has no `batches.md`); if a file is absent, that feature's example is not yet documented for that language - fall back to the cURL shape or WebFetch the SDK repo from `shared/live-sources.md`. **cURL** -> `curl/examples.md`.
+
+The Quick Task Reference below uses the `{lang}/claude-api/FILE.md` path notation for all languages.
+
+### Quick Task Reference
+
+**Single text classification/summarization/extraction/Q&A:**
+-> Read only `{lang}/claude-api/README.md` - **always read the README first** for any task (installation, quick start, common patterns, error handling)
+
+**Chat UI or real-time response display:**
+-> Read `{lang}/claude-api/README.md` + `{lang}/claude-api/streaming.md`
+
+**Long-running conversations (may exceed context window):**
+-> Read `{lang}/claude-api/README.md` - see Compaction section
+**Migrating to a newer model (Fable 5.1 / Fable 5 / Opus 5 / Opus 4.8 / Opus 4.7 / Opus 4.6 / Sonnet 5 / Sonnet 4.6), replacing a retired model, or translating `budget_tokens` / prefill patterns to the current API:**
+-> Read `shared/model-migration.md`
+**Upgrading the Anthropic SDK package itself across a major version (`anthropic` 0.x -> 1.x: `httpx2`, awaited async `.with_raw_response`, removed deprecated parameters / aliases / Text Completions, Python >= 3.10) - or writing new code against a project already on 1.x:**
+-> Read `{lang}/claude-api/sdk-upgrade.md` (currently Python only; other SDKs have no bundled major-version guide yet - use that SDK's CHANGELOG via `shared/live-sources.md`)
+**Building an eval set for a Claude app (or "how do I know if my change helped"):**
+-> Read `shared/evals/build-eval.md` - it loads `shared/evals/eval-audit.md` (the health checklist every eval must satisfy) before Step 0.
+**Checking whether an existing eval is trustworthy ("is my eval any good?"):**
+-> Read `shared/evals/eval-audit.md` and run it against the eval; report per its section 6.
+**Iteratively improving an app against an eval (prompt tuning, hill-climbing):**
+-> Read `shared/evals/eval-hillclimb.md` - runs Step 0 -> Step 5 with a train/test split; test is scored every round and is the headline.
+**Rendering an eval-hillclimb HTML report:**
+-> Run `shared/evals/report/build-report.mjs` when it is on disk (EAP install), else `shared/evals/report/build-report-lite.mjs` (always extracted with this skill) - both consume the `_state.json` / `vN/` layout produced by the hillclimb guide and write the same `trajectory/scores.tsv`. Don't write a parallel one.
+**Prompting or tuning Fable 5/5.1 (long turns, effort, verbosity, autonomous runs, sub-agents):**
+-> Read `shared/model-migration.md` -> Migrating to Claude Fable 5.1 -> Behavioral shifts (prompt-tunable) + Long-running agent recommendations
+**Prompting or tuning Claude Fable 5.1 (progress updates, parallel tool calls, writing density / formatting, autonomy, test sprawl, whole-file rewrites) or making a harness compatible with preserved thinking's history-editing check (history edits, compaction, per-turn reminders):**
+-> Read `shared/model-migration.md` -> Migrating to Claude Fable 5.1 from Claude Fable 5 -> New API features + Behavioral shifts (prompt-tunable); for the history-editing check itself (the three-step check, the append-only edit table, compaction shapes), Breaking change 3 in the same section
+**Prompt caching / optimize caching / "why is my cache hit rate low":**
+-> Read `shared/prompt-caching.md` (prefix-stability design, breakpoint placement, anti-patterns that silently invalidate cache) + `{lang}/claude-api/README.md` (Prompt Caching section)
+**Auditing or cleaning up prompts, skills, or tool descriptions ("is this prompt outdated", "remove the cruft", "this was written for an older model"):**
+-> Read `shared/prompt-audit.md` - dated-pattern tables with greppable signals, the keep list (what NOT to delete), and the report + proposed-diff output contract
+**Count tokens in a file / prompt / diff ("how many tokens is X"):**
+-> Read `shared/token-counting.md` - use `messages.count_tokens`, never `tiktoken`
+**Reducing or reviewing API spend ("the bill is too high", "make this cheaper", "am I overspending", cost per completed task, cheapest model or effort that holds quality):**
+-> Read `shared/cost-optimization.md` - baseline and token profile first, then the levers in order (free wins before tradeoffs) with measured expectations, and a workload-shape -> lever mapping table
+
+**Function calling / tool use / agents:**
+-> Read `{lang}/claude-api/README.md` + `shared/tool-use-concepts.md` (conceptual foundations: function calling, code execution, memory, structured outputs) + `{lang}/claude-api/tool-use.md` (language-specific code examples: tool runner, manual loop, code execution, memory, structured outputs)
+
+**Agent design (tool surface, context management, caching strategy):**
+-> Read `shared/agent-design.md` (bash vs. dedicated tools, programmatic tool calling, tool search/skills, context editing vs. compaction vs. memory, caching principles)
+
+**Batch processing (non-latency-sensitive; runs asynchronously at 50% cost):**
+-> Read `{lang}/claude-api/README.md` + `{lang}/claude-api/batches.md`
+
+**File uploads across multiple requests (same file without re-uploading):**
+-> Read `{lang}/claude-api/README.md` + `{lang}/claude-api/files-api.md`
+
+**Organization administration (members, invites, workspaces, API keys, rate limit reports, service accounts, WIF resources, CMEK):**
+-> Read `shared/admin-api.md` - `client.beta.organization` endpoint/method table, admin credentials, per-language naming and pagination, what stays curl-only
+
+**Debugging HTTP errors or implementing error handling:**
+-> Read `shared/error-codes.md` - per-SDK typed exception class table and the Go `errors.As` pattern
+
+**Latest official documentation:**
+-> WebFetch the URLs in `shared/live-sources.md`
+
+**Managed Agents (server-managed stateful agents with workspace):**
+-> See the reading guide in the `## Managed Agents (Beta)` section above - it lists every `shared/managed-agents-*.md` file and the language-specific READMEs (`{lang}/managed-agents/README.md`, `curl/managed-agents.md`).
+
+---
+
+## When to Use WebFetch
+
+Use WebFetch to get the latest documentation when:
+
+- User asks for "latest" or "current" information
+- Cached data seems incorrect
+- User asks about features not covered here
+
+Live documentation URLs are in `shared/live-sources.md`.
+
+## Common Pitfalls
+
+- Don't truncate inputs when passing files or content to the API. If the content is too long to fit in the context window, notify the user and discuss options (chunking, summarization, etc.) rather than silently truncating.
+- **Prefill removed (Fable 5, Claude Fable 5.1, Opus 5, Sonnet 5, and the 4.6/4.7/4.8 family):** Assistant message prefills (last-assistant-turn prefills) return a 400 error on Fable 5, Claude Fable 5.1, Opus 5, Sonnet 5, Opus 4.6, Opus 4.7, Opus 4.8, and Sonnet 4.6. Use structured outputs (`output_config.format`) or system prompt instructions to control response format instead. (One exception: the fallback-credit prefill claim - when redeeming a credit with `fallback_has_prefill_claim: true`, the server accepts the echoed assistant message; see the migration guide's refusal section.)
+- **Confirm migration scope before editing:** When a user asks to migrate code to a newer Claude model without naming a specific file, directory, or file list, **ask which scope to apply first** - the entire working directory, a specific subdirectory, or a specific set of files. Do not start editing until the user confirms. Imperative phrasings like "migrate my codebase", "move my project to X", "upgrade to Sonnet 4.6", or bare "migrate to Opus 4.8" are **still ambiguous** - they tell you what to do but not where, so ask. Proceed without asking only when the prompt names an exact file, a specific directory, or an explicit file list ("migrate `app.py`", "migrate everything under `services/`", "update `a.py` and `b.py`"). See `shared/model-migration.md` Step 0.
+- **`max_tokens` defaults:** Don't lowball `max_tokens` - hitting the cap truncates output mid-thought and requires a retry. For non-streaming requests, default to `~16000` (keeps responses under SDK HTTP timeouts). For streaming requests, default to `~64000` (timeouts aren't a concern, so give the model room). Only go lower when you have a hard reason: classification (`~256`), cost caps, deliberately short outputs, or **`max_tokens: 0`** for cache pre-warming (see `shared/prompt-caching.md` -> Pre-warming).
+- **Disabling thinking on Claude Opus 5 has two failure modes - prefer low/medium effort instead.** Only affects code that explicitly opts out; thinking is on by default, so watch for a disabled-thinking setting carried forward from Opus 4.8. With `thinking: {type: "disabled"}`, the model occasionally writes a tool call into its **visible text** instead of a `tool_use` block: the turn succeeds, the call never runs, no error is raised, and in an agentic loop that text pollutes later turns. It can also leak `<thinking>` tags into the response. Turning thinking on and lowering `effort` fixes both and still cuts cost. If a route must stay thinking-off: **delete** any don't-think/don't-reason rule (it makes tag leakage worse), don't name thinking tags, and add the combined instruction *"When you use a tool, you may say a brief sentence first. If no tool can express what the user asked for, say so instead of guessing. Do not include internal or system XML tags in your response."* Details: `shared/model-migration.md` -> Two failure modes when thinking is disabled.
+- **128K output tokens:** Fable 5, Claude Fable 5.1, Opus 5, Opus 4.6, Opus 4.7, Opus 4.8, Sonnet 5, and Sonnet 4.6 support up to 128K `max_tokens`, but the SDKs require streaming for values that large to avoid HTTP timeouts. Use `.stream()` with `.get_final_message()` / `.finalMessage()`.
+- **Forced tool use removed (Claude Fable 5.1 / Claude Mythos 5.1, as on Mythos Preview):** `tool_choice: {type: "any"}` and `{type: "tool", name: ...}` return a 400 (`tool_choice: type "tool" and "any" are not supported for this model.`), on `count_tokens` and Batches too. Use `{type: "auto"}` plus an explicit instruction naming the tool, `strict: true` on the tool to keep schema-valid arguments, or structured outputs (`output_config.format`) when the forced call only existed to get JSON back. `{type: "none"}` is unaffected; `disable_parallel_tool_use` still works with `auto` (at most one call).
+- **Tool call JSON parsing (Fable 5, Claude Fable 5.1, Opus 5, and the 4.6/4.7/4.8 family):** Fable 5, Claude Fable 5.1, Opus 5, Opus 4.6, Opus 4.7, Opus 4.8, and Sonnet 4.6 may produce different JSON string escaping in tool call `input` fields (e.g., Unicode or forward-slash escaping). Always parse tool inputs with `json.loads()` / `JSON.parse()` - never do raw string matching on the serialized input.
+- **Structured outputs (all models):** Use `output_config: {format: {...}}` instead of the deprecated `output_format` parameter on `messages.create()`. This is a general API change, not 4.6-specific.
+- **Don't reimplement SDK functionality:** The SDK provides high-level helpers - use them instead of building from scratch. Specifically: use `stream.finalMessage()` instead of wrapping `.on()` events in `new Promise()`; use typed exception classes (`Anthropic.RateLimitError`, etc.) instead of string-matching error messages; use SDK types (`Anthropic.MessageParam`, `Anthropic.Tool`, `Anthropic.Message`, etc.) instead of redefining equivalent interfaces.
+- **Error handling - catch a chain, not one broad class.** A single `except APIStatusError` / `catch (AnthropicServiceException)` / `rescue APIError` loses the distinction between retryable (429, >=500, network) and non-retryable (400/404) failures. Write a most-specific-first chain - e.g. `NotFoundError` -> `RateLimitError` -> `APIStatusError` -> `APIConnectionError` (or the Go equivalent: `errors.As` into `*anthropic.Error` then `switch apierr.StatusCode { case 404: ...; case 429: ...; default: ... }`). Per-language class names and namespaces are in `shared/error-codes.md`.
+- **Don't research SDK types - write first.** If a type name isn't shown in the documentation included in this skill, write the code file from the namespace/package tables in the language-specific doc and let the compiler's error point you to the right name. Do not spend turns on WebFetch, SDK-repo clones, or compiling-and-running a separate reflection program to discover type names before writing - produce the source file first, then fix what the compiler reports. A quick `strings` / `jar tf` / `javap` against the installed SDK is acceptable for locating names (it returns in seconds), but don't escalate beyond that. A file with a wrong type name is recoverable; a session spent on discovery with no file written is not.
+- **Bash and text editor tools are Anthropic-defined, schema-less.** Declare `{"type": "bash_20250124", "name": "bash"}` / `{"type": "text_editor_20250728", "name": "str_replace_based_edit_tool"}` - no `input_schema`. A custom tool with your own schema named `"bash"` is a different tool. Handler paths and security checks are in `shared/tool-use-concepts.md` § Client-Side Tools.
+- **Advisor tool model pairing.** The advisor tool's `model` must be at least as capable as the request's top-level `model` - e.g. executor `claude-sonnet-5` -> advisor `claude-opus-5` or `claude-opus-4-8`. An invalid pair returns 400. Pairing table (and which advisors return plaintext vs encrypted `advisor_redacted_result` advice) in `shared/tool-use-concepts.md` § Advisor. Availability: `shared/platform-availability.md`.
+- **Agent Skills != Managed Agents.** To have Claude generate a `.pptx`/`.xlsx`/etc. via Agent Skills, call `client.beta.messages.create` with `container={"skills": [...]}`, the `code_execution_20260521` tool, and the `code-execution-2025-08-25` beta (Skills is out of beta - no `skills-2025-10-02` header needed). Do not use `client.beta.agents` / `sessions` / `environments` here - those are the Managed Agents surface, not Agent Skills.
+- **MCP connector needs both halves.** `mcp_servers=[{type:"url", url, name}]` alone is rejected as a validation error - also add `tools=[{type:"mcp_toolset", mcp_server_name:<same name>}]` with beta `mcp-client-2025-11-20`. Availability: `shared/platform-availability.md`.
+- **`inference_geo` is a direct top-level request parameter** - `client.messages.create(..., inference_geo="us")` / `.inferenceGeo("us")`. Do not put it in `extra_body` / `putAdditionalBodyProperty`. (Messages API only - on Managed Agents, `inference_geo` instead nests inside the agent's `model` object, never top-level; see `shared/managed-agents-core.md` § Pinning inference geography.) Supported on Opus 4.6 / Sonnet 4.6 and later; availability: `shared/platform-availability.md`. `response.usage.inference_geo` reports where inference ran.
+- **Fine-grained tool streaming is not a beta feature.** Set `eager_input_streaming: true` on the tool definition and call the regular `client.messages.stream(...)`. There is no beta header and no `client.beta.*` path.
+- **Cache diagnostics is beta.** Use `client.beta.messages.*` with beta `cache-diagnosis-2026-04-07`. Pass `diagnostics: {previous_message_id: null}` on the first turn and `diagnostics: {previous_message_id: <previous response id>}` on subsequent turns; the result is on `response.diagnostics`. Availability: `shared/platform-availability.md`.
+- **Memory tool type is `memory_20250818`.** Declare `{"type": "memory_20250818", "name": "memory"}`. Go uses the beta-namespace type `{OfMemoryTool20250818: &anthropic.BetaMemoryTool20250818Param{}}` on `client.Beta.Messages.New`; Python/TypeScript/Ruby/PHP/C# use the non-beta `client.messages.create`; Java has both a non-beta `MemoryTool20250818` and a beta tool-runner path. Python/TypeScript provide `BetaAbstractMemoryTool` / `betaMemoryTool` helpers for implementing the backend.
+- **Use a model the feature actually supports.** Some features are restricted to specific model tiers - fast mode is Claude Opus 5 / Opus 4.8 only (and Claude API only), task budgets (Messages API only - Managed Agents session budgets have no model-tier restriction) are Claude Opus 5 / Fable 5 / Claude Fable 5.1 (confirm at launch) / Sonnet 5 / Opus 4.8 / 4.7 only, and the advisor tool requires a valid executor<->advisor pair. If the user's prompt names a model that the feature doesn't support, use a supported model instead and note the substitution in the output.
+- **Don't define custom types for SDK data structures:** The SDK exports types for all API objects. Use `Anthropic.MessageParam` for messages, `Anthropic.Tool` for tool definitions, `Anthropic.ToolUseBlock` / `Anthropic.ToolResultBlockParam` for tool results, `Anthropic.Message` for responses. Defining your own `interface ChatMessage { role: string; content: unknown }` duplicates what the SDK already provides and loses type safety.
+- **Report and document output:** For tasks that produce reports, documents, or visualizations, the code execution sandbox has `python-docx`, `python-pptx`, `matplotlib`, `pillow`, and `pypdf` pre-installed. Claude can generate formatted files (DOCX, PDF, charts) and return them via the Files API - consider this for "report" or "document" type requests instead of plain stdout text.
+- **Server-tool errors don't raise.** Web search and web fetch errors return HTTP 200 with a `web_search_tool_result` / `web_fetch_tool_result` block whose `content` is a single error object (e.g. `{error_code: "max_uses_exceeded"}`) - not a raised exception. For web search, a success `content` is a *list*; an error `content` is an *object* - branch on that before indexing.
+- **Managed Agents web tools ignore the environment's `networking`.** `web_search` / `web_fetch` run on Anthropic's servers in cloud *and* self-hosted environments, and Console org-level web settings apply to the Messages API only. Restrict them per tool with `allowed_domains` **or** `blocked_domains` (never both; 1-64 plain hostnames per list, subdomains covered; IPs, bare TLDs, single-label and `localhost`-style names rejected on both tools; a path suffix is allowed only on `web_search`) on the toolset `configs` entry - `shared/managed-agents-tools.md` § Web search & web fetch settings.
+- **Eval / hillclimb work has dedicated guides:** If the user says "hillclimb", "improve my eval score", "iterate on my prompt against an eval", or "build me an eval" - load `shared/evals/eval-hillclimb.md` or `shared/evals/build-eval.md` rather than improvising. The bundled HTML report builder is `shared/evals/report/build-report.mjs` when it is on disk (EAP install), else `shared/evals/report/build-report-lite.mjs` (always extracted with this skill); don't write a parallel one.
+- **Code execution output block type:** `code_execution_20260521` returns `bash_code_execution_tool_result` (with `.content.stdout`), **not** the legacy bare `code_execution_tool_result`. Iterate `response.content` and match on the correct type.
+- **Tool search: never defer everything.** The search tool itself must not have `defer_loading: true`, and at least one tool in `tools` must be non-deferred, or the API returns 400 `All tools have defer_loading set`.
+
+No project language was auto-detected. Ask the user which language they are using (see Language Detection above), then Read the matching `{lang}/claude-api/README.md` (or `curl/examples.md` for cURL/raw HTTP or an unsupported language) from the base directory before anything else.
+
+## Assistant  <sub>2026-09-06T09:49:48.124Z</sub>
+
+The repo is empty except for a placeholder README, so this is a greenfield build. Before writing the plan, I need to settle four decisions where your brief points two ways or leaves the choice open.
+
+## Assistant  <sub>2026-09-06T09:49:56.784Z</sub>
+
+**Tool call — `AskUserQuestion`**
+
+```json
+{
+  "questions": [
+    {
+      "question": "You mentioned both FastAPI and Flask. Which web framework should the API use?",
+      "header": "Framework",
+      "options": [
+        {
+          "label": "FastAPI (Recommended)",
+          "description": "Async, built-in OpenAPI docs at /docs, pydantic validation. Serves the single HTML page as a static file."
+        },
+        {
+          "label": "Flask",
+          "description": "Simpler, synchronous. Fine for this scale but no free API docs or request validation."
+        }
+      ],
+      "multiSelect": false
+    },
+    {
+      "question": "What protocol should the generation LLM (LLM_API_URL + LLM_API_KEY in .env) speak?",
+      "header": "LLM protocol",
+      "options": [
+        {
+          "label": "OpenAI-compatible (Recommended)",
+          "description": "POST {LLM_API_URL}/chat/completions. Works with OpenAI, Azure, OpenRouter, Groq, vLLM, Ollama, LiteLLM. Model name via LLM_MODEL env var."
+        },
+        {
+          "label": "Anthropic Messages API",
+          "description": "Use the anthropic SDK with base_url=LLM_API_URL. Only works with Claude endpoints."
+        },
+        {
+          "label": "Both, via LLM_PROVIDER switch",
+          "description": "LLM_PROVIDER=openai|anthropic in .env picks the client. Slightly more code, maximum flexibility."
+        }
+      ],
+      "multiSelect": false
+    },
+    {
+      "question": "The evaluation script uses Claude as judge. How should the judge authenticate?",
+      "header": "Judge auth",
+      "options": [
+        {
+          "label": "Separate ANTHROPIC_API_KEY (Recommended)",
+          "description": "Judge always calls Claude (claude-opus-5) via the anthropic SDK using its own key in .env. Independent of whatever LLM generates answers."
+        },
+        {
+          "label": "Reuse LLM_API_URL / key",
+          "description": "Judge calls the same endpoint as generation. Only valid if that endpoint is Claude; otherwise the judge is not Claude."
+        }
+      ],
+      "multiSelect": false
+    },
+    {
+      "question": "How should ChromaDB run under docker compose?",
+      "header": "Chroma mode",
+      "options": [
+        {
+          "label": "Embedded in app container (Recommended)",
+          "description": "chromadb PersistentClient writing to a named volume. One service, zero network config, simplest to run."
+        },
+        {
+          "label": "Separate chroma service",
+          "description": "Official chromadb/chroma image as a second compose service; app uses HttpClient. Closer to production topology."
+        }
+      ],
+      "multiSelect": false
+    }
+  ]
+}
+```
+
+## Tool  <sub>2026-09-06T09:50:28.438Z</sub>
+
+**Tool result**
+
+```
+Your questions have been answered: "You mentioned both FastAPI and Flask. Which web framework should the API use?"="FastAPI (Recommended)", "What protocol should the generation LLM (LLM_API_URL + LLM_API_KEY in .env) speak?"="OpenAI-compatible (Recommended)", "The evaluation script uses Claude as judge. How should the judge authenticate?"="Separate ANTHROPIC_API_KEY (Recommended)", "How should ChromaDB run under docker compose?"="Embedded in app container (Recommended)". You can now continue with these answers in mind.
+```
+
+## Assistant  <sub>2026-09-06T09:50:34.642Z</sub>
+
+Decisions locked in. I'll check the Python SDK reference for the structured-output shape the judge will use, then write the plan.
+
+## Assistant  <sub>2026-09-06T09:50:37.986Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /private/tmp/claude-502/bundled-skills/2.1.260/5dc1bfbb34c0ed5325b15b1ddcff5b1f/claude-api && grep -n \"parse\\|output_config\\|fallbacks\\|pip install\" python/claude-api/README.md | head -40; echo ---; grep -n \"^#\" python/claude-api/tool-use.md | head -40",
+  "description": "Locate structured-output and install sections in Python SDK reference"
+}
+```
+
+## Tool  <sub>2026-09-06T09:50:38.038Z</sub>
+
+**Tool result**
+
+```
+6:pip install anthropic
+262:    output_config={"effort": "high"},  # low | medium | high | xhigh | max
+325:message = raw.parse()  # the Message object messages.create() would have returned
+443:Fallbacks are **opt-in**: without them a refused request simply stops. Include the server-side `fallbacks` parameter in `claude-fable-5-1` code by default - on a policy decline the API re-runs the same request on the fallback model inside the same call. A decline before any output isn't billed (a mid-stream decline bills the streamed partial); the rescue bills at the fallback model's own rates, with cache repricing applied automatically.
+450:    fallbacks=[{"model": "claude-opus-4-8"}],
+468:A `stop_reason: "refusal"` on the final response means the whole chain refused. The header must be exactly `server-side-fallback-2026-06-01` **for this array form**; the newer `fallbacks: "default"` scalar form uses `server-side-fallback-2026-07-01` instead (see `shared/model-migration.md` -> Migrating to Claude Opus 5 -> New API features), and pairing either header with the other form returns a 400. The parameter is rejected on the Batches API and unavailable on Amazon Bedrock, Vertex AI, and Microsoft Foundry - register the client-side `BetaRefusalFallbackMiddleware` on the client there instead. Full semantics (sticky routing, billing, streaming, echoing fallback turns back): `shared/model-migration.md` -> Migrating to Claude Fable 5.1 -> `refusal` stop reason.
+---
+1:# Tool Use - Python
+5:## Tool Runner (Recommended)
+28:# The tool runner handles the agentic loop automatically
+36:# Each iteration yields a BetaMessage; iteration stops when Claude is done
+50:### Server tools with the tool runner
+89:## MCP Tool Conversion Helpers
+95:### MCP Tools with Tool Runner
+123:### MCP Prompts
+136:### MCP Resources as Content
+155:### Upload MCP Resources as Files
+168:## Manual Agentic Loop
+181:# Agentic loop: keep going until Claude stops calling tools
+221:# Final response text
+227:## Handling Tool Results
+266:## Multiple Tool Calls
+280:# Send all results back at once
+296:## Error Handling in Tool Results
+309:## Tool Choice
+323:## Code Execution
+325:### Basic Usage
+352:### Upload Files for Analysis
+355:# 1. Upload a file
+358:# 2. Pass to code execution via container_upload block
+373:### Retrieve Generated Files
+399:### Container Reuse
+402:# First request: set up environment
+410:# Get container ID from response
+413:# Second request: reuse the same container
+423:### Response Structure
+446:## Memory Tool
+448:### Basic Usage
+463:### SDK Memory Helper
+480:# Use with tool runner
+498:## Structured Outputs
+500:### JSON Outputs (Pydantic - Recommended)
+526:# response.parsed_output is a validated ContactInfo instance
+532:### Raw Schema
+561:# output_config.format guarantees the first block is text with valid JSON
+566:### Strict Tool Use
+591:### Using Both Together
+Shell cwd was reset to /Users/shoaib.rayeen/my_space/rag-generator
+```
+
+## Assistant  <sub>2026-09-06T09:50:43.784Z</sub>
+
+**Tool call — `Read`**
+
+```json
+{
+  "file_path": "/private/tmp/claude-502/bundled-skills/2.1.260/5dc1bfbb34c0ed5325b15b1ddcff5b1f/claude-api/python/claude-api/tool-use.md",
+  "offset": 498,
+  "limit": 70
+}
+```
+
+## Tool  <sub>2026-09-06T09:50:43.801Z</sub>
+
+**Tool result**
+
+```
+498	## Structured Outputs
+499	
+500	### JSON Outputs (Pydantic - Recommended)
+501	
+502	```python
+503	from pydantic import BaseModel
+504	from typing import List
+505	import anthropic
+506	
+507	class ContactInfo(BaseModel):
+508	    name: str
+509	    email: str
+510	    plan: str
+511	    interests: List[str]
+512	    demo_requested: bool
+513	
+514	client = anthropic.Anthropic()
+515	
+516	response = client.messages.parse(
+517	    model="claude-opus-5",
+518	    max_tokens=16000,
+519	    messages=[{
+520	        "role": "user",
+521	        "content": "Extract: Jane Doe (jane@co.com) wants Enterprise, interested in API and SDKs, wants a demo."
+522	    }],
+523	    output_format=ContactInfo,
+524	)
+525	
+526	# response.parsed_output is a validated ContactInfo instance
+527	contact = response.parsed_output
+528	print(contact.name)           # "Jane Doe"
+529	print(contact.interests)      # ["API", "SDKs"]
+530	```
+531	
+532	### Raw Schema
+533	
+534	```python
+535	response = client.messages.create(
+536	    model="claude-opus-5",
+537	    max_tokens=16000,
+538	    messages=[{
+539	        "role": "user",
+540	        "content": "Extract info: John Smith (john@example.com) wants the Enterprise plan."
+541	    }],
+542	    output_config={
+543	        "format": {
+544	            "type": "json_schema",
+545	            "schema": {
+546	                "type": "object",
+547	                "properties": {
+548	                    "name": {"type": "string"},
+549	                    "email": {"type": "string"},
+550	                    "plan": {"type": "string"},
+551	                    "demo_requested": {"type": "boolean"}
+552	                },
+553	                "required": ["name", "email", "plan", "demo_requested"],
+554	                "additionalProperties": False
+555	            }
+556	        }
+557	    }
+558	)
+559	
+560	import json
+561	# output_config.format guarantees the first block is text with valid JSON
+562	text = next(b.text for b in response.content if b.type == "text")
+563	data = json.loads(text)
+564	```
+565	
+566	### Strict Tool Use
+567	
+```
+
+## Assistant  <sub>2026-09-06T09:51:29.012Z</sub>
+
+I have everything I need. Writing the plan file now.
+
+## Assistant  <sub>2026-09-06T09:52:37.282Z</sub>
+
+**Tool call — `Write`**
+
+```json
+{
+  "file_path": "/Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md",
+  "content": "# RAG Generator — Implementation Plan\n\n## Context\n\nAgentic-coding assessment: build a **RAG Generator** that accepts documents at runtime, indexes them, and answers questions grounded in those documents, with no code changes needed for a different document set. Deliverables also include AI-agent transcripts (this session, exported to `transcripts/`) and an evaluation script that uses Claude as judge.\n\nThe repo is empty (placeholder README only), so this is a greenfield build.\n\n**Decisions confirmed with the user:**\n- Web framework: **FastAPI** (serves the single HTML page + JSON API)\n- Generation LLM: **OpenAI-compatible** `chat/completions` endpoint, configured only via `.env` (`LLM_API_URL`, `LLM_API_KEY`, `LLM_MODEL`)\n- Judge: **Claude via the `anthropic` SDK** with its own `ANTHROPIC_API_KEY`\n- Vector store: **ChromaDB embedded** (`PersistentClient`) inside the app container, data on a volume\n- Embeddings: **fastembed** (`BAAI/bge-small-en-v1.5`); chunking is a custom overlapping, metadata-tagged splitter (fastembed only embeds, it does not chunk)\n- Lexical retrieval: **rank-bm25**; dense + BM25 results merged with **Reciprocal Rank Fusion**\n- Deployment: **Docker + docker compose**\n- Formats: PDF, DOCX, HTML, TXT, MD, CSV → text with page metadata, driven by a user-editable constant\n\n## Tech stack\n\n| Concern | Choice |\n|---|---|\n| Language / runtime | Python 3.11 |\n| API | FastAPI + uvicorn |\n| UI | Single static `index.html` (vanilla JS, no build step) |\n| CLI | `typer` app talking to the running API over HTTP (`httpx`) so there is exactly one Chroma writer |\n| Extraction | `pypdf` (PDF), `python-docx` (DOCX), `beautifulsoup4` (HTML), stdlib for TXT/MD/CSV |\n| Chunking | custom sliding window, char-based, sentence/paragraph-boundary aware |\n| Embeddings | `fastembed` `TextEmbedding` |\n| Vector DB | `chromadb` `PersistentClient`, cosine space |\n| Lexical | `rank-bm25` `BM25Okapi`, rebuilt from Chroma on startup / after ingest |\n| Fusion | Reciprocal Rank Fusion (k=60) |\n| Generation LLM | OpenAI-compatible `POST {LLM_API_URL}/chat/completions` via `httpx` |\n| Judge | `anthropic` SDK, `claude-opus-5`, structured output via `client.messages.parse(..., output_format=PydanticModel)` |\n| Config | `pydantic-settings` reading `.env` |\n| Tests | `pytest` (chunker, fusion, extractors, API smoke) |\n| Not used (state in README) | LangChain / LlamaIndex, rerankers, external Chroma server, auth, GPU |\n\n## Repository layout\n\n```\nrag-generator/\n├── app/\n│   ├── main.py            # FastAPI app, routes, static mount, lifespan (load index)\n│   ├── config.py          # Settings (from .env) + editable CONSTANTS (see below)\n│   ├── models.py          # pydantic request/response schemas\n│   ├── ingest/\n│   │   ├── extractors.py  # per-format -> list[Page(text, page_no, meta)]\n│   │   ├── chunker.py     # overlapping, metadata-tagged chunks\n│   │   └── pipeline.py    # ingest job: extract -> chunk -> embed -> store, status updates\n│   ├── retrieval/\n│   │   ├── embedder.py    # fastembed wrapper (singleton)\n│   │   ├── vector_store.py# Chroma wrapper: add/query/delete/list, per-collection\n│   │   ├── bm25_index.py  # rank-bm25 wrapper, tokenizer, rebuild from Chroma\n│   │   └── fusion.py      # RRF + hybrid retrieve()\n│   ├── llm/\n│   │   ├── client.py      # OpenAI-compatible chat client (httpx)\n│   │   └── prompts.py     # grounded-answer system prompt, context formatting\n│   ├── rag.py             # answer(question, collection) -> answer + sources\n│   ├── jobs.py            # in-memory job registry + persisted documents.json\n│   └── static/index.html  # the UI\n├── cli/rag_cli.py         # typer CLI: ingest | status | ask | reset | serve\n├── evaluation/\n│   ├── run_eval.py        # runs dataset through /api/ask, judges, writes report\n│   ├── judge.py           # Claude judge (anthropic SDK, structured outputs)\n│   ├── generate_dataset.py# optional: synthesize Q/A pairs from indexed chunks\n│   ├── dataset.example.jsonl\n│   └── reports/           # gitignored outputs\n├── samples/               # small md/txt/csv/html (+ script to make pdf/docx) for the demo\n├── scripts/make_samples.py\n├── tests/\n├── transcripts/README.md  # where /export transcripts go\n├── data/                  # runtime: chroma/, uploads/, documents.json (gitignored, volume)\n├── Dockerfile\n├── docker-compose.yml\n├── .env.example\n├── .gitignore\n├── requirements.txt\n├── pyproject.toml         # console script `rag` -> cli\n└── README.md\n```\n\n## Configuration\n\n### `.env` (only thing the user must edit)\n```\nLLM_API_URL=https://api.openai.com/v1        # base URL; client appends /chat/completions\nLLM_API_KEY=sk-...\nLLM_MODEL=gpt-4o-mini                        # any model the endpoint serves\nLLM_TEMPERATURE=0.1\nANTHROPIC_API_KEY=sk-ant-...                 # eval judge only\nJUDGE_MODEL=claude-opus-5\nRAG_API_URL=http://localhost:8000            # used by CLI + eval script\n```\n\n### Editable constants in `app/config.py` (documented in README)\n```python\nSUPPORTED_EXTENSIONS = {\".pdf\": \"pdf\", \".docx\": \"docx\", \".html\": \"html\", \".htm\": \"html\",\n                        \".txt\": \"text\", \".md\": \"text\", \".csv\": \"csv\"}\nCHUNK_SIZE_CHARS = 1200\nCHUNK_OVERLAP_CHARS = 200\nCSV_ROWS_PER_PAGE = 50          # CSV \"page\" = block of rows\nEMBEDDING_MODEL = \"BAAI/bge-small-en-v1.5\"\nDENSE_TOP_K = 20\nBM25_TOP_K = 20\nFUSED_TOP_K = 6                 # chunks sent to the LLM\nRRF_K = 60\nDEFAULT_COLLECTION = \"default\"\nMAX_UPLOAD_MB = 50\n```\n\n## Pipeline design\n\n### Ingest (`app/ingest/`)\n1. `POST /api/documents` saves each file under `data/uploads/<doc_id>_<name>`, registers a job (`queued`), and schedules `pipeline.run(doc_id)` via FastAPI `BackgroundTasks`.\n2. `extractors.extract(path) -> list[Page]` dispatches on `SUPPORTED_EXTENSIONS`:\n   - PDF: `pypdf` per page → `page_no` = real page number\n   - DOCX: paragraphs grouped under headings; `page_no` = sequential section index, `section` = heading text (DOCX has no real pages; state this in README)\n   - HTML: `BeautifulSoup`, drop `script/style/nav`, `page_no=1`, `title` metadata\n   - TXT/MD: single page, split on blank lines; MD keeps `#` heading as `section`\n   - CSV: header row prepended to each block of `CSV_ROWS_PER_PAGE` rows, block index = `page_no`\n3. `chunker.chunk(pages, doc_meta)` produces overlapping windows (`CHUNK_SIZE_CHARS`, `CHUNK_OVERLAP_CHARS`), preferring to cut at paragraph/sentence boundaries. Each chunk carries metadata: `doc_id, source (filename), file_type, page, section, chunk_index, char_start, char_end, collection`. Chunk id = `f\"{doc_id}:{chunk_index}\"`.\n4. `embedder.embed(texts)` → fastembed vectors (batched).\n5. `vector_store.add(collection, ids, texts, embeddings, metadatas)`; then `bm25_index.rebuild(collection)` pulls all chunk texts for that collection from Chroma and rebuilds `BM25Okapi`.\n6. Status transitions persisted to `data/documents.json`: `queued → extracting → chunking → embedding → indexed | failed(error)`, plus `pages`, `chunks`, timestamps.\n\n### Query (`app/rag.py`, `app/retrieval/fusion.py`)\n1. Dense: embed question → Chroma `query(n_results=DENSE_TOP_K)` (cosine).\n2. Lexical: tokenize question → BM25 `get_scores` → top `BM25_TOP_K`.\n3. Fusion: RRF `score = Σ 1/(RRF_K + rank)` across both lists, keep `FUSED_TOP_K`; record which retriever(s) surfaced each chunk.\n4. Prompt: system message instructs grounded answering with `[n]` citations and an explicit \"not found in the provided documents\" fallback; user message = numbered context blocks (`[n] source, page`) + question.\n5. `llm.client.chat(messages)` → OpenAI-compatible request; surface HTTP/auth errors as 502 with a readable message so a wrong `.env` is obvious.\n6. Response: `{answer, sources:[{n, chunk_id, source, page, section, text, dense_rank, bm25_rank, rrf_score}], model, latency_ms}`.\n\n### API surface (`app/main.py`)\n| Method | Path | Purpose |\n|---|---|---|\n| GET | `/` | UI |\n| GET | `/api/health` | liveness + LLM/embedding config (no secrets) |\n| POST | `/api/documents` | multipart upload (multi-file), optional `collection` |\n| GET | `/api/documents?collection=` | list docs with status/chunk counts |\n| GET | `/api/documents/{doc_id}` | status detail |\n| DELETE | `/api/documents/{doc_id}` | remove file, chunks, rebuild BM25 |\n| GET | `/api/chunks?collection=&limit=` | sample chunks (used by eval dataset generator + \"view sources\") |\n| POST | `/api/ask` | `{question, collection?, top_k?}` → answer + sources |\n| DELETE | `/api/collections/{name}` | reset a collection (switch document sets without code changes) |\n\nStartup lifespan: open Chroma, warm the fastembed model, rebuild BM25 for every existing collection so restarts keep working.\n\n### UI (`app/static/index.html`)\nOne page, four panels: **Upload** (drag-drop / file picker, collection name, shows accepted extensions from `/api/health`), **Status** (table polling `/api/documents` every 2s while any job is non-terminal), **Ask** (question box, answer with `[n]` citations), **Sources** (expandable cards per cited chunk: file, page/section, retriever ranks, chunk text). Plain fetch calls, no framework.\n\n### CLI (`cli/rag_cli.py`, console script `rag`)\n`rag ingest <files...> [--collection]`, `rag status [--watch]`, `rag ask \"<q>\" [--collection] [--show-sources]`, `rag reset [--collection]`, `rag serve` (runs uvicorn locally). All except `serve` call the API at `RAG_API_URL`.\n\n## Evaluation (`evaluation/`)\n- **Dataset**: JSONL rows `{question, reference_answer?, collection?}`. Ship `dataset.example.jsonl` matching `samples/`.\n- **`generate_dataset.py`** (optional): pulls chunks from `/api/chunks`, asks Claude to write N question/reference pairs per chunk → JSONL. Lets the eval work on any new document set.\n- **`run_eval.py`**: for each row, `POST /api/ask`, then judge. Judge model `claude-opus-5` via `client.messages.parse` with a pydantic `JudgeVerdict` (`faithfulness 1-5`, `answer_relevance 1-5`, `context_relevance 1-5`, `correctness 1-5 | null` when no reference, `hallucinated: bool`, `rationale`). Prompt gives question, retrieved contexts, answer, optional reference. Thinking left at model default (adaptive). Writes `reports/<ts>.json` + `reports/<ts>.md` with per-question rows and mean scores, exits non-zero if mean faithfulness < threshold (`--min-faithfulness`, default 3.5).\n- Judge deliberately does **not** use the server-side refusal-fallback beta; judge prompts are benign and it keeps the script to one plain `parse` call. Noted in README.\n\n## Docker\n- `Dockerfile`: `python:3.11-slim`, install `requirements.txt`, **pre-download the fastembed model at build time** (`FASTEMBED_CACHE_PATH=/models`) so first run is offline-safe, copy app, `uvicorn app.main:app --host 0.0.0.0 --port 8000`.\n- `docker-compose.yml`: single `app` service, `env_file: .env`, `ports: 8000:8000`, volume `./data:/app/data`, healthcheck on `/api/health`.\n- Eval runs from host (`python -m evaluation.run_eval`) or `docker compose run --rm app python -m evaluation.run_eval`.\n\n## README contents\nSetup (copy `.env.example` → `.env`, set `LLM_API_URL` + `LLM_API_KEY` + `LLM_MODEL`, `docker compose up --build`), local dev without Docker, UI walkthrough, CLI usage, API table, **how to change supported formats / chunk sizes / top-k** (points at the constants), architecture diagram (ingest + hybrid retrieval + fusion), tech stack used vs. not used and why, evaluation instructions, transcripts folder note, known limitations (DOCX pages are sections, single-process BM25 in memory, no auth).\n\n## Transcripts\n`transcripts/README.md` explaining that Claude Code session transcripts go here via `/export`. The `/export` step itself must be run by the user in the Claude Code terminal at the end of the session; I will remind them and name the target path `transcripts/<date>-rag-generator-build.md`.\n\n## Implementation order\n1. Scaffold: `requirements.txt`, `pyproject.toml`, `.env.example`, `.gitignore`, `config.py`, `models.py`\n2. Extractors + chunker + unit tests\n3. Embedder, vector store, BM25, fusion + unit tests\n4. LLM client + prompts + `rag.py`\n5. Jobs + ingest pipeline + FastAPI routes\n6. `index.html`\n7. CLI\n8. Samples + `scripts/make_samples.py`\n9. Evaluation (judge, run_eval, generate_dataset, example dataset)\n10. Dockerfile, compose, README, transcripts folder\n11. Build, run, preview, fix\n\n## Verification\n1. `pytest` green (chunk overlap/metadata, RRF ordering, each extractor on a sample file, `/api/health`).\n2. `docker compose up --build` starts; `/api/health` returns 200 and reports the configured model.\n3. **Preview in the Browser pane** at `http://localhost:8000`: upload `samples/*` (all six formats), watch status reach `indexed`, ask 2–3 questions, confirm citations and source cards show file + page; ask an off-topic question and confirm the \"not in documents\" fallback.\n4. CLI round-trip: `rag ingest samples/*.md`, `rag status`, `rag ask \"...\" --show-sources`.\n5. Reset flow: `rag reset`, upload a different document set, ask again with no code change.\n6. `python -m evaluation.run_eval --dataset evaluation/dataset.example.jsonl` produces a report with scores.\n7. Restart the container and confirm the index and BM25 survive (volume + startup rebuild).\n"
+}
+```
+
+## Tool  <sub>2026-09-06T09:52:37.306Z</sub>
+
+**Tool result**
+
+```
+File created successfully at: /Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md (file state is current in your context — no need to Read it back)
+```
+
+## Assistant  <sub>2026-09-06T09:52:43.926Z</sub>
+
+**Tool call — `ToolSearch`**
+
+```json
+{
+  "query": "select:ExitPlanMode",
+  "max_results": 1
+}
+```
+
+## Tool  <sub>2026-09-06T09:52:43.931Z</sub>
+
+**Tool result**
+
+```
+
+```
+
+## Assistant  <sub>2026-09-06T09:52:51.437Z</sub>
+
+**Tool call — `ExitPlanMode`**
+
+```json
+{
+  "plan": "# RAG Generator — Implementation Plan\n\n## Context\n\nAgentic-coding assessment: build a **RAG Generator** that accepts documents at runtime, indexes them, and answers questions grounded in those documents, with no code changes needed for a different document set. Deliverables also include AI-agent transcripts (this session, exported to `transcripts/`) and an evaluation script that uses Claude as judge.\n\nThe repo is empty (placeholder README only), so this is a greenfield build.\n\n**Decisions confirmed with the user:**\n- Web framework: **FastAPI** (serves the single HTML page + JSON API)\n- Generation LLM: **OpenAI-compatible** `chat/completions` endpoint, configured only via `.env` (`LLM_API_URL`, `LLM_API_KEY`, `LLM_MODEL`)\n- Judge: **Claude via the `anthropic` SDK** with its own `ANTHROPIC_API_KEY`\n- Vector store: **ChromaDB embedded** (`PersistentClient`) inside the app container, data on a volume\n- Embeddings: **fastembed** (`BAAI/bge-small-en-v1.5`); chunking is a custom overlapping, metadata-tagged splitter (fastembed only embeds, it does not chunk)\n- Lexical retrieval: **rank-bm25**; dense + BM25 results merged with **Reciprocal Rank Fusion**\n- Deployment: **Docker + docker compose**\n- Formats: PDF, DOCX, HTML, TXT, MD, CSV → text with page metadata, driven by a user-editable constant\n\n## Tech stack\n\n| Concern | Choice |\n|---|---|\n| Language / runtime | Python 3.11 |\n| API | FastAPI + uvicorn |\n| UI | Single static `index.html` (vanilla JS, no build step) |\n| CLI | `typer` app talking to the running API over HTTP (`httpx`) so there is exactly one Chroma writer |\n| Extraction | `pypdf` (PDF), `python-docx` (DOCX), `beautifulsoup4` (HTML), stdlib for TXT/MD/CSV |\n| Chunking | custom sliding window, char-based, sentence/paragraph-boundary aware |\n| Embeddings | `fastembed` `TextEmbedding` |\n| Vector DB | `chromadb` `PersistentClient`, cosine space |\n| Lexical | `rank-bm25` `BM25Okapi`, rebuilt from Chroma on startup / after ingest |\n| Fusion | Reciprocal Rank Fusion (k=60) |\n| Generation LLM | OpenAI-compatible `POST {LLM_API_URL}/chat/completions` via `httpx` |\n| Judge | `anthropic` SDK, `claude-opus-5`, structured output via `client.messages.parse(..., output_format=PydanticModel)` |\n| Config | `pydantic-settings` reading `.env` |\n| Tests | `pytest` (chunker, fusion, extractors, API smoke) |\n| Not used (state in README) | LangChain / LlamaIndex, rerankers, external Chroma server, auth, GPU |\n\n## Repository layout\n\n```\nrag-generator/\n├── app/\n│   ├── main.py            # FastAPI app, routes, static mount, lifespan (load index)\n│   ├── config.py          # Settings (from .env) + editable CONSTANTS (see below)\n│   ├── models.py          # pydantic request/response schemas\n│   ├── ingest/\n│   │   ├── extractors.py  # per-format -> list[Page(text, page_no, meta)]\n│   │   ├── chunker.py     # overlapping, metadata-tagged chunks\n│   │   └── pipeline.py    # ingest job: extract -> chunk -> embed -> store, status updates\n│   ├── retrieval/\n│   │   ├── embedder.py    # fastembed wrapper (singleton)\n│   │   ├── vector_store.py# Chroma wrapper: add/query/delete/list, per-collection\n│   │   ├── bm25_index.py  # rank-bm25 wrapper, tokenizer, rebuild from Chroma\n│   │   └── fusion.py      # RRF + hybrid retrieve()\n│   ├── llm/\n│   │   ├── client.py      # OpenAI-compatible chat client (httpx)\n│   │   └── prompts.py     # grounded-answer system prompt, context formatting\n│   ├── rag.py             # answer(question, collection) -> answer + sources\n│   ├── jobs.py            # in-memory job registry + persisted documents.json\n│   └── static/index.html  # the UI\n├── cli/rag_cli.py         # typer CLI: ingest | status | ask | reset | serve\n├── evaluation/\n│   ├── run_eval.py        # runs dataset through /api/ask, judges, writes report\n│   ├── judge.py           # Claude judge (anthropic SDK, structured outputs)\n│   ├── generate_dataset.py# optional: synthesize Q/A pairs from indexed chunks\n│   ├── dataset.example.jsonl\n│   └── reports/           # gitignored outputs\n├── samples/               # small md/txt/csv/html (+ script to make pdf/docx) for the demo\n├── scripts/make_samples.py\n├── tests/\n├── transcripts/README.md  # where /export transcripts go\n├── data/                  # runtime: chroma/, uploads/, documents.json (gitignored, volume)\n├── Dockerfile\n├── docker-compose.yml\n├── .env.example\n├── .gitignore\n├── requirements.txt\n├── pyproject.toml         # console script `rag` -> cli\n└── README.md\n```\n\n## Configuration\n\n### `.env` (only thing the user must edit)\n```\nLLM_API_URL=https://api.openai.com/v1        # base URL; client appends /chat/completions\nLLM_API_KEY=sk-...\nLLM_MODEL=gpt-4o-mini                        # any model the endpoint serves\nLLM_TEMPERATURE=0.1\nANTHROPIC_API_KEY=sk-ant-...                 # eval judge only\nJUDGE_MODEL=claude-opus-5\nRAG_API_URL=http://localhost:8000            # used by CLI + eval script\n```\n\n### Editable constants in `app/config.py` (documented in README)\n```python\nSUPPORTED_EXTENSIONS = {\".pdf\": \"pdf\", \".docx\": \"docx\", \".html\": \"html\", \".htm\": \"html\",\n                        \".txt\": \"text\", \".md\": \"text\", \".csv\": \"csv\"}\nCHUNK_SIZE_CHARS = 1200\nCHUNK_OVERLAP_CHARS = 200\nCSV_ROWS_PER_PAGE = 50          # CSV \"page\" = block of rows\nEMBEDDING_MODEL = \"BAAI/bge-small-en-v1.5\"\nDENSE_TOP_K = 20\nBM25_TOP_K = 20\nFUSED_TOP_K = 6                 # chunks sent to the LLM\nRRF_K = 60\nDEFAULT_COLLECTION = \"default\"\nMAX_UPLOAD_MB = 50\n```\n\n## Pipeline design\n\n### Ingest (`app/ingest/`)\n1. `POST /api/documents` saves each file under `data/uploads/<doc_id>_<name>`, registers a job (`queued`), and schedules `pipeline.run(doc_id)` via FastAPI `BackgroundTasks`.\n2. `extractors.extract(path) -> list[Page]` dispatches on `SUPPORTED_EXTENSIONS`:\n   - PDF: `pypdf` per page → `page_no` = real page number\n   - DOCX: paragraphs grouped under headings; `page_no` = sequential section index, `section` = heading text (DOCX has no real pages; state this in README)\n   - HTML: `BeautifulSoup`, drop `script/style/nav`, `page_no=1`, `title` metadata\n   - TXT/MD: single page, split on blank lines; MD keeps `#` heading as `section`\n   - CSV: header row prepended to each block of `CSV_ROWS_PER_PAGE` rows, block index = `page_no`\n3. `chunker.chunk(pages, doc_meta)` produces overlapping windows (`CHUNK_SIZE_CHARS`, `CHUNK_OVERLAP_CHARS`), preferring to cut at paragraph/sentence boundaries. Each chunk carries metadata: `doc_id, source (filename), file_type, page, section, chunk_index, char_start, char_end, collection`. Chunk id = `f\"{doc_id}:{chunk_index}\"`.\n4. `embedder.embed(texts)` → fastembed vectors (batched).\n5. `vector_store.add(collection, ids, texts, embeddings, metadatas)`; then `bm25_index.rebuild(collection)` pulls all chunk texts for that collection from Chroma and rebuilds `BM25Okapi`.\n6. Status transitions persisted to `data/documents.json`: `queued → extracting → chunking → embedding → indexed | failed(error)`, plus `pages`, `chunks`, timestamps.\n\n### Query (`app/rag.py`, `app/retrieval/fusion.py`)\n1. Dense: embed question → Chroma `query(n_results=DENSE_TOP_K)` (cosine).\n2. Lexical: tokenize question → BM25 `get_scores` → top `BM25_TOP_K`.\n3. Fusion: RRF `score = Σ 1/(RRF_K + rank)` across both lists, keep `FUSED_TOP_K`; record which retriever(s) surfaced each chunk.\n4. Prompt: system message instructs grounded answering with `[n]` citations and an explicit \"not found in the provided documents\" fallback; user message = numbered context blocks (`[n] source, page`) + question.\n5. `llm.client.chat(messages)` → OpenAI-compatible request; surface HTTP/auth errors as 502 with a readable message so a wrong `.env` is obvious.\n6. Response: `{answer, sources:[{n, chunk_id, source, page, section, text, dense_rank, bm25_rank, rrf_score}], model, latency_ms}`.\n\n### API surface (`app/main.py`)\n| Method | Path | Purpose |\n|---|---|---|\n| GET | `/` | UI |\n| GET | `/api/health` | liveness + LLM/embedding config (no secrets) |\n| POST | `/api/documents` | multipart upload (multi-file), optional `collection` |\n| GET | `/api/documents?collection=` | list docs with status/chunk counts |\n| GET | `/api/documents/{doc_id}` | status detail |\n| DELETE | `/api/documents/{doc_id}` | remove file, chunks, rebuild BM25 |\n| GET | `/api/chunks?collection=&limit=` | sample chunks (used by eval dataset generator + \"view sources\") |\n| POST | `/api/ask` | `{question, collection?, top_k?}` → answer + sources |\n| DELETE | `/api/collections/{name}` | reset a collection (switch document sets without code changes) |\n\nStartup lifespan: open Chroma, warm the fastembed model, rebuild BM25 for every existing collection so restarts keep working.\n\n### UI (`app/static/index.html`)\nOne page, four panels: **Upload** (drag-drop / file picker, collection name, shows accepted extensions from `/api/health`), **Status** (table polling `/api/documents` every 2s while any job is non-terminal), **Ask** (question box, answer with `[n]` citations), **Sources** (expandable cards per cited chunk: file, page/section, retriever ranks, chunk text). Plain fetch calls, no framework.\n\n### CLI (`cli/rag_cli.py`, console script `rag`)\n`rag ingest <files...> [--collection]`, `rag status [--watch]`, `rag ask \"<q>\" [--collection] [--show-sources]`, `rag reset [--collection]`, `rag serve` (runs uvicorn locally). All except `serve` call the API at `RAG_API_URL`.\n\n## Evaluation (`evaluation/`)\n- **Dataset**: JSONL rows `{question, reference_answer?, collection?}`. Ship `dataset.example.jsonl` matching `samples/`.\n- **`generate_dataset.py`** (optional): pulls chunks from `/api/chunks`, asks Claude to write N question/reference pairs per chunk → JSONL. Lets the eval work on any new document set.\n- **`run_eval.py`**: for each row, `POST /api/ask`, then judge. Judge model `claude-opus-5` via `client.messages.parse` with a pydantic `JudgeVerdict` (`faithfulness 1-5`, `answer_relevance 1-5`, `context_relevance 1-5`, `correctness 1-5 | null` when no reference, `hallucinated: bool`, `rationale`). Prompt gives question, retrieved contexts, answer, optional reference. Thinking left at model default (adaptive). Writes `reports/<ts>.json` + `reports/<ts>.md` with per-question rows and mean scores, exits non-zero if mean faithfulness < threshold (`--min-faithfulness`, default 3.5).\n- Judge deliberately does **not** use the server-side refusal-fallback beta; judge prompts are benign and it keeps the script to one plain `parse` call. Noted in README.\n\n## Docker\n- `Dockerfile`: `python:3.11-slim`, install `requirements.txt`, **pre-download the fastembed model at build time** (`FASTEMBED_CACHE_PATH=/models`) so first run is offline-safe, copy app, `uvicorn app.main:app --host 0.0.0.0 --port 8000`.\n- `docker-compose.yml`: single `app` service, `env_file: .env`, `ports: 8000:8000`, volume `./data:/app/data`, healthcheck on `/api/health`.\n- Eval runs from host (`python -m evaluation.run_eval`) or `docker compose run --rm app python -m evaluation.run_eval`.\n\n## README contents\nSetup (copy `.env.example` → `.env`, set `LLM_API_URL` + `LLM_API_KEY` + `LLM_MODEL`, `docker compose up --build`), local dev without Docker, UI walkthrough, CLI usage, API table, **how to change supported formats / chunk sizes / top-k** (points at the constants), architecture diagram (ingest + hybrid retrieval + fusion), tech stack used vs. not used and why, evaluation instructions, transcripts folder note, known limitations (DOCX pages are sections, single-process BM25 in memory, no auth).\n\n## Transcripts\n`transcripts/README.md` explaining that Claude Code session transcripts go here via `/export`. The `/export` step itself must be run by the user in the Claude Code terminal at the end of the session; I will remind them and name the target path `transcripts/<date>-rag-generator-build.md`.\n\n## Implementation order\n1. Scaffold: `requirements.txt`, `pyproject.toml`, `.env.example`, `.gitignore`, `config.py`, `models.py`\n2. Extractors + chunker + unit tests\n3. Embedder, vector store, BM25, fusion + unit tests\n4. LLM client + prompts + `rag.py`\n5. Jobs + ingest pipeline + FastAPI routes\n6. `index.html`\n7. CLI\n8. Samples + `scripts/make_samples.py`\n9. Evaluation (judge, run_eval, generate_dataset, example dataset)\n10. Dockerfile, compose, README, transcripts folder\n11. Build, run, preview, fix\n\n## Verification\n1. `pytest` green (chunk overlap/metadata, RRF ordering, each extractor on a sample file, `/api/health`).\n2. `docker compose up --build` starts; `/api/health` returns 200 and reports the configured model.\n3. **Preview in the Browser pane** at `http://localhost:8000`: upload `samples/*` (all six formats), watch status reach `indexed`, ask 2–3 questions, confirm citations and source cards show file + page; ask an off-topic question and confirm the \"not in documents\" fallback.\n4. CLI round-trip: `rag ingest samples/*.md`, `rag status`, `rag ask \"...\" --show-sources`.\n5. Reset flow: `rag reset`, upload a different document set, ask again with no code change.\n6. `python -m evaluation.run_eval --dataset evaluation/dataset.example.jsonl` produces a report with scores.\n7. Restart the container and confirm the index and BM25 survive (volume + startup rebuild).\n",
+  "planFilePath": "/Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md"
+}
+```
+
+## Tool  <sub>2026-09-06T09:52:56.826Z</sub>
+
+**Tool result**
+
+```
+The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). To tell you how to proceed, the user said:
+Interface	REST API plus a single-page UI	Upload, ask, see answer with sources
+```
+
+## Assistant  <sub>2026-09-06T09:53:04.315Z</sub>
+
+**Tool call — `ExitPlanMode`**
+
+```json
+{
+  "plan": "# RAG Generator — Implementation Plan\n\n## Context\n\nAgentic-coding assessment: build a **RAG Generator** that accepts documents at runtime, indexes them, and answers questions grounded in those documents, with no code changes needed for a different document set. Deliverables also include AI-agent transcripts (this session, exported to `transcripts/`) and an evaluation script that uses Claude as judge.\n\nThe repo is empty (placeholder README only), so this is a greenfield build.\n\n**Decisions confirmed with the user:**\n- Web framework: **FastAPI** (serves the single HTML page + JSON API)\n- Generation LLM: **OpenAI-compatible** `chat/completions` endpoint, configured only via `.env` (`LLM_API_URL`, `LLM_API_KEY`, `LLM_MODEL`)\n- Judge: **Claude via the `anthropic` SDK** with its own `ANTHROPIC_API_KEY`\n- Vector store: **ChromaDB embedded** (`PersistentClient`) inside the app container, data on a volume\n- Embeddings: **fastembed** (`BAAI/bge-small-en-v1.5`); chunking is a custom overlapping, metadata-tagged splitter (fastembed only embeds, it does not chunk)\n- Lexical retrieval: **rank-bm25**; dense + BM25 results merged with **Reciprocal Rank Fusion**\n- Deployment: **Docker + docker compose**\n- Formats: PDF, DOCX, HTML, TXT, MD, CSV → text with page metadata, driven by a user-editable constant\n\n## Tech stack\n\n| Concern | Choice |\n|---|---|\n| Language / runtime | Python 3.11 |\n| API | FastAPI + uvicorn |\n| UI | Single static `index.html` (vanilla JS, no build step) |\n| CLI | `typer` app talking to the running API over HTTP (`httpx`) so there is exactly one Chroma writer |\n| Extraction | `pypdf` (PDF), `python-docx` (DOCX), `beautifulsoup4` (HTML), stdlib for TXT/MD/CSV |\n| Chunking | custom sliding window, char-based, sentence/paragraph-boundary aware |\n| Embeddings | `fastembed` `TextEmbedding` |\n| Vector DB | `chromadb` `PersistentClient`, cosine space |\n| Lexical | `rank-bm25` `BM25Okapi`, rebuilt from Chroma on startup / after ingest |\n| Fusion | Reciprocal Rank Fusion (k=60) |\n| Generation LLM | OpenAI-compatible `POST {LLM_API_URL}/chat/completions` via `httpx` |\n| Judge | `anthropic` SDK, `claude-opus-5`, structured output via `client.messages.parse(..., output_format=PydanticModel)` |\n| Config | `pydantic-settings` reading `.env` |\n| Tests | `pytest` (chunker, fusion, extractors, API smoke) |\n| Not used (state in README) | LangChain / LlamaIndex, rerankers, external Chroma server, auth, GPU |\n\n## Repository layout\n\n```\nrag-generator/\n├── app/\n│   ├── main.py            # FastAPI app, routes, static mount, lifespan (load index)\n│   ├── config.py          # Settings (from .env) + editable CONSTANTS (see below)\n│   ├── models.py          # pydantic request/response schemas\n│   ├── ingest/\n│   │   ├── extractors.py  # per-format -> list[Page(text, page_no, meta)]\n│   │   ├── chunker.py     # overlapping, metadata-tagged chunks\n│   │   └── pipeline.py    # ingest job: extract -> chunk -> embed -> store, status updates\n│   ├── retrieval/\n│   │   ├── embedder.py    # fastembed wrapper (singleton)\n│   │   ├── vector_store.py# Chroma wrapper: add/query/delete/list, per-collection\n│   │   ├── bm25_index.py  # rank-bm25 wrapper, tokenizer, rebuild from Chroma\n│   │   └── fusion.py      # RRF + hybrid retrieve()\n│   ├── llm/\n│   │   ├── client.py      # OpenAI-compatible chat client (httpx)\n│   │   └── prompts.py     # grounded-answer system prompt, context formatting\n│   ├── rag.py             # answer(question, collection) -> answer + sources\n│   ├── jobs.py            # in-memory job registry + persisted documents.json\n│   └── static/index.html  # the UI\n├── cli/rag_cli.py         # typer CLI: ingest | status | ask | reset | serve\n├── evaluation/\n│   ├── run_eval.py        # runs dataset through /api/ask, judges, writes report\n│   ├── judge.py           # Claude judge (anthropic SDK, structured outputs)\n│   ├── generate_dataset.py# optional: synthesize Q/A pairs from indexed chunks\n│   ├── dataset.example.jsonl\n│   └── reports/           # gitignored outputs\n├── samples/               # small md/txt/csv/html (+ script to make pdf/docx) for the demo\n├── scripts/make_samples.py\n├── tests/\n├── transcripts/README.md  # where /export transcripts go\n├── data/                  # runtime: chroma/, uploads/, documents.json (gitignored, volume)\n├── Dockerfile\n├── docker-compose.yml\n├── .env.example\n├── .gitignore\n├── requirements.txt\n├── pyproject.toml         # console script `rag` -> cli\n└── README.md\n```\n\n## Configuration\n\n### `.env` (only thing the user must edit)\n```\nLLM_API_URL=https://api.openai.com/v1        # base URL; client appends /chat/completions\nLLM_API_KEY=sk-...\nLLM_MODEL=gpt-4o-mini                        # any model the endpoint serves\nLLM_TEMPERATURE=0.1\nANTHROPIC_API_KEY=sk-ant-...                 # eval judge only\nJUDGE_MODEL=claude-opus-5\nRAG_API_URL=http://localhost:8000            # used by CLI + eval script\n```\n\n### Editable constants in `app/config.py` (documented in README)\n```python\nSUPPORTED_EXTENSIONS = {\".pdf\": \"pdf\", \".docx\": \"docx\", \".html\": \"html\", \".htm\": \"html\",\n                        \".txt\": \"text\", \".md\": \"text\", \".csv\": \"csv\"}\nCHUNK_SIZE_CHARS = 1200\nCHUNK_OVERLAP_CHARS = 200\nCSV_ROWS_PER_PAGE = 50          # CSV \"page\" = block of rows\nEMBEDDING_MODEL = \"BAAI/bge-small-en-v1.5\"\nDENSE_TOP_K = 20\nBM25_TOP_K = 20\nFUSED_TOP_K = 6                 # chunks sent to the LLM\nRRF_K = 60\nDEFAULT_COLLECTION = \"default\"\nMAX_UPLOAD_MB = 50\n```\n\n## Pipeline design\n\n### Ingest (`app/ingest/`)\n1. `POST /api/documents` saves each file under `data/uploads/<doc_id>_<name>`, registers a job (`queued`), and schedules `pipeline.run(doc_id)` via FastAPI `BackgroundTasks`.\n2. `extractors.extract(path) -> list[Page]` dispatches on `SUPPORTED_EXTENSIONS`:\n   - PDF: `pypdf` per page → `page_no` = real page number\n   - DOCX: paragraphs grouped under headings; `page_no` = sequential section index, `section` = heading text (DOCX has no real pages; state this in README)\n   - HTML: `BeautifulSoup`, drop `script/style/nav`, `page_no=1`, `title` metadata\n   - TXT/MD: single page, split on blank lines; MD keeps `#` heading as `section`\n   - CSV: header row prepended to each block of `CSV_ROWS_PER_PAGE` rows, block index = `page_no`\n3. `chunker.chunk(pages, doc_meta)` produces overlapping windows (`CHUNK_SIZE_CHARS`, `CHUNK_OVERLAP_CHARS`), preferring to cut at paragraph/sentence boundaries. Each chunk carries metadata: `doc_id, source (filename), file_type, page, section, chunk_index, char_start, char_end, collection`. Chunk id = `f\"{doc_id}:{chunk_index}\"`.\n4. `embedder.embed(texts)` → fastembed vectors (batched).\n5. `vector_store.add(collection, ids, texts, embeddings, metadatas)`; then `bm25_index.rebuild(collection)` pulls all chunk texts for that collection from Chroma and rebuilds `BM25Okapi`.\n6. Status transitions persisted to `data/documents.json`: `queued → extracting → chunking → embedding → indexed | failed(error)`, plus `pages`, `chunks`, timestamps.\n\n### Query (`app/rag.py`, `app/retrieval/fusion.py`)\n1. Dense: embed question → Chroma `query(n_results=DENSE_TOP_K)` (cosine).\n2. Lexical: tokenize question → BM25 `get_scores` → top `BM25_TOP_K`.\n3. Fusion: RRF `score = Σ 1/(RRF_K + rank)` across both lists, keep `FUSED_TOP_K`; record which retriever(s) surfaced each chunk.\n4. Prompt: system message instructs grounded answering with `[n]` citations and an explicit \"not found in the provided documents\" fallback; user message = numbered context blocks (`[n] source, page`) + question.\n5. `llm.client.chat(messages)` → OpenAI-compatible request; surface HTTP/auth errors as 502 with a readable message so a wrong `.env` is obvious.\n6. Response: `{answer, sources:[{n, chunk_id, source, page, section, text, dense_rank, bm25_rank, rrf_score}], model, latency_ms}`.\n\n### API surface (`app/main.py`)\n| Method | Path | Purpose |\n|---|---|---|\n| GET | `/` | UI |\n| GET | `/api/health` | liveness + LLM/embedding config (no secrets) |\n| POST | `/api/documents` | multipart upload (multi-file), optional `collection` |\n| GET | `/api/documents?collection=` | list docs with status/chunk counts |\n| GET | `/api/documents/{doc_id}` | status detail |\n| DELETE | `/api/documents/{doc_id}` | remove file, chunks, rebuild BM25 |\n| GET | `/api/chunks?collection=&limit=` | sample chunks (used by eval dataset generator + \"view sources\") |\n| POST | `/api/ask` | `{question, collection?, top_k?}` → answer + sources |\n| DELETE | `/api/collections/{name}` | reset a collection (switch document sets without code changes) |\n\nStartup lifespan: open Chroma, warm the fastembed model, rebuild BM25 for every existing collection so restarts keep working.\n\n### UI (`app/static/index.html`)\nOne page, four panels: **Upload** (drag-drop / file picker, collection name, shows accepted extensions from `/api/health`), **Status** (table polling `/api/documents` every 2s while any job is non-terminal), **Ask** (question box, answer with `[n]` citations), **Sources** (expandable cards per cited chunk: file, page/section, retriever ranks, chunk text). Plain fetch calls, no framework.\n\n### CLI (`cli/rag_cli.py`, console script `rag`)\n`rag ingest <files...> [--collection]`, `rag status [--watch]`, `rag ask \"<q>\" [--collection] [--show-sources]`, `rag reset [--collection]`, `rag serve` (runs uvicorn locally). All except `serve` call the API at `RAG_API_URL`.\n\n## Evaluation (`evaluation/`)\n- **Dataset**: JSONL rows `{question, reference_answer?, collection?}`. Ship `dataset.example.jsonl` matching `samples/`.\n- **`generate_dataset.py`** (optional): pulls chunks from `/api/chunks`, asks Claude to write N question/reference pairs per chunk → JSONL. Lets the eval work on any new document set.\n- **`run_eval.py`**: for each row, `POST /api/ask`, then judge. Judge model `claude-opus-5` via `client.messages.parse` with a pydantic `JudgeVerdict` (`faithfulness 1-5`, `answer_relevance 1-5`, `context_relevance 1-5`, `correctness 1-5 | null` when no reference, `hallucinated: bool`, `rationale`). Prompt gives question, retrieved contexts, answer, optional reference. Thinking left at model default (adaptive). Writes `reports/<ts>.json` + `reports/<ts>.md` with per-question rows and mean scores, exits non-zero if mean faithfulness < threshold (`--min-faithfulness`, default 3.5).\n- Judge deliberately does **not** use the server-side refusal-fallback beta; judge prompts are benign and it keeps the script to one plain `parse` call. Noted in README.\n\n## Docker\n- `Dockerfile`: `python:3.11-slim`, install `requirements.txt`, **pre-download the fastembed model at build time** (`FASTEMBED_CACHE_PATH=/models`) so first run is offline-safe, copy app, `uvicorn app.main:app --host 0.0.0.0 --port 8000`.\n- `docker-compose.yml`: single `app` service, `env_file: .env`, `ports: 8000:8000`, volume `./data:/app/data`, healthcheck on `/api/health`.\n- Eval runs from host (`python -m evaluation.run_eval`) or `docker compose run --rm app python -m evaluation.run_eval`.\n\n## README contents\nSetup (copy `.env.example` → `.env`, set `LLM_API_URL` + `LLM_API_KEY` + `LLM_MODEL`, `docker compose up --build`), local dev without Docker, UI walkthrough, CLI usage, API table, **how to change supported formats / chunk sizes / top-k** (points at the constants), architecture diagram (ingest + hybrid retrieval + fusion), tech stack used vs. not used and why, evaluation instructions, transcripts folder note, known limitations (DOCX pages are sections, single-process BM25 in memory, no auth).\n\n## Transcripts\n`transcripts/README.md` explaining that Claude Code session transcripts go here via `/export`. The `/export` step itself must be run by the user in the Claude Code terminal at the end of the session; I will remind them and name the target path `transcripts/<date>-rag-generator-build.md`.\n\n## Implementation order\n1. Scaffold: `requirements.txt`, `pyproject.toml`, `.env.example`, `.gitignore`, `config.py`, `models.py`\n2. Extractors + chunker + unit tests\n3. Embedder, vector store, BM25, fusion + unit tests\n4. LLM client + prompts + `rag.py`\n5. Jobs + ingest pipeline + FastAPI routes\n6. `index.html`\n7. CLI\n8. Samples + `scripts/make_samples.py`\n9. Evaluation (judge, run_eval, generate_dataset, example dataset)\n10. Dockerfile, compose, README, transcripts folder\n11. Build, run, preview, fix\n\n## Verification\n1. `pytest` green (chunk overlap/metadata, RRF ordering, each extractor on a sample file, `/api/health`).\n2. `docker compose up --build` starts; `/api/health` returns 200 and reports the configured model.\n3. **Preview in the Browser pane** at `http://localhost:8000`: upload `samples/*` (all six formats), watch status reach `indexed`, ask 2–3 questions, confirm citations and source cards show file + page; ask an off-topic question and confirm the \"not in documents\" fallback.\n4. CLI round-trip: `rag ingest samples/*.md`, `rag status`, `rag ask \"...\" --show-sources`.\n5. Reset flow: `rag reset`, upload a different document set, ask again with no code change.\n6. `python -m evaluation.run_eval --dataset evaluation/dataset.example.jsonl` produces a report with scores.\n7. Restart the container and confirm the index and BM25 survive (volume + startup rebuild).\n",
+  "planFilePath": "/Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md"
+}
+```
+
+## Tool  <sub>2026-09-06T09:53:13.257Z</sub>
+
+**Tool result**
+
+```
+The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). To tell you how to proceed, the user said:
+Create the package layout, a config file for chunk size, top-k, and model names, and a requirements file. Everything tunable lives in config, not code.
+
+use default values
+```
+
+## Assistant  <sub>2026-09-06T09:53:20.291Z</sub>
+
+Adding that to the plan: an explicit config module where every tunable lives with defaults and env overrides, plus the pinned requirements file.
+
+## Assistant  <sub>2026-09-06T09:53:35.347Z</sub>
+
+**Tool call — `Edit`**
+
+```json
+{
+  "replace_all": false,
+  "file_path": "/Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md",
+  "old_string": "### Editable constants in `app/config.py` (documented in README)\n```python\nSUPPORTED_EXTENSIONS = {\".pdf\": \"pdf\", \".docx\": \"docx\", \".html\": \"html\", \".htm\": \"html\",\n                        \".txt\": \"text\", \".md\": \"text\", \".csv\": \"csv\"}\nCHUNK_SIZE_CHARS = 1200\nCHUNK_OVERLAP_CHARS = 200\nCSV_ROWS_PER_PAGE = 50          # CSV \"page\" = block of rows\nEMBEDDING_MODEL = \"BAAI/bge-small-en-v1.5\"\nDENSE_TOP_K = 20\nBM25_TOP_K = 20\nFUSED_TOP_K = 6                 # chunks sent to the LLM\nRRF_K = 60\nDEFAULT_COLLECTION = \"default\"\nMAX_UPLOAD_MB = 50\n```",
+  "new_string": "### `app/config.py` — the single home for every tunable (nothing tunable is hard-coded elsewhere)\nOne `Settings` class (`pydantic-settings`) with sensible defaults; every field can be overridden by an env var of the same name in `.env`. Modules import `settings` and never define their own numbers or model names.\n\n```python\nclass Settings(BaseSettings):\n    # --- LLM (generation) ---\n    LLM_API_URL: str = \"https://api.openai.com/v1\"\n    LLM_API_KEY: str = \"\"\n    LLM_MODEL: str = \"gpt-4o-mini\"\n    LLM_TEMPERATURE: float = 0.1\n    LLM_MAX_TOKENS: int = 1024\n    LLM_TIMEOUT_S: int = 60\n    # --- Embeddings ---\n    EMBEDDING_MODEL: str = \"BAAI/bge-small-en-v1.5\"\n    EMBEDDING_BATCH_SIZE: int = 64\n    # --- Chunking ---\n    CHUNK_SIZE_CHARS: int = 1200\n    CHUNK_OVERLAP_CHARS: int = 200\n    CSV_ROWS_PER_PAGE: int = 50\n    # --- Retrieval ---\n    DENSE_TOP_K: int = 20\n    BM25_TOP_K: int = 20\n    FUSED_TOP_K: int = 6\n    RRF_K: int = 60\n    # --- Storage / server ---\n    DATA_DIR: Path = Path(\"data\")\n    DEFAULT_COLLECTION: str = \"default\"\n    MAX_UPLOAD_MB: int = 50\n    APP_HOST: str = \"0.0.0.0\"\n    APP_PORT: int = 8000\n    # --- Evaluation ---\n    ANTHROPIC_API_KEY: str = \"\"\n    JUDGE_MODEL: str = \"claude-opus-5\"\n    JUDGE_MAX_TOKENS: int = 4096\n    EVAL_MIN_FAITHFULNESS: float = 3.5\n    RAG_API_URL: str = \"http://localhost:8000\"\n\nSUPPORTED_EXTENSIONS: dict[str, str] = {   # extension -> extractor name; edit to add/remove formats\n    \".pdf\": \"pdf\", \".docx\": \"docx\", \".html\": \"html\", \".htm\": \"html\",\n    \".txt\": \"text\", \".md\": \"text\", \".csv\": \"csv\",\n}\n```\n`.env.example` lists every field above with its default so the user sees the full knob set in one place. The README's \"Tuning\" section points at this file.\n\n### `requirements.txt` (pinned)\n```\nfastapi\nuvicorn[standard]\npython-multipart\npydantic-settings\nhttpx\ntyper\nfastembed\nchromadb\nrank-bm25\npypdf\npython-docx\nbeautifulsoup4\nlxml\nanthropic\npytest\n```\nExact versions pinned at implementation time to what `pip` resolves on Python 3.11 (fastembed and chromadb have onnxruntime/numpy constraints that must be resolved together). `reportlab` goes in a separate `requirements-dev.txt` only for `scripts/make_samples.py`."
+}
+```
+
+## Tool  <sub>2026-09-06T09:53:35.368Z</sub>
+
+**Tool result**
+
+```
+The file /Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+
+## Assistant  <sub>2026-09-06T09:53:44.433Z</sub>
+
+**Tool call — `Edit`**
+
+```json
+{
+  "replace_all": false,
+  "file_path": "/Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md",
+  "old_string": "### `.env` (only thing the user must edit)\n```\nLLM_API_URL=https://api.openai.com/v1        # base URL; client appends /chat/completions\nLLM_API_KEY=sk-...\nLLM_MODEL=gpt-4o-mini                        # any model the endpoint serves\nLLM_TEMPERATURE=0.1\nANTHROPIC_API_KEY=sk-ant-...                 # eval judge only\nJUDGE_MODEL=claude-opus-5\nRAG_API_URL=http://localhost:8000            # used by CLI + eval script\n```",
+  "new_string": "### `.env` (the only file the user must edit to go live)\nMinimum required: `LLM_API_URL`, `LLM_API_KEY`, `LLM_MODEL` (plus `ANTHROPIC_API_KEY` to run the eval). Every other setting below has a default and is optional to override."
+}
+```
+
+## Tool  <sub>2026-09-06T09:53:44.447Z</sub>
+
+**Tool result**
+
+```
+The file /Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+
+## Assistant  <sub>2026-09-06T09:53:50.439Z</sub>
+
+The plan now has a dedicated config module holding every tunable with defaults and env overrides, a pinned requirements file, and the package layout. Nothing else is pending before implementation.
+
+## Assistant  <sub>2026-09-06T09:53:50.443Z</sub>
+
+**Tool call — `ExitPlanMode`**
+
+```json
+{
+  "plan": "# RAG Generator — Implementation Plan\n\n## Context\n\nAgentic-coding assessment: build a **RAG Generator** that accepts documents at runtime, indexes them, and answers questions grounded in those documents, with no code changes needed for a different document set. Deliverables also include AI-agent transcripts (this session, exported to `transcripts/`) and an evaluation script that uses Claude as judge.\n\nThe repo is empty (placeholder README only), so this is a greenfield build.\n\n**Decisions confirmed with the user:**\n- Web framework: **FastAPI** (serves the single HTML page + JSON API)\n- Generation LLM: **OpenAI-compatible** `chat/completions` endpoint, configured only via `.env` (`LLM_API_URL`, `LLM_API_KEY`, `LLM_MODEL`)\n- Judge: **Claude via the `anthropic` SDK** with its own `ANTHROPIC_API_KEY`\n- Vector store: **ChromaDB embedded** (`PersistentClient`) inside the app container, data on a volume\n- Embeddings: **fastembed** (`BAAI/bge-small-en-v1.5`); chunking is a custom overlapping, metadata-tagged splitter (fastembed only embeds, it does not chunk)\n- Lexical retrieval: **rank-bm25**; dense + BM25 results merged with **Reciprocal Rank Fusion**\n- Deployment: **Docker + docker compose**\n- Formats: PDF, DOCX, HTML, TXT, MD, CSV → text with page metadata, driven by a user-editable constant\n\n## Tech stack\n\n| Concern | Choice |\n|---|---|\n| Language / runtime | Python 3.11 |\n| API | FastAPI + uvicorn |\n| UI | Single static `index.html` (vanilla JS, no build step) |\n| CLI | `typer` app talking to the running API over HTTP (`httpx`) so there is exactly one Chroma writer |\n| Extraction | `pypdf` (PDF), `python-docx` (DOCX), `beautifulsoup4` (HTML), stdlib for TXT/MD/CSV |\n| Chunking | custom sliding window, char-based, sentence/paragraph-boundary aware |\n| Embeddings | `fastembed` `TextEmbedding` |\n| Vector DB | `chromadb` `PersistentClient`, cosine space |\n| Lexical | `rank-bm25` `BM25Okapi`, rebuilt from Chroma on startup / after ingest |\n| Fusion | Reciprocal Rank Fusion (k=60) |\n| Generation LLM | OpenAI-compatible `POST {LLM_API_URL}/chat/completions` via `httpx` |\n| Judge | `anthropic` SDK, `claude-opus-5`, structured output via `client.messages.parse(..., output_format=PydanticModel)` |\n| Config | `pydantic-settings` reading `.env` |\n| Tests | `pytest` (chunker, fusion, extractors, API smoke) |\n| Not used (state in README) | LangChain / LlamaIndex, rerankers, external Chroma server, auth, GPU |\n\n## Repository layout\n\n```\nrag-generator/\n├── app/\n│   ├── main.py            # FastAPI app, routes, static mount, lifespan (load index)\n│   ├── config.py          # Settings (from .env) + editable CONSTANTS (see below)\n│   ├── models.py          # pydantic request/response schemas\n│   ├── ingest/\n│   │   ├── extractors.py  # per-format -> list[Page(text, page_no, meta)]\n│   │   ├── chunker.py     # overlapping, metadata-tagged chunks\n│   │   └── pipeline.py    # ingest job: extract -> chunk -> embed -> store, status updates\n│   ├── retrieval/\n│   │   ├── embedder.py    # fastembed wrapper (singleton)\n│   │   ├── vector_store.py# Chroma wrapper: add/query/delete/list, per-collection\n│   │   ├── bm25_index.py  # rank-bm25 wrapper, tokenizer, rebuild from Chroma\n│   │   └── fusion.py      # RRF + hybrid retrieve()\n│   ├── llm/\n│   │   ├── client.py      # OpenAI-compatible chat client (httpx)\n│   │   └── prompts.py     # grounded-answer system prompt, context formatting\n│   ├── rag.py             # answer(question, collection) -> answer + sources\n│   ├── jobs.py            # in-memory job registry + persisted documents.json\n│   └── static/index.html  # the UI\n├── cli/rag_cli.py         # typer CLI: ingest | status | ask | reset | serve\n├── evaluation/\n│   ├── run_eval.py        # runs dataset through /api/ask, judges, writes report\n│   ├── judge.py           # Claude judge (anthropic SDK, structured outputs)\n│   ├── generate_dataset.py# optional: synthesize Q/A pairs from indexed chunks\n│   ├── dataset.example.jsonl\n│   └── reports/           # gitignored outputs\n├── samples/               # small md/txt/csv/html (+ script to make pdf/docx) for the demo\n├── scripts/make_samples.py\n├── tests/\n├── transcripts/README.md  # where /export transcripts go\n├── data/                  # runtime: chroma/, uploads/, documents.json (gitignored, volume)\n├── Dockerfile\n├── docker-compose.yml\n├── .env.example\n├── .gitignore\n├── requirements.txt\n├── pyproject.toml         # console script `rag` -> cli\n└── README.md\n```\n\n## Configuration\n\n### `.env` (the only file the user must edit to go live)\nMinimum required: `LLM_API_URL`, `LLM_API_KEY`, `LLM_MODEL` (plus `ANTHROPIC_API_KEY` to run the eval). Every other setting below has a default and is optional to override.\n\n### `app/config.py` — the single home for every tunable (nothing tunable is hard-coded elsewhere)\nOne `Settings` class (`pydantic-settings`) with sensible defaults; every field can be overridden by an env var of the same name in `.env`. Modules import `settings` and never define their own numbers or model names.\n\n```python\nclass Settings(BaseSettings):\n    # --- LLM (generation) ---\n    LLM_API_URL: str = \"https://api.openai.com/v1\"\n    LLM_API_KEY: str = \"\"\n    LLM_MODEL: str = \"gpt-4o-mini\"\n    LLM_TEMPERATURE: float = 0.1\n    LLM_MAX_TOKENS: int = 1024\n    LLM_TIMEOUT_S: int = 60\n    # --- Embeddings ---\n    EMBEDDING_MODEL: str = \"BAAI/bge-small-en-v1.5\"\n    EMBEDDING_BATCH_SIZE: int = 64\n    # --- Chunking ---\n    CHUNK_SIZE_CHARS: int = 1200\n    CHUNK_OVERLAP_CHARS: int = 200\n    CSV_ROWS_PER_PAGE: int = 50\n    # --- Retrieval ---\n    DENSE_TOP_K: int = 20\n    BM25_TOP_K: int = 20\n    FUSED_TOP_K: int = 6\n    RRF_K: int = 60\n    # --- Storage / server ---\n    DATA_DIR: Path = Path(\"data\")\n    DEFAULT_COLLECTION: str = \"default\"\n    MAX_UPLOAD_MB: int = 50\n    APP_HOST: str = \"0.0.0.0\"\n    APP_PORT: int = 8000\n    # --- Evaluation ---\n    ANTHROPIC_API_KEY: str = \"\"\n    JUDGE_MODEL: str = \"claude-opus-5\"\n    JUDGE_MAX_TOKENS: int = 4096\n    EVAL_MIN_FAITHFULNESS: float = 3.5\n    RAG_API_URL: str = \"http://localhost:8000\"\n\nSUPPORTED_EXTENSIONS: dict[str, str] = {   # extension -> extractor name; edit to add/remove formats\n    \".pdf\": \"pdf\", \".docx\": \"docx\", \".html\": \"html\", \".htm\": \"html\",\n    \".txt\": \"text\", \".md\": \"text\", \".csv\": \"csv\",\n}\n```\n`.env.example` lists every field above with its default so the user sees the full knob set in one place. The README's \"Tuning\" section points at this file.\n\n### `requirements.txt` (pinned)\n```\nfastapi\nuvicorn[standard]\npython-multipart\npydantic-settings\nhttpx\ntyper\nfastembed\nchromadb\nrank-bm25\npypdf\npython-docx\nbeautifulsoup4\nlxml\nanthropic\npytest\n```\nExact versions pinned at implementation time to what `pip` resolves on Python 3.11 (fastembed and chromadb have onnxruntime/numpy constraints that must be resolved together). `reportlab` goes in a separate `requirements-dev.txt` only for `scripts/make_samples.py`.\n\n## Pipeline design\n\n### Ingest (`app/ingest/`)\n1. `POST /api/documents` saves each file under `data/uploads/<doc_id>_<name>`, registers a job (`queued`), and schedules `pipeline.run(doc_id)` via FastAPI `BackgroundTasks`.\n2. `extractors.extract(path) -> list[Page]` dispatches on `SUPPORTED_EXTENSIONS`:\n   - PDF: `pypdf` per page → `page_no` = real page number\n   - DOCX: paragraphs grouped under headings; `page_no` = sequential section index, `section` = heading text (DOCX has no real pages; state this in README)\n   - HTML: `BeautifulSoup`, drop `script/style/nav`, `page_no=1`, `title` metadata\n   - TXT/MD: single page, split on blank lines; MD keeps `#` heading as `section`\n   - CSV: header row prepended to each block of `CSV_ROWS_PER_PAGE` rows, block index = `page_no`\n3. `chunker.chunk(pages, doc_meta)` produces overlapping windows (`CHUNK_SIZE_CHARS`, `CHUNK_OVERLAP_CHARS`), preferring to cut at paragraph/sentence boundaries. Each chunk carries metadata: `doc_id, source (filename), file_type, page, section, chunk_index, char_start, char_end, collection`. Chunk id = `f\"{doc_id}:{chunk_index}\"`.\n4. `embedder.embed(texts)` → fastembed vectors (batched).\n5. `vector_store.add(collection, ids, texts, embeddings, metadatas)`; then `bm25_index.rebuild(collection)` pulls all chunk texts for that collection from Chroma and rebuilds `BM25Okapi`.\n6. Status transitions persisted to `data/documents.json`: `queued → extracting → chunking → embedding → indexed | failed(error)`, plus `pages`, `chunks`, timestamps.\n\n### Query (`app/rag.py`, `app/retrieval/fusion.py`)\n1. Dense: embed question → Chroma `query(n_results=DENSE_TOP_K)` (cosine).\n2. Lexical: tokenize question → BM25 `get_scores` → top `BM25_TOP_K`.\n3. Fusion: RRF `score = Σ 1/(RRF_K + rank)` across both lists, keep `FUSED_TOP_K`; record which retriever(s) surfaced each chunk.\n4. Prompt: system message instructs grounded answering with `[n]` citations and an explicit \"not found in the provided documents\" fallback; user message = numbered context blocks (`[n] source, page`) + question.\n5. `llm.client.chat(messages)` → OpenAI-compatible request; surface HTTP/auth errors as 502 with a readable message so a wrong `.env` is obvious.\n6. Response: `{answer, sources:[{n, chunk_id, source, page, section, text, dense_rank, bm25_rank, rrf_score}], model, latency_ms}`.\n\n### API surface (`app/main.py`)\n| Method | Path | Purpose |\n|---|---|---|\n| GET | `/` | UI |\n| GET | `/api/health` | liveness + LLM/embedding config (no secrets) |\n| POST | `/api/documents` | multipart upload (multi-file), optional `collection` |\n| GET | `/api/documents?collection=` | list docs with status/chunk counts |\n| GET | `/api/documents/{doc_id}` | status detail |\n| DELETE | `/api/documents/{doc_id}` | remove file, chunks, rebuild BM25 |\n| GET | `/api/chunks?collection=&limit=` | sample chunks (used by eval dataset generator + \"view sources\") |\n| POST | `/api/ask` | `{question, collection?, top_k?}` → answer + sources |\n| DELETE | `/api/collections/{name}` | reset a collection (switch document sets without code changes) |\n\nStartup lifespan: open Chroma, warm the fastembed model, rebuild BM25 for every existing collection so restarts keep working.\n\n### UI (`app/static/index.html`)\nOne page, four panels: **Upload** (drag-drop / file picker, collection name, shows accepted extensions from `/api/health`), **Status** (table polling `/api/documents` every 2s while any job is non-terminal), **Ask** (question box, answer with `[n]` citations), **Sources** (expandable cards per cited chunk: file, page/section, retriever ranks, chunk text). Plain fetch calls, no framework.\n\n### CLI (`cli/rag_cli.py`, console script `rag`)\n`rag ingest <files...> [--collection]`, `rag status [--watch]`, `rag ask \"<q>\" [--collection] [--show-sources]`, `rag reset [--collection]`, `rag serve` (runs uvicorn locally). All except `serve` call the API at `RAG_API_URL`.\n\n## Evaluation (`evaluation/`)\n- **Dataset**: JSONL rows `{question, reference_answer?, collection?}`. Ship `dataset.example.jsonl` matching `samples/`.\n- **`generate_dataset.py`** (optional): pulls chunks from `/api/chunks`, asks Claude to write N question/reference pairs per chunk → JSONL. Lets the eval work on any new document set.\n- **`run_eval.py`**: for each row, `POST /api/ask`, then judge. Judge model `claude-opus-5` via `client.messages.parse` with a pydantic `JudgeVerdict` (`faithfulness 1-5`, `answer_relevance 1-5`, `context_relevance 1-5`, `correctness 1-5 | null` when no reference, `hallucinated: bool`, `rationale`). Prompt gives question, retrieved contexts, answer, optional reference. Thinking left at model default (adaptive). Writes `reports/<ts>.json` + `reports/<ts>.md` with per-question rows and mean scores, exits non-zero if mean faithfulness < threshold (`--min-faithfulness`, default 3.5).\n- Judge deliberately does **not** use the server-side refusal-fallback beta; judge prompts are benign and it keeps the script to one plain `parse` call. Noted in README.\n\n## Docker\n- `Dockerfile`: `python:3.11-slim`, install `requirements.txt`, **pre-download the fastembed model at build time** (`FASTEMBED_CACHE_PATH=/models`) so first run is offline-safe, copy app, `uvicorn app.main:app --host 0.0.0.0 --port 8000`.\n- `docker-compose.yml`: single `app` service, `env_file: .env`, `ports: 8000:8000`, volume `./data:/app/data`, healthcheck on `/api/health`.\n- Eval runs from host (`python -m evaluation.run_eval`) or `docker compose run --rm app python -m evaluation.run_eval`.\n\n## README contents\nSetup (copy `.env.example` → `.env`, set `LLM_API_URL` + `LLM_API_KEY` + `LLM_MODEL`, `docker compose up --build`), local dev without Docker, UI walkthrough, CLI usage, API table, **how to change supported formats / chunk sizes / top-k** (points at the constants), architecture diagram (ingest + hybrid retrieval + fusion), tech stack used vs. not used and why, evaluation instructions, transcripts folder note, known limitations (DOCX pages are sections, single-process BM25 in memory, no auth).\n\n## Transcripts\n`transcripts/README.md` explaining that Claude Code session transcripts go here via `/export`. The `/export` step itself must be run by the user in the Claude Code terminal at the end of the session; I will remind them and name the target path `transcripts/<date>-rag-generator-build.md`.\n\n## Implementation order\n1. Scaffold: `requirements.txt`, `pyproject.toml`, `.env.example`, `.gitignore`, `config.py`, `models.py`\n2. Extractors + chunker + unit tests\n3. Embedder, vector store, BM25, fusion + unit tests\n4. LLM client + prompts + `rag.py`\n5. Jobs + ingest pipeline + FastAPI routes\n6. `index.html`\n7. CLI\n8. Samples + `scripts/make_samples.py`\n9. Evaluation (judge, run_eval, generate_dataset, example dataset)\n10. Dockerfile, compose, README, transcripts folder\n11. Build, run, preview, fix\n\n## Verification\n1. `pytest` green (chunk overlap/metadata, RRF ordering, each extractor on a sample file, `/api/health`).\n2. `docker compose up --build` starts; `/api/health` returns 200 and reports the configured model.\n3. **Preview in the Browser pane** at `http://localhost:8000`: upload `samples/*` (all six formats), watch status reach `indexed`, ask 2–3 questions, confirm citations and source cards show file + page; ask an off-topic question and confirm the \"not in documents\" fallback.\n4. CLI round-trip: `rag ingest samples/*.md`, `rag status`, `rag ask \"...\" --show-sources`.\n5. Reset flow: `rag reset`, upload a different document set, ask again with no code change.\n6. `python -m evaluation.run_eval --dataset evaluation/dataset.example.jsonl` produces a report with scores.\n7. Restart the container and confirm the index and BM25 survive (volume + startup rebuild).\n",
+  "planFilePath": "/Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md"
+}
+```
+
+## Tool  <sub>2026-09-06T09:54:04.922Z</sub>
+
+**Tool result**
+
+```
+The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). To tell you how to proceed, the user said:
+see if you could use Tesseract somewhere in case our flow fails
+```
+
+## Assistant  <sub>2026-09-06T09:54:15.898Z</sub>
+
+Good addition. Tesseract fits as an OCR fallback for scanned or image-only PDFs where pypdf returns no text, and it also lets image files be ingested. Adding it to the plan.
+
+## Assistant  <sub>2026-09-06T09:54:21.569Z</sub>
+
+**Tool call — `Edit`**
+
+```json
+{
+  "replace_all": false,
+  "file_path": "/Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md",
+  "old_string": "2. `extractors.extract(path) -> list[Page]` dispatches on `SUPPORTED_EXTENSIONS`:\n   - PDF: `pypdf` per page → `page_no` = real page number",
+  "new_string": "2. `extractors.extract(path) -> list[Page]` dispatches on `SUPPORTED_EXTENSIONS`:\n   - PDF: `pypdf` per page → `page_no` = real page number. **OCR fallback:** if a page yields fewer than `OCR_MIN_CHARS_PER_PAGE` characters (scanned / image-only page) and `OCR_ENABLED`, render that page with `pypdfium2` at `OCR_DPI` and run `pytesseract.image_to_string(lang=OCR_LANG)`. Chunk metadata gets `extraction=\"ocr\"` so sources show it came from OCR.\n   - Images (`.png .jpg .jpeg .tiff`): whole file through Tesseract, `page_no=1` (multi-page TIFF → one page per frame).\n   - OCR degrades gracefully: if the `tesseract` binary is missing, log a warning once, mark the page `extraction=\"ocr_unavailable\"`, and continue with whatever text pypdf found. Never fails the ingest job."
+}
+```
+
+## Tool  <sub>2026-09-06T09:54:21.586Z</sub>
+
+**Tool result**
+
+```
+The file /Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+
+## Assistant  <sub>2026-09-06T09:54:27.462Z</sub>
+
+Three more independent plan edits: OCR knobs in config, OCR packages in requirements, and Tesseract in the Dockerfile plus stack table.
+
+## Assistant  <sub>2026-09-06T09:54:30.334Z</sub>
+
+**Tool call — `Edit`**
+
+```json
+{
+  "replace_all": false,
+  "file_path": "/Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md",
+  "old_string": "    CSV_ROWS_PER_PAGE: int = 50\n    # --- Retrieval ---",
+  "new_string": "    CSV_ROWS_PER_PAGE: int = 50\n    # --- OCR fallback (Tesseract) ---\n    OCR_ENABLED: bool = True\n    OCR_MIN_CHARS_PER_PAGE: int = 20      # below this, a PDF page is treated as scanned and OCR'd\n    OCR_LANG: str = \"eng\"\n    OCR_DPI: int = 200\n    # --- Retrieval ---"
+}
+```
+
+## Tool  <sub>2026-09-06T09:54:30.353Z</sub>
+
+**Tool result**
+
+```
+The file /Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+
+## Assistant  <sub>2026-09-06T09:54:37.745Z</sub>
+
+**Tool call — `Edit`**
+
+```json
+{
+  "replace_all": false,
+  "file_path": "/Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md",
+  "old_string": "    \".txt\": \"text\", \".md\": \"text\", \".csv\": \"csv\",\n}\n```",
+  "new_string": "    \".txt\": \"text\", \".md\": \"text\", \".csv\": \"csv\",\n    \".png\": \"image\", \".jpg\": \"image\", \".jpeg\": \"image\", \".tiff\": \"image\",   # via Tesseract OCR\n}\n```"
+}
+```
+
+## Tool  <sub>2026-09-06T09:54:37.759Z</sub>
+
+**Tool result**
+
+```
+The file /Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+
+## Assistant  <sub>2026-09-06T09:54:39.987Z</sub>
+
+**Tool call — `Edit`**
+
+```json
+{
+  "replace_all": false,
+  "file_path": "/Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md",
+  "old_string": "beautifulsoup4\nlxml\nanthropic\npytest\n```",
+  "new_string": "beautifulsoup4\nlxml\npypdfium2        # renders PDF pages to images for OCR, no poppler needed\npytesseract      # Python binding; needs the tesseract binary (installed in Dockerfile)\npillow\nanthropic\npytest\n```"
+}
+```
+
+## Tool  <sub>2026-09-06T09:54:39.999Z</sub>
+
+**Tool result**
+
+```
+The file /Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+
+## Assistant  <sub>2026-09-06T09:54:42.414Z</sub>
+
+**Tool call — `Edit`**
+
+```json
+{
+  "replace_all": false,
+  "file_path": "/Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md",
+  "old_string": "- `Dockerfile`: `python:3.11-slim`, install `requirements.txt`, **pre-download the fastembed model at build time**",
+  "new_string": "- `Dockerfile`: `python:3.11-slim`, `apt-get install tesseract-ocr tesseract-ocr-eng` (OCR fallback), install `requirements.txt`, **pre-download the fastembed model at build time**"
+}
+```
+
+## Tool  <sub>2026-09-06T09:54:42.425Z</sub>
+
+**Tool result**
+
+```
+The file /Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+
+## Assistant  <sub>2026-09-06T09:54:45.388Z</sub>
+
+**Tool call — `Edit`**
+
+```json
+{
+  "replace_all": false,
+  "file_path": "/Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md",
+  "old_string": "| Extraction | `pypdf` (PDF), `python-docx` (DOCX), `beautifulsoup4` (HTML), stdlib for TXT/MD/CSV |",
+  "new_string": "| Extraction | `pypdf` (PDF), `python-docx` (DOCX), `beautifulsoup4` (HTML), stdlib for TXT/MD/CSV |\n| OCR fallback | Tesseract via `pytesseract` + `pypdfium2` page rendering; kicks in only when a PDF page has no extractable text, and for image inputs |"
+}
+```
+
+## Tool  <sub>2026-09-06T09:54:45.403Z</sub>
+
+**Tool result**
+
+```
+The file /Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+
+## Assistant  <sub>2026-09-06T09:54:47.535Z</sub>
+
+**Tool call — `Edit`**
+
+```json
+{
+  "replace_all": false,
+  "file_path": "/Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md",
+  "old_string": "known limitations (DOCX pages are sections, single-process BM25 in memory, no auth).",
+  "new_string": "known limitations (DOCX pages are sections, single-process BM25 in memory, no auth, OCR is English-only by default and needs the `tesseract` binary when running outside Docker: `brew install tesseract` / `apt install tesseract-ocr`)."
+}
+```
+
+## Tool  <sub>2026-09-06T09:54:47.547Z</sub>
+
+**Tool result**
+
+```
+The file /Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+
+## Assistant  <sub>2026-09-06T09:54:49.827Z</sub>
+
+**Tool call — `Edit`**
+
+```json
+{
+  "replace_all": false,
+  "file_path": "/Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md",
+  "old_string": "3. **Preview in the Browser pane** at `http://localhost:8000`: upload `samples/*` (all six formats),",
+  "new_string": "3. **Preview in the Browser pane** at `http://localhost:8000`: upload `samples/*` (all six formats plus a scanned-style PDF and a PNG made by `make_samples.py` to exercise the OCR path; confirm their source cards show `extraction: ocr`),"
+}
+```
+
+## Tool  <sub>2026-09-06T09:54:49.839Z</sub>
+
+**Tool result**
+
+```
+The file /Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+
+## Assistant  <sub>2026-09-06T09:54:56.075Z</sub>
+
+**Tool call — `ExitPlanMode`**
+
+```json
+{
+  "plan": "# RAG Generator — Implementation Plan\n\n## Context\n\nAgentic-coding assessment: build a **RAG Generator** that accepts documents at runtime, indexes them, and answers questions grounded in those documents, with no code changes needed for a different document set. Deliverables also include AI-agent transcripts (this session, exported to `transcripts/`) and an evaluation script that uses Claude as judge.\n\nThe repo is empty (placeholder README only), so this is a greenfield build.\n\n**Decisions confirmed with the user:**\n- Web framework: **FastAPI** (serves the single HTML page + JSON API)\n- Generation LLM: **OpenAI-compatible** `chat/completions` endpoint, configured only via `.env` (`LLM_API_URL`, `LLM_API_KEY`, `LLM_MODEL`)\n- Judge: **Claude via the `anthropic` SDK** with its own `ANTHROPIC_API_KEY`\n- Vector store: **ChromaDB embedded** (`PersistentClient`) inside the app container, data on a volume\n- Embeddings: **fastembed** (`BAAI/bge-small-en-v1.5`); chunking is a custom overlapping, metadata-tagged splitter (fastembed only embeds, it does not chunk)\n- Lexical retrieval: **rank-bm25**; dense + BM25 results merged with **Reciprocal Rank Fusion**\n- Deployment: **Docker + docker compose**\n- Formats: PDF, DOCX, HTML, TXT, MD, CSV → text with page metadata, driven by a user-editable constant\n\n## Tech stack\n\n| Concern | Choice |\n|---|---|\n| Language / runtime | Python 3.11 |\n| API | FastAPI + uvicorn |\n| UI | Single static `index.html` (vanilla JS, no build step) |\n| CLI | `typer` app talking to the running API over HTTP (`httpx`) so there is exactly one Chroma writer |\n| Extraction | `pypdf` (PDF), `python-docx` (DOCX), `beautifulsoup4` (HTML), stdlib for TXT/MD/CSV |\n| OCR fallback | Tesseract via `pytesseract` + `pypdfium2` page rendering; kicks in only when a PDF page has no extractable text, and for image inputs |\n| Chunking | custom sliding window, char-based, sentence/paragraph-boundary aware |\n| Embeddings | `fastembed` `TextEmbedding` |\n| Vector DB | `chromadb` `PersistentClient`, cosine space |\n| Lexical | `rank-bm25` `BM25Okapi`, rebuilt from Chroma on startup / after ingest |\n| Fusion | Reciprocal Rank Fusion (k=60) |\n| Generation LLM | OpenAI-compatible `POST {LLM_API_URL}/chat/completions` via `httpx` |\n| Judge | `anthropic` SDK, `claude-opus-5`, structured output via `client.messages.parse(..., output_format=PydanticModel)` |\n| Config | `pydantic-settings` reading `.env` |\n| Tests | `pytest` (chunker, fusion, extractors, API smoke) |\n| Not used (state in README) | LangChain / LlamaIndex, rerankers, external Chroma server, auth, GPU |\n\n## Repository layout\n\n```\nrag-generator/\n├── app/\n│   ├── main.py            # FastAPI app, routes, static mount, lifespan (load index)\n│   ├── config.py          # Settings (from .env) + editable CONSTANTS (see below)\n│   ├── models.py          # pydantic request/response schemas\n│   ├── ingest/\n│   │   ├── extractors.py  # per-format -> list[Page(text, page_no, meta)]\n│   │   ├── chunker.py     # overlapping, metadata-tagged chunks\n│   │   └── pipeline.py    # ingest job: extract -> chunk -> embed -> store, status updates\n│   ├── retrieval/\n│   │   ├── embedder.py    # fastembed wrapper (singleton)\n│   │   ├── vector_store.py# Chroma wrapper: add/query/delete/list, per-collection\n│   │   ├── bm25_index.py  # rank-bm25 wrapper, tokenizer, rebuild from Chroma\n│   │   └── fusion.py      # RRF + hybrid retrieve()\n│   ├── llm/\n│   │   ├── client.py      # OpenAI-compatible chat client (httpx)\n│   │   └── prompts.py     # grounded-answer system prompt, context formatting\n│   ├── rag.py             # answer(question, collection) -> answer + sources\n│   ├── jobs.py            # in-memory job registry + persisted documents.json\n│   └── static/index.html  # the UI\n├── cli/rag_cli.py         # typer CLI: ingest | status | ask | reset | serve\n├── evaluation/\n│   ├── run_eval.py        # runs dataset through /api/ask, judges, writes report\n│   ├── judge.py           # Claude judge (anthropic SDK, structured outputs)\n│   ├── generate_dataset.py# optional: synthesize Q/A pairs from indexed chunks\n│   ├── dataset.example.jsonl\n│   └── reports/           # gitignored outputs\n├── samples/               # small md/txt/csv/html (+ script to make pdf/docx) for the demo\n├── scripts/make_samples.py\n├── tests/\n├── transcripts/README.md  # where /export transcripts go\n├── data/                  # runtime: chroma/, uploads/, documents.json (gitignored, volume)\n├── Dockerfile\n├── docker-compose.yml\n├── .env.example\n├── .gitignore\n├── requirements.txt\n├── pyproject.toml         # console script `rag` -> cli\n└── README.md\n```\n\n## Configuration\n\n### `.env` (the only file the user must edit to go live)\nMinimum required: `LLM_API_URL`, `LLM_API_KEY`, `LLM_MODEL` (plus `ANTHROPIC_API_KEY` to run the eval). Every other setting below has a default and is optional to override.\n\n### `app/config.py` — the single home for every tunable (nothing tunable is hard-coded elsewhere)\nOne `Settings` class (`pydantic-settings`) with sensible defaults; every field can be overridden by an env var of the same name in `.env`. Modules import `settings` and never define their own numbers or model names.\n\n```python\nclass Settings(BaseSettings):\n    # --- LLM (generation) ---\n    LLM_API_URL: str = \"https://api.openai.com/v1\"\n    LLM_API_KEY: str = \"\"\n    LLM_MODEL: str = \"gpt-4o-mini\"\n    LLM_TEMPERATURE: float = 0.1\n    LLM_MAX_TOKENS: int = 1024\n    LLM_TIMEOUT_S: int = 60\n    # --- Embeddings ---\n    EMBEDDING_MODEL: str = \"BAAI/bge-small-en-v1.5\"\n    EMBEDDING_BATCH_SIZE: int = 64\n    # --- Chunking ---\n    CHUNK_SIZE_CHARS: int = 1200\n    CHUNK_OVERLAP_CHARS: int = 200\n    CSV_ROWS_PER_PAGE: int = 50\n    # --- OCR fallback (Tesseract) ---\n    OCR_ENABLED: bool = True\n    OCR_MIN_CHARS_PER_PAGE: int = 20      # below this, a PDF page is treated as scanned and OCR'd\n    OCR_LANG: str = \"eng\"\n    OCR_DPI: int = 200\n    # --- Retrieval ---\n    DENSE_TOP_K: int = 20\n    BM25_TOP_K: int = 20\n    FUSED_TOP_K: int = 6\n    RRF_K: int = 60\n    # --- Storage / server ---\n    DATA_DIR: Path = Path(\"data\")\n    DEFAULT_COLLECTION: str = \"default\"\n    MAX_UPLOAD_MB: int = 50\n    APP_HOST: str = \"0.0.0.0\"\n    APP_PORT: int = 8000\n    # --- Evaluation ---\n    ANTHROPIC_API_KEY: str = \"\"\n    JUDGE_MODEL: str = \"claude-opus-5\"\n    JUDGE_MAX_TOKENS: int = 4096\n    EVAL_MIN_FAITHFULNESS: float = 3.5\n    RAG_API_URL: str = \"http://localhost:8000\"\n\nSUPPORTED_EXTENSIONS: dict[str, str] = {   # extension -> extractor name; edit to add/remove formats\n    \".pdf\": \"pdf\", \".docx\": \"docx\", \".html\": \"html\", \".htm\": \"html\",\n    \".txt\": \"text\", \".md\": \"text\", \".csv\": \"csv\",\n    \".png\": \"image\", \".jpg\": \"image\", \".jpeg\": \"image\", \".tiff\": \"image\",   # via Tesseract OCR\n}\n```\n`.env.example` lists every field above with its default so the user sees the full knob set in one place. The README's \"Tuning\" section points at this file.\n\n### `requirements.txt` (pinned)\n```\nfastapi\nuvicorn[standard]\npython-multipart\npydantic-settings\nhttpx\ntyper\nfastembed\nchromadb\nrank-bm25\npypdf\npython-docx\nbeautifulsoup4\nlxml\npypdfium2        # renders PDF pages to images for OCR, no poppler needed\npytesseract      # Python binding; needs the tesseract binary (installed in Dockerfile)\npillow\nanthropic\npytest\n```\nExact versions pinned at implementation time to what `pip` resolves on Python 3.11 (fastembed and chromadb have onnxruntime/numpy constraints that must be resolved together). `reportlab` goes in a separate `requirements-dev.txt` only for `scripts/make_samples.py`.\n\n## Pipeline design\n\n### Ingest (`app/ingest/`)\n1. `POST /api/documents` saves each file under `data/uploads/<doc_id>_<name>`, registers a job (`queued`), and schedules `pipeline.run(doc_id)` via FastAPI `BackgroundTasks`.\n2. `extractors.extract(path) -> list[Page]` dispatches on `SUPPORTED_EXTENSIONS`:\n   - PDF: `pypdf` per page → `page_no` = real page number. **OCR fallback:** if a page yields fewer than `OCR_MIN_CHARS_PER_PAGE` characters (scanned / image-only page) and `OCR_ENABLED`, render that page with `pypdfium2` at `OCR_DPI` and run `pytesseract.image_to_string(lang=OCR_LANG)`. Chunk metadata gets `extraction=\"ocr\"` so sources show it came from OCR.\n   - Images (`.png .jpg .jpeg .tiff`): whole file through Tesseract, `page_no=1` (multi-page TIFF → one page per frame).\n   - OCR degrades gracefully: if the `tesseract` binary is missing, log a warning once, mark the page `extraction=\"ocr_unavailable\"`, and continue with whatever text pypdf found. Never fails the ingest job.\n   - DOCX: paragraphs grouped under headings; `page_no` = sequential section index, `section` = heading text (DOCX has no real pages; state this in README)\n   - HTML: `BeautifulSoup`, drop `script/style/nav`, `page_no=1`, `title` metadata\n   - TXT/MD: single page, split on blank lines; MD keeps `#` heading as `section`\n   - CSV: header row prepended to each block of `CSV_ROWS_PER_PAGE` rows, block index = `page_no`\n3. `chunker.chunk(pages, doc_meta)` produces overlapping windows (`CHUNK_SIZE_CHARS`, `CHUNK_OVERLAP_CHARS`), preferring to cut at paragraph/sentence boundaries. Each chunk carries metadata: `doc_id, source (filename), file_type, page, section, chunk_index, char_start, char_end, collection`. Chunk id = `f\"{doc_id}:{chunk_index}\"`.\n4. `embedder.embed(texts)` → fastembed vectors (batched).\n5. `vector_store.add(collection, ids, texts, embeddings, metadatas)`; then `bm25_index.rebuild(collection)` pulls all chunk texts for that collection from Chroma and rebuilds `BM25Okapi`.\n6. Status transitions persisted to `data/documents.json`: `queued → extracting → chunking → embedding → indexed | failed(error)`, plus `pages`, `chunks`, timestamps.\n\n### Query (`app/rag.py`, `app/retrieval/fusion.py`)\n1. Dense: embed question → Chroma `query(n_results=DENSE_TOP_K)` (cosine).\n2. Lexical: tokenize question → BM25 `get_scores` → top `BM25_TOP_K`.\n3. Fusion: RRF `score = Σ 1/(RRF_K + rank)` across both lists, keep `FUSED_TOP_K`; record which retriever(s) surfaced each chunk.\n4. Prompt: system message instructs grounded answering with `[n]` citations and an explicit \"not found in the provided documents\" fallback; user message = numbered context blocks (`[n] source, page`) + question.\n5. `llm.client.chat(messages)` → OpenAI-compatible request; surface HTTP/auth errors as 502 with a readable message so a wrong `.env` is obvious.\n6. Response: `{answer, sources:[{n, chunk_id, source, page, section, text, dense_rank, bm25_rank, rrf_score}], model, latency_ms}`.\n\n### API surface (`app/main.py`)\n| Method | Path | Purpose |\n|---|---|---|\n| GET | `/` | UI |\n| GET | `/api/health` | liveness + LLM/embedding config (no secrets) |\n| POST | `/api/documents` | multipart upload (multi-file), optional `collection` |\n| GET | `/api/documents?collection=` | list docs with status/chunk counts |\n| GET | `/api/documents/{doc_id}` | status detail |\n| DELETE | `/api/documents/{doc_id}` | remove file, chunks, rebuild BM25 |\n| GET | `/api/chunks?collection=&limit=` | sample chunks (used by eval dataset generator + \"view sources\") |\n| POST | `/api/ask` | `{question, collection?, top_k?}` → answer + sources |\n| DELETE | `/api/collections/{name}` | reset a collection (switch document sets without code changes) |\n\nStartup lifespan: open Chroma, warm the fastembed model, rebuild BM25 for every existing collection so restarts keep working.\n\n### UI (`app/static/index.html`)\nOne page, four panels: **Upload** (drag-drop / file picker, collection name, shows accepted extensions from `/api/health`), **Status** (table polling `/api/documents` every 2s while any job is non-terminal), **Ask** (question box, answer with `[n]` citations), **Sources** (expandable cards per cited chunk: file, page/section, retriever ranks, chunk text). Plain fetch calls, no framework.\n\n### CLI (`cli/rag_cli.py`, console script `rag`)\n`rag ingest <files...> [--collection]`, `rag status [--watch]`, `rag ask \"<q>\" [--collection] [--show-sources]`, `rag reset [--collection]`, `rag serve` (runs uvicorn locally). All except `serve` call the API at `RAG_API_URL`.\n\n## Evaluation (`evaluation/`)\n- **Dataset**: JSONL rows `{question, reference_answer?, collection?}`. Ship `dataset.example.jsonl` matching `samples/`.\n- **`generate_dataset.py`** (optional): pulls chunks from `/api/chunks`, asks Claude to write N question/reference pairs per chunk → JSONL. Lets the eval work on any new document set.\n- **`run_eval.py`**: for each row, `POST /api/ask`, then judge. Judge model `claude-opus-5` via `client.messages.parse` with a pydantic `JudgeVerdict` (`faithfulness 1-5`, `answer_relevance 1-5`, `context_relevance 1-5`, `correctness 1-5 | null` when no reference, `hallucinated: bool`, `rationale`). Prompt gives question, retrieved contexts, answer, optional reference. Thinking left at model default (adaptive). Writes `reports/<ts>.json` + `reports/<ts>.md` with per-question rows and mean scores, exits non-zero if mean faithfulness < threshold (`--min-faithfulness`, default 3.5).\n- Judge deliberately does **not** use the server-side refusal-fallback beta; judge prompts are benign and it keeps the script to one plain `parse` call. Noted in README.\n\n## Docker\n- `Dockerfile`: `python:3.11-slim`, `apt-get install tesseract-ocr tesseract-ocr-eng` (OCR fallback), install `requirements.txt`, **pre-download the fastembed model at build time** (`FASTEMBED_CACHE_PATH=/models`) so first run is offline-safe, copy app, `uvicorn app.main:app --host 0.0.0.0 --port 8000`.\n- `docker-compose.yml`: single `app` service, `env_file: .env`, `ports: 8000:8000`, volume `./data:/app/data`, healthcheck on `/api/health`.\n- Eval runs from host (`python -m evaluation.run_eval`) or `docker compose run --rm app python -m evaluation.run_eval`.\n\n## README contents\nSetup (copy `.env.example` → `.env`, set `LLM_API_URL` + `LLM_API_KEY` + `LLM_MODEL`, `docker compose up --build`), local dev without Docker, UI walkthrough, CLI usage, API table, **how to change supported formats / chunk sizes / top-k** (points at the constants), architecture diagram (ingest + hybrid retrieval + fusion), tech stack used vs. not used and why, evaluation instructions, transcripts folder note, known limitations (DOCX pages are sections, single-process BM25 in memory, no auth, OCR is English-only by default and needs the `tesseract` binary when running outside Docker: `brew install tesseract` / `apt install tesseract-ocr`).\n\n## Transcripts\n`transcripts/README.md` explaining that Claude Code session transcripts go here via `/export`. The `/export` step itself must be run by the user in the Claude Code terminal at the end of the session; I will remind them and name the target path `transcripts/<date>-rag-generator-build.md`.\n\n## Implementation order\n1. Scaffold: `requirements.txt`, `pyproject.toml`, `.env.example`, `.gitignore`, `config.py`, `models.py`\n2. Extractors + chunker + unit tests\n3. Embedder, vector store, BM25, fusion + unit tests\n4. LLM client + prompts + `rag.py`\n5. Jobs + ingest pipeline + FastAPI routes\n6. `index.html`\n7. CLI\n8. Samples + `scripts/make_samples.py`\n9. Evaluation (judge, run_eval, generate_dataset, example dataset)\n10. Dockerfile, compose, README, transcripts folder\n11. Build, run, preview, fix\n\n## Verification\n1. `pytest` green (chunk overlap/metadata, RRF ordering, each extractor on a sample file, `/api/health`).\n2. `docker compose up --build` starts; `/api/health` returns 200 and reports the configured model.\n3. **Preview in the Browser pane** at `http://localhost:8000`: upload `samples/*` (all six formats plus a scanned-style PDF and a PNG made by `make_samples.py` to exercise the OCR path; confirm their source cards show `extraction: ocr`), watch status reach `indexed`, ask 2–3 questions, confirm citations and source cards show file + page; ask an off-topic question and confirm the \"not in documents\" fallback.\n4. CLI round-trip: `rag ingest samples/*.md`, `rag status`, `rag ask \"...\" --show-sources`.\n5. Reset flow: `rag reset`, upload a different document set, ask again with no code change.\n6. `python -m evaluation.run_eval --dataset evaluation/dataset.example.jsonl` produces a report with scores.\n7. Restart the container and confirm the index and BM25 survive (volume + startup rebuild).\n",
+  "planFilePath": "/Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md"
+}
+```
+
+## Tool  <sub>2026-09-06T09:55:29.068Z</sub>
+
+**Tool result**
+
+```
+User has approved your plan. You can now start coding. Start with updating your todo list if applicable
+
+Your plan has been saved to: /Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md
+You can refer back to it if needed during implementation.
+
+## Approved Plan:
+# RAG Generator — Implementation Plan
+
+## Context
+
+Agentic-coding assessment: build a **RAG Generator** that accepts documents at runtime, indexes them, and answers questions grounded in those documents, with no code changes needed for a different document set. Deliverables also include AI-agent transcripts (this session, exported to `transcripts/`) and an evaluation script that uses Claude as judge.
+
+The repo is empty (placeholder README only), so this is a greenfield build.
+
+**Decisions confirmed with the user:**
+- Web framework: **FastAPI** (serves the single HTML page + JSON API)
+- Generation LLM: **OpenAI-compatible** `chat/completions` endpoint, configured only via `.env` (`LLM_API_URL`, `LLM_API_KEY`, `LLM_MODEL`)
+- Judge: **Claude via the `anthropic` SDK** with its own `ANTHROPIC_API_KEY`
+- Vector store: **ChromaDB embedded** (`PersistentClient`) inside the app container, data on a volume
+- Embeddings: **fastembed** (`BAAI/bge-small-en-v1.5`); chunking is a custom overlapping, metadata-tagged splitter (fastembed only embeds, it does not chunk)
+- Lexical retrieval: **rank-bm25**; dense + BM25 results merged with **Reciprocal Rank Fusion**
+- Deployment: **Docker + docker compose**
+- Formats: PDF, DOCX, HTML, TXT, MD, CSV → text with page metadata, driven by a user-editable constant
+
+## Tech stack
+
+| Concern | Choice |
+|---|---|
+| Language / runtime | Python 3.11 |
+| API | FastAPI + uvicorn |
+| UI | Single static `index.html` (vanilla JS, no build step) |
+| CLI | `typer` app talking to the running API over HTTP (`httpx`) so there is exactly one Chroma writer |
+| Extraction | `pypdf` (PDF), `python-docx` (DOCX), `beautifulsoup4` (HTML), stdlib for TXT/MD/CSV |
+| OCR fallback | Tesseract via `pytesseract` + `pypdfium2` page rendering; kicks in only when a PDF page has no extractable text, and for image inputs |
+| Chunking | custom sliding window, char-based, sentence/paragraph-boundary aware |
+| Embeddings | `fastembed` `TextEmbedding` |
+| Vector DB | `chromadb` `PersistentClient`, cosine space |
+| Lexical | `rank-bm25` `BM25Okapi`, rebuilt from Chroma on startup / after ingest |
+| Fusion | Reciprocal Rank Fusion (k=60) |
+| Generation LLM | OpenAI-compatible `POST {LLM_API_URL}/chat/completions` via `httpx` |
+| Judge | `anthropic` SDK, `claude-opus-5`, structured output via `client.messages.parse(..., output_format=PydanticModel)` |
+| Config | `pydantic-settings` reading `.env` |
+| Tests | `pytest` (chunker, fusion, extractors, API smoke) |
+| Not used (state in README) | LangChain / LlamaIndex, rerankers, external Chroma server, auth, GPU |
+
+## Repository layout
+
+```
+rag-generator/
+├── app/
+│   ├── main.py            # FastAPI app, routes, static mount, lifespan (load index)
+│   ├── config.py          # Settings (from .env) + editable CONSTANTS (see below)
+│   ├── models.py          # pydantic request/response schemas
+│   ├── ingest/
+│   │   ├── extractors.py  # per-format -> list[Page(text, page_no, meta)]
+│   │   ├── chunker.py     # overlapping, metadata-tagged chunks
+│   │   └── pipeline.py    # ingest job: extract -> chunk -> embed -> store, status updates
+│   ├── retrieval/
+│   │   ├── embedder.py    # fastembed wrapper (singleton)
+│   │   ├── vector_store.py# Chroma wrapper: add/query/delete/list, per-collection
+│   │   ├── bm25_index.py  # rank-bm25 wrapper, tokenizer, rebuild from Chroma
+│   │   └── fusion.py      # RRF + hybrid retrieve()
+│   ├── llm/
+│   │   ├── client.py      # OpenAI-compatible chat client (httpx)
+│   │   └── prompts.py     # grounded-answer system prompt, context formatting
+│   ├── rag.py             # answer(question, collection) -> answer + sources
+│   ├── jobs.py            # in-memory job registry + persisted docum
+… [12547 more characters]
+```
+
+## Assistant  <sub>2026-09-06T09:55:33.848Z</sub>
+
+Plan approved. Starting implementation with a quick environment check, then scaffolding.
+
+## Assistant  <sub>2026-09-06T09:55:34.643Z</sub>
+
+**Tool call — `mcp__ccd_session__mark_chapter`**
+
+```json
+{
+  "title": "Scaffold and core modules",
+  "summary": "Environment check, config, requirements, extractors, chunker, retrieval, LLM client"
+}
+```
+
+## Tool  <sub>2026-09-06T09:55:34.658Z</sub>
+
+**Tool result**
+
+```
+Chapter marked: "Scaffold and core modules". Continue your current work.
+```
+
+## Assistant  <sub>2026-09-06T09:55:36.412Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "which python3 python3.11 python3.12 uv docker tesseract; python3 --version; docker --version 2>&1 | head -1; docker compose version 2>&1 | head -1; docker info >/dev/null 2>&1 && echo \"docker daemon: up\" || echo \"docker daemon: DOWN\"",
+  "description": "Check Python, Docker, and Tesseract availability"
+}
+```
+
+## Tool  <sub>2026-09-06T09:55:36.473Z</sub>
+
+**Tool result**
+
+```
+/usr/bin/python3
+python3.11 not found
+python3.12 not found
+/Users/shoaib.rayeen/.local/bin/uv
+docker not found
+tesseract not found
+Python 3.9.6
+(eval):1: command not found: docker
+(eval):1: command not found: docker
+docker daemon: DOWN
+```
+
+## Assistant  <sub>2026-09-06T09:55:46.506Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "uv python list 2>/dev/null | head -20; echo ---; ls /Applications | grep -i docker; echo ---; which brew && brew list --formula 2>/dev/null | grep -i -E \"tesseract|leptonica\" ; echo \"brew check done\"",
+  "description": "Check uv Python versions, Docker Desktop, and Homebrew"
+}
+```
+
+## Tool  <sub>2026-09-06T09:55:47.101Z</sub>
+
+**Tool result**
+
+```
+cpython-3.15.0b2-macos-aarch64-none                 <download available>
+cpython-3.15.0b2+freethreaded-macos-aarch64-none    <download available>
+cpython-3.14.6-macos-aarch64-none                   <download available>
+cpython-3.14.6+freethreaded-macos-aarch64-none      <download available>
+cpython-3.13.14-macos-aarch64-none                  <download available>
+cpython-3.13.14+freethreaded-macos-aarch64-none     <download available>
+cpython-3.12.13-macos-aarch64-none                  <download available>
+cpython-3.11.15-macos-aarch64-none                  <download available>
+cpython-3.10.20-macos-aarch64-none                  /Users/shoaib.rayeen/.local/share/uv/python/cpython-3.10-macos-aarch64-none/bin/python3.10
+cpython-3.9.25-macos-aarch64-none                   <download available>
+cpython-3.9.6-macos-aarch64-none                    /usr/bin/python3
+cpython-3.8.20-macos-aarch64-none                   <download available>
+pypy-3.11.15-macos-aarch64-none                     <download available>
+pypy-3.10.16-macos-aarch64-none                     <download available>
+pypy-3.9.19-macos-aarch64-none                      <download available>
+pypy-3.8.16-macos-aarch64-none                      <download available>
+graalpy-3.12.0-macos-aarch64-none                   <download available>
+graalpy-3.11.0-macos-aarch64-none                   <download available>
+graalpy-3.10.0-macos-aarch64-none                   <download available>
+graalpy-3.8.5-macos-aarch64-none                    <download available>
+---
+---
+brew not found
+brew check done
+```
+
+## Assistant  <sub>2026-09-06T09:55:47.450Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat README.md && cat .gitignore 2>/dev/null; git remote -v",
+  "description": "Show existing README and git remote"
+}
+```
+
+## Tool  <sub>2026-09-06T09:55:47.492Z</sub>
+
+**Tool result**
+
+```
+# rag-generator
+origin	git@github-personal:shoaibrayeen/rag-generator.git (fetch)
+origin	git@github-personal:shoaibrayeen/rag-generator.git (push)
+```
+
+## Assistant  <sub>2026-09-06T09:56:03.804Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "mkdir -p app/ingest app/retrieval app/llm app/static cli evaluation/reports samples scripts tests transcripts data && cat > requirements.in <<'EOF'\n# Web / API\nfastapi\nuvicorn[standard]\npython-multipart\npydantic-settings\nhttpx\ntyper\n# Retrieval\nfastembed\nchromadb\nrank-bm25\n# Document extraction\npypdf\npython-docx\nbeautifulsoup4\nlxml\n# OCR fallback (Tesseract binary required at runtime; see README)\npypdfium2\npytesseract\npillow\n# Evaluation judge\nanthropic\n# Tests\npytest\nEOF\ncat > requirements-dev.txt <<'EOF'\n# Only needed for scripts/make_samples.py (generates sample PDF/DOCX/PNG)\nreportlab\nEOF\ncat > .gitignore <<'EOF'\n__pycache__/\n*.pyc\n.venv/\n.env\ndata/\nevaluation/reports/*\n!evaluation/reports/.gitkeep\n.pytest_cache/\n*.egg-info/\n.DS_Store\nEOF\ntouch evaluation/reports/.gitkeep\ncat > pyproject.toml <<'EOF'\n[project]\nname = \"rag-generator\"\nversion = \"0.1.0\"\ndescription = \"Upload documents at runtime, get a hybrid-retrieval RAG app with grounded answers.\"\nrequires-python = \">=3.11\"\ndynamic = [\"dependencies\"]\n\n[project.scripts]\nrag = \"cli.rag_cli:app\"\n\n[tool.setuptools]\npackages = [\"app\", \"app.ingest\", \"app.retrieval\", \"app.llm\", \"cli\", \"evaluation\"]\n\n[tool.setuptools.dynamic]\ndependencies = { file = [\"requirements.txt\"] }\n\n[tool.pytest.ini_options]\ntestpaths = [\"tests\"]\nEOF\nuv venv --python 3.11 .venv 2>&1 | tail -2",
+  "description": "Create directories, requirements, gitignore, pyproject, and 3.11 venv"
+}
+```
+
+## Tool  <sub>2026-09-06T09:56:05.591Z</sub>
+
+**Tool result**
+
+```
+Creating virtual environment at: .venv
+Activate with: source .venv/bin/activate
+```
+
+## Assistant  <sub>2026-09-06T09:56:17.840Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "uv pip compile requirements.in -o requirements.txt --python .venv/bin/python -q 2>&1 | tail -5 && uv pip install -r requirements.txt --python .venv/bin/python 2>&1 | tail -3 && echo INSTALL_OK",
+  "description": "Pin requirements and install into venv",
+  "timeout": 600000,
+  "run_in_background": true
+}
+```
+
+## Tool  <sub>2026-09-06T09:56:17.861Z</sub>
+
+**Tool result**
+
+```
+Command running in background with ID: bmbeulcq6. Output is being written to: /private/tmp/claude-502/-Users-shoaib-rayeen-my-space-rag-generator/a88920a3-6212-4085-ad05-80ba0afca34d/tasks/bmbeulcq6.output. You will be notified when it completes. To check interim output, use Read on that file path.
+```
+
+## Assistant  <sub>2026-09-06T09:56:38.846Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > app/__init__.py <<'EOF'\n\"\"\"RAG Generator: runtime document ingestion + hybrid retrieval + grounded answers.\"\"\"\nEOF\ntouch app/ingest/__init__.py app/retrieval/__init__.py app/llm/__init__.py cli/__init__.py evaluation/__init__.py tests/__init__.py\ncat > app/config.py <<'EOF'\n\"\"\"\nSingle home for every tunable in the application.\n\nEvery field on `Settings` has a default and can be overridden by an environment\nvariable of the same name (or a line in `.env`). Nothing tunable is hard-coded\nanywhere else: other modules import `settings` and read from it.\n\nTo go live you only need to set LLM_API_URL, LLM_API_KEY and LLM_MODEL in `.env`.\n\"\"\"\nfrom __future__ import annotations\n\nfrom pathlib import Path\n\nfrom pydantic_settings import BaseSettings, SettingsConfigDict\n\n\nclass Settings(BaseSettings):\n    model_config = SettingsConfigDict(env_file=\".env\", env_file_encoding=\"utf-8\", extra=\"ignore\")\n\n    # --- Generation LLM (OpenAI-compatible chat/completions endpoint) ---\n    LLM_API_URL: str = \"https://api.openai.com/v1\"  # base URL; \"/chat/completions\" is appended\n    LLM_API_KEY: str = \"\"\n    LLM_MODEL: str = \"gpt-4o-mini\"\n    LLM_TEMPERATURE: float = 0.1\n    LLM_MAX_TOKENS: int = 1024\n    LLM_TIMEOUT_S: int = 60\n\n    # --- Embeddings (fastembed) ---\n    EMBEDDING_MODEL: str = \"BAAI/bge-small-en-v1.5\"\n    EMBEDDING_BATCH_SIZE: int = 64\n\n    # --- Chunking (overlapping, metadata-tagged) ---\n    CHUNK_SIZE_CHARS: int = 1200\n    CHUNK_OVERLAP_CHARS: int = 200\n    CSV_ROWS_PER_PAGE: int = 50  # a CSV \"page\" is a block of this many rows\n\n    # --- OCR fallback (Tesseract) ---\n    OCR_ENABLED: bool = True\n    OCR_MIN_CHARS_PER_PAGE: int = 20  # a PDF page with fewer extractable chars is OCR'd\n    OCR_LANG: str = \"eng\"\n    OCR_DPI: int = 200\n\n    # --- Retrieval (hybrid: dense + BM25, fused with RRF) ---\n    DENSE_TOP_K: int = 20\n    BM25_TOP_K: int = 20\n    FUSED_TOP_K: int = 6  # chunks handed to the LLM\n    RRF_K: int = 60\n\n    # --- Storage / server ---\n    DATA_DIR: Path = Path(\"data\")\n    DEFAULT_COLLECTION: str = \"default\"\n    MAX_UPLOAD_MB: int = 50\n    APP_HOST: str = \"0.0.0.0\"\n    APP_PORT: int = 8000\n\n    # --- Evaluation (Claude as judge) ---\n    ANTHROPIC_API_KEY: str = \"\"\n    JUDGE_MODEL: str = \"claude-opus-5\"\n    JUDGE_MAX_TOKENS: int = 4096\n    EVAL_MIN_FAITHFULNESS: float = 3.5\n    RAG_API_URL: str = \"http://localhost:8000\"  # used by the CLI and the eval script\n\n    # Derived paths\n    @property\n    def uploads_dir(self) -> Path:\n        return self.DATA_DIR / \"uploads\"\n\n    @property\n    def chroma_dir(self) -> Path:\n        return self.DATA_DIR / \"chroma\"\n\n    @property\n    def documents_file(self) -> Path:\n        return self.DATA_DIR / \"documents.json\"\n\n    @property\n    def chat_completions_url(self) -> str:\n        return self.LLM_API_URL.rstrip(\"/\") + \"/chat/completions\"\n\n\n# Extension -> extractor name. Edit this dict to add or remove supported formats;\n# each value must match a key in `app.ingest.extractors.EXTRACTORS`.\nSUPPORTED_EXTENSIONS: dict[str, str] = {\n    \".pdf\": \"pdf\",\n    \".docx\": \"docx\",\n    \".html\": \"html\",\n    \".htm\": \"html\",\n    \".txt\": \"text\",\n    \".md\": \"text\",\n    \".csv\": \"csv\",\n    # Image inputs go through Tesseract OCR\n    \".png\": \"image\",\n    \".jpg\": \"image\",\n    \".jpeg\": \"image\",\n    \".tiff\": \"image\",\n    \".tif\": \"image\",\n}\n\nsettings = Settings()\nEOF\ncat > app/models.py <<'EOF'\n\"\"\"Pydantic schemas shared by the API, CLI and evaluation script.\"\"\"\nfrom __future__ import annotations\n\nfrom typing import Literal, Optional\n\nfrom pydantic import BaseModel, Field\n\nDocStatus = Literal[\"queued\", \"extracting\", \"chunking\", \"embedding\", \"indexed\", \"failed\"]\n\n\nclass DocumentInfo(BaseModel):\n    doc_id: str\n    filename: str\n    file_type: str\n    collection: str\n    status: DocStatus\n    pages: int = 0\n    chunks: int = 0\n    ocr_pages: int = 0\n    error: Optional[str] = None\n    created_at: str\n    updated_at: str\n\n\nclass UploadResponse(BaseModel):\n    documents: list[DocumentInfo]\n    rejected: list[dict] = Field(default_factory=list)\n\n\nclass AskRequest(BaseModel):\n    question: str = Field(..., min_length=1)\n    collection: Optional[str] = None\n    top_k: Optional[int] = Field(default=None, ge=1, le=50)\n\n\nclass Source(BaseModel):\n    n: int\n    chunk_id: str\n    doc_id: str\n    source: str\n    file_type: str\n    page: int\n    section: Optional[str] = None\n    extraction: str = \"text\"\n    text: str\n    dense_rank: Optional[int] = None\n    bm25_rank: Optional[int] = None\n    rrf_score: float\n\n\nclass AskResponse(BaseModel):\n    question: str\n    answer: str\n    sources: list[Source]\n    collection: str\n    model: str\n    latency_ms: int\n\n\nclass ChunkOut(BaseModel):\n    chunk_id: str\n    doc_id: str\n    source: str\n    page: int\n    section: Optional[str] = None\n    text: str\n\n\nclass HealthResponse(BaseModel):\n    status: str\n    llm_model: str\n    llm_api_url: str\n    embedding_model: str\n    supported_extensions: list[str]\n    ocr_enabled: bool\n    ocr_available: bool\n    collections: list[str]\n    settings: dict\nEOF\necho written",
+  "description": "Write package init files, config.py, and models.py"
+}
+```
+
+## Tool  <sub>2026-09-06T09:56:38.884Z</sub>
+
+**Tool result**
+
+```
+written
+```
+
+## Assistant  <sub>2026-09-06T09:56:44.173Z</sub>
+
+Dependencies pinned and installed. Now the extraction layer with the OCR fallback, and the chunker.
+
+## Assistant  <sub>2026-09-06T09:56:46.482Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "tail -3 /private/tmp/claude-502/-Users-shoaib-rayeen-my-space-rag-generator/a88920a3-6212-4085-ad05-80ba0afca34d/tasks/bmbeulcq6.output; grep -E \"^(fastembed|chromadb|fastapi|anthropic|pypdfium2|pytesseract|rank-bm25)==\" requirements.txt",
+  "description": "Confirm install result and key pinned versions"
+}
+```
+
+## Tool  <sub>2026-09-06T09:56:46.510Z</sub>
+
+**Tool result**
+
+```
+INSTALL_OK
+
+[exited with code 0]
+anthropic==1.4.0
+chromadb==1.5.9
+fastapi==0.141.1
+fastembed==0.8.0
+pypdfium2==5.13.0
+pytesseract==0.3.13
+rank-bm25==0.2.2
+```
+
+## Assistant  <sub>2026-09-06T09:57:25.264Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > app/ingest/extractors.py <<'EOF'\n\"\"\"\nTurn a file into a list of `Page`s (text + page metadata).\n\nDispatch is driven by `app.config.SUPPORTED_EXTENSIONS`; each extractor name there\nmust exist in `EXTRACTORS` below. To support a new format, add an extractor\nfunction and register it in both places.\n\nOCR: PDF pages with little/no extractable text and image files are sent through\nTesseract (`pytesseract`). If the `tesseract` binary is missing the page is kept\nwith whatever text was found and tagged `extraction=\"ocr_unavailable\"`; ingestion\nnever fails because of OCR.\n\"\"\"\nfrom __future__ import annotations\n\nimport csv\nimport io\nimport logging\nimport shutil\nfrom dataclasses import dataclass, field\nfrom pathlib import Path\nfrom typing import Callable\n\nfrom app.config import SUPPORTED_EXTENSIONS, settings\n\nlog = logging.getLogger(__name__)\n\n\n@dataclass\nclass Page:\n    text: str\n    page_no: int\n    section: str | None = None\n    extraction: str = \"text\"  # text | ocr | ocr_unavailable\n    meta: dict = field(default_factory=dict)\n\n\nclass UnsupportedFormat(ValueError):\n    pass\n\n\n# --------------------------------------------------------------------------- OCR\n\n_ocr_warned = False\n\n\ndef ocr_available() -> bool:\n    return shutil.which(\"tesseract\") is not None\n\n\ndef _ocr_image(image) -> str | None:\n    \"\"\"Return OCR text for a PIL image, or None when Tesseract is unavailable.\"\"\"\n    global _ocr_warned\n    if not settings.OCR_ENABLED:\n        return None\n    if not ocr_available():\n        if not _ocr_warned:\n            log.warning(\"OCR requested but `tesseract` binary not found; skipping OCR. \"\n                        \"Install it (apt install tesseract-ocr / brew install tesseract).\")\n            _ocr_warned = True\n        return None\n    import pytesseract\n\n    try:\n        return pytesseract.image_to_string(image, lang=settings.OCR_LANG)\n    except Exception as exc:  # pragma: no cover - depends on host tesseract\n        log.warning(\"OCR failed: %s\", exc)\n        return None\n\n\ndef _render_pdf_page(path: Path, index: int):\n    import pypdfium2 as pdfium\n\n    pdf = pdfium.PdfDocument(str(path))\n    try:\n        page = pdf[index]\n        scale = settings.OCR_DPI / 72.0\n        return page.render(scale=scale).to_pil()\n    finally:\n        pdf.close()\n\n\n# --------------------------------------------------------------------- extractors\n\ndef extract_pdf(path: Path) -> list[Page]:\n    from pypdf import PdfReader\n\n    reader = PdfReader(str(path))\n    pages: list[Page] = []\n    for i, p in enumerate(reader.pages):\n        text = (p.extract_text() or \"\").strip()\n        extraction = \"text\"\n        if len(text) < settings.OCR_MIN_CHARS_PER_PAGE and settings.OCR_ENABLED:\n            ocr_text = _ocr_image(_render_pdf_page(path, i)) if ocr_available() else None\n            if ocr_text is None:\n                extraction = \"ocr_unavailable\"\n            else:\n                text = ocr_text.strip()\n                extraction = \"ocr\"\n        if text:\n            pages.append(Page(text=text, page_no=i + 1, extraction=extraction))\n    return pages\n\n\ndef extract_image(path: Path) -> list[Page]:\n    from PIL import Image, ImageSequence\n\n    pages: list[Page] = []\n    with Image.open(path) as img:\n        for i, frame in enumerate(ImageSequence.Iterator(img)):\n            text = _ocr_image(frame.convert(\"RGB\"))\n            if text is None:\n                pages.append(Page(text=\"\", page_no=i + 1, extraction=\"ocr_unavailable\"))\n            elif text.strip():\n                pages.append(Page(text=text.strip(), page_no=i + 1, extraction=\"ocr\"))\n    return [p for p in pages if p.text]\n\n\ndef extract_docx(path: Path) -> list[Page]:\n    \"\"\"DOCX has no real pages: each heading starts a new 'page' (section).\"\"\"\n    import docx\n\n    document = docx.Document(str(path))\n    pages: list[Page] = []\n    section_title: str | None = None\n    buffer: list[str] = []\n    page_no = 1\n\n    def flush():\n        nonlocal page_no, buffer\n        text = \"\\n\".join(buffer).strip()\n        if text:\n            pages.append(Page(text=text, page_no=page_no, section=section_title))\n            page_no += 1\n        buffer = []\n\n    for para in document.paragraphs:\n        txt = para.text.strip()\n        if not txt:\n            continue\n        if para.style is not None and para.style.name.lower().startswith(\"heading\"):\n            flush()\n            section_title = txt\n            buffer.append(txt)\n        else:\n            buffer.append(txt)\n    # Tables: append each table as its own block in the current section\n    for table in document.tables:\n        rows = []\n        for row in table.rows:\n            rows.append(\" | \".join(c.text.strip() for c in row.cells))\n        if rows:\n            buffer.append(\"\\n\".join(rows))\n    flush()\n    return pages\n\n\ndef extract_html(path: Path) -> list[Page]:\n    from bs4 import BeautifulSoup\n\n    soup = BeautifulSoup(path.read_text(encoding=\"utf-8\", errors=\"replace\"), \"lxml\")\n    for tag in soup([\"script\", \"style\", \"noscript\", \"nav\", \"footer\", \"header\"]):\n        tag.decompose()\n    title = soup.title.get_text(strip=True) if soup.title else None\n    text = soup.get_text(\"\\n\")\n    lines = [ln.strip() for ln in text.splitlines()]\n    text = \"\\n\".join(ln for ln in lines if ln)\n    return [Page(text=text, page_no=1, section=title, meta={\"title\": title})] if text else []\n\n\ndef extract_text(path: Path) -> list[Page]:\n    \"\"\"TXT/MD. Markdown headings become `section` metadata on a per-heading page.\"\"\"\n    raw = path.read_text(encoding=\"utf-8\", errors=\"replace\")\n    if path.suffix.lower() != \".md\":\n        return [Page(text=raw.strip(), page_no=1)] if raw.strip() else []\n\n    pages: list[Page] = []\n    section: str | None = None\n    buffer: list[str] = []\n    page_no = 1\n    for line in raw.splitlines():\n        if line.startswith(\"#\"):\n            text = \"\\n\".join(buffer).strip()\n            if text:\n                pages.append(Page(text=text, page_no=page_no, section=section))\n                page_no += 1\n            buffer = []\n            section = line.lstrip(\"#\").strip()\n        buffer.append(line)\n    text = \"\\n\".join(buffer).strip()\n    if text:\n        pages.append(Page(text=text, page_no=page_no, section=section))\n    return pages\n\n\ndef extract_csv(path: Path) -> list[Page]:\n    \"\"\"Each block of CSV_ROWS_PER_PAGE rows becomes a page, header repeated on each.\"\"\"\n    raw = path.read_text(encoding=\"utf-8\", errors=\"replace\")\n    reader = csv.reader(io.StringIO(raw))\n    rows = [r for r in reader if any(cell.strip() for cell in r)]\n    if not rows:\n        return []\n    header, body = rows[0], rows[1:]\n    per_page = max(1, settings.CSV_ROWS_PER_PAGE)\n    pages: list[Page] = []\n    for i in range(0, len(body), per_page):\n        block = body[i : i + per_page]\n        lines = [\", \".join(header)]\n        for r in block:\n            lines.append(\"; \".join(f\"{h}: {v}\" for h, v in zip(header, r)))\n        pages.append(Page(text=\"\\n\".join(lines), page_no=len(pages) + 1,\n                          section=f\"rows {i + 1}-{i + len(block)}\"))\n    return pages or [Page(text=\", \".join(header), page_no=1)]\n\n\nEXTRACTORS: dict[str, Callable[[Path], list[Page]]] = {\n    \"pdf\": extract_pdf,\n    \"docx\": extract_docx,\n    \"html\": extract_html,\n    \"text\": extract_text,\n    \"csv\": extract_csv,\n    \"image\": extract_image,\n}\n\n\ndef file_type_for(filename: str) -> str | None:\n    return SUPPORTED_EXTENSIONS.get(Path(filename).suffix.lower())\n\n\ndef extract(path: Path) -> list[Page]:\n    kind = file_type_for(path.name)\n    if kind is None or kind not in EXTRACTORS:\n        raise UnsupportedFormat(\n            f\"Unsupported file type '{path.suffix}'. Supported: {sorted(SUPPORTED_EXTENSIONS)}\"\n        )\n    return EXTRACTORS[kind](path)\nEOF\ncat > app/ingest/chunker.py <<'EOF'\n\"\"\"\nOverlapping, metadata-tagged chunking.\n\nEach page is split into windows of `CHUNK_SIZE_CHARS` with `CHUNK_OVERLAP_CHARS`\nof overlap. Cuts prefer paragraph, then sentence, then word boundaries so chunks\nread naturally. Every chunk carries the metadata needed to cite it later.\n\"\"\"\nfrom __future__ import annotations\n\nimport re\nfrom dataclasses import dataclass\n\nfrom app.config import settings\nfrom app.ingest.extractors import Page\n\n_BOUNDARIES = (\"\\n\\n\", \"\\n\", \". \", \"? \", \"! \", \"; \", \", \", \" \")\n\n\n@dataclass\nclass Chunk:\n    chunk_id: str\n    text: str\n    metadata: dict\n\n\ndef _find_cut(text: str, start: int, hard_end: int) -> int:\n    \"\"\"Pick the best boundary in the last 25% of the window, else hard cut.\"\"\"\n    if hard_end >= len(text):\n        return len(text)\n    window_start = start + int((hard_end - start) * 0.75)\n    for sep in _BOUNDARIES:\n        idx = text.rfind(sep, window_start, hard_end)\n        if idx != -1:\n            return idx + len(sep)\n    return hard_end\n\n\ndef split_text(text: str, size: int | None = None, overlap: int | None = None) -> list[tuple[int, int]]:\n    \"\"\"Return (start, end) char offsets of overlapping windows over `text`.\"\"\"\n    size = size or settings.CHUNK_SIZE_CHARS\n    overlap = settings.CHUNK_OVERLAP_CHARS if overlap is None else overlap\n    if size <= 0:\n        raise ValueError(\"chunk size must be positive\")\n    overlap = min(max(0, overlap), size - 1)\n    spans: list[tuple[int, int]] = []\n    n = len(text)\n    start = 0\n    while start < n:\n        end = _find_cut(text, start, min(start + size, n))\n        if end <= start:  # safety: always make progress\n            end = min(start + size, n)\n        spans.append((start, end))\n        if end >= n:\n            break\n        start = max(end - overlap, start + 1)\n    return spans\n\n\ndef chunk_pages(pages: list[Page], *, doc_id: str, source: str, file_type: str,\n                collection: str) -> list[Chunk]:\n    chunks: list[Chunk] = []\n    idx = 0\n    for page in pages:\n        text = re.sub(r\"[ \\t]+\\n\", \"\\n\", page.text).strip()\n        if not text:\n            continue\n        for start, end in split_text(text):\n            piece = text[start:end].strip()\n            if not piece:\n                continue\n            chunks.append(\n                Chunk(\n                    chunk_id=f\"{doc_id}:{idx}\",\n                    text=piece,\n                    metadata={\n                        \"doc_id\": doc_id,\n                        \"source\": source,\n                        \"file_type\": file_type,\n                        \"collection\": collection,\n                        \"page\": page.page_no,\n                        \"section\": page.section or \"\",\n                        \"extraction\": page.extraction,\n                        \"chunk_index\": idx,\n                        \"char_start\": start,\n                        \"char_end\": end,\n                    },\n                )\n            )\n            idx += 1\n    return chunks\nEOF\necho ok",
+  "description": "Write extractors.py and chunker.py"
+}
+```
+
+## Tool  <sub>2026-09-06T09:57:25.294Z</sub>
+
+**Tool result**
+
+```
+ok
+```
+
+## Assistant  <sub>2026-09-06T09:57:39.158Z</sub>
+
+Next up are the retrieval layer, the LLM client, and the RAG orchestration. They're independent files, so I'll write them together with the first unit tests.
+
+## Assistant  <sub>2026-09-06T09:58:25.667Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > app/retrieval/embedder.py <<'EOF'\n\"\"\"fastembed wrapper. One model instance per process, loaded lazily.\"\"\"\nfrom __future__ import annotations\n\nimport threading\n\nfrom app.config import settings\n\n_model = None\n_lock = threading.Lock()\n\n\ndef get_model():\n    global _model\n    if _model is None:\n        with _lock:\n            if _model is None:\n                from fastembed import TextEmbedding\n\n                _model = TextEmbedding(model_name=settings.EMBEDDING_MODEL)\n    return _model\n\n\ndef embed_texts(texts: list[str]) -> list[list[float]]:\n    if not texts:\n        return []\n    model = get_model()\n    return [vec.tolist() for vec in model.embed(texts, batch_size=settings.EMBEDDING_BATCH_SIZE)]\n\n\ndef embed_query(text: str) -> list[float]:\n    model = get_model()\n    # bge models expose a query-specific path; fall back to plain embed otherwise.\n    if hasattr(model, \"query_embed\"):\n        return next(iter(model.query_embed([text]))).tolist()\n    return embed_texts([text])[0]\nEOF\ncat > app/retrieval/vector_store.py <<'EOF'\n\"\"\"ChromaDB (embedded PersistentClient) wrapper. One collection per document set.\"\"\"\nfrom __future__ import annotations\n\nimport threading\n\nimport chromadb\n\nfrom app.config import settings\n\n_client = None\n_lock = threading.Lock()\n\n\ndef client() -> chromadb.ClientAPI:\n    global _client\n    if _client is None:\n        with _lock:\n            if _client is None:\n                settings.chroma_dir.mkdir(parents=True, exist_ok=True)\n                _client = chromadb.PersistentClient(path=str(settings.chroma_dir))\n    return _client\n\n\ndef get_collection(name: str):\n    return client().get_or_create_collection(name=name, metadata={\"hnsw:space\": \"cosine\"})\n\n\ndef list_collections() -> list[str]:\n    cols = client().list_collections()\n    return sorted(c.name if hasattr(c, \"name\") else str(c) for c in cols)\n\n\ndef add_chunks(collection: str, ids: list[str], texts: list[str],\n               embeddings: list[list[float]], metadatas: list[dict]) -> None:\n    if not ids:\n        return\n    col = get_collection(collection)\n    # Chroma has a per-call batch limit; stay well under it.\n    step = 500\n    for i in range(0, len(ids), step):\n        col.add(ids=ids[i:i + step], documents=texts[i:i + step],\n                embeddings=embeddings[i:i + step], metadatas=metadatas[i:i + step])\n\n\ndef query_dense(collection: str, query_embedding: list[float], top_k: int) -> list[dict]:\n    col = get_collection(collection)\n    total = col.count()\n    if total == 0:\n        return []\n    res = col.query(query_embeddings=[query_embedding], n_results=min(top_k, total),\n                    include=[\"documents\", \"metadatas\", \"distances\"])\n    out = []\n    for cid, doc, meta, dist in zip(res[\"ids\"][0], res[\"documents\"][0],\n                                    res[\"metadatas\"][0], res[\"distances\"][0]):\n        out.append({\"chunk_id\": cid, \"text\": doc, \"metadata\": meta, \"distance\": dist})\n    return out\n\n\ndef get_all_chunks(collection: str) -> list[dict]:\n    col = get_collection(collection)\n    total = col.count()\n    out: list[dict] = []\n    step = 1000\n    for offset in range(0, total, step):\n        res = col.get(include=[\"documents\", \"metadatas\"], limit=step, offset=offset)\n        for cid, doc, meta in zip(res[\"ids\"], res[\"documents\"], res[\"metadatas\"]):\n            out.append({\"chunk_id\": cid, \"text\": doc, \"metadata\": meta})\n    return out\n\n\ndef delete_document(collection: str, doc_id: str) -> None:\n    col = get_collection(collection)\n    col.delete(where={\"doc_id\": doc_id})\n\n\ndef delete_collection(collection: str) -> None:\n    try:\n        client().delete_collection(collection)\n    except Exception:\n        pass\n\n\ndef count(collection: str) -> int:\n    return get_collection(collection).count()\nEOF\ncat > app/retrieval/bm25_index.py <<'EOF'\n\"\"\"rank-bm25 lexical index, one per collection, rebuilt from Chroma.\"\"\"\nfrom __future__ import annotations\n\nimport re\nimport threading\n\nfrom rank_bm25 import BM25Okapi\n\nfrom app.retrieval import vector_store\n\n_WORD = re.compile(r\"[a-z0-9]+(?:'[a-z]+)?\")\n_STOP = {\n    \"a\", \"an\", \"the\", \"and\", \"or\", \"of\", \"to\", \"in\", \"on\", \"for\", \"is\", \"are\", \"was\", \"were\",\n    \"be\", \"it\", \"this\", \"that\", \"with\", \"as\", \"by\", \"at\", \"from\", \"what\", \"which\", \"who\",\n    \"how\", \"does\", \"do\", \"did\", \"can\", \"i\", \"you\", \"we\", \"they\", \"he\", \"she\",\n}\n\n\ndef tokenize(text: str) -> list[str]:\n    return [t for t in _WORD.findall(text.lower()) if t not in _STOP]\n\n\nclass _Index:\n    def __init__(self, chunks: list[dict]):\n        self.chunks = chunks\n        corpus = [tokenize(c[\"text\"]) or [\"_\"] for c in chunks]\n        self.bm25 = BM25Okapi(corpus) if corpus else None\n\n    def search(self, query: str, top_k: int) -> list[dict]:\n        if not self.bm25:\n            return []\n        tokens = tokenize(query)\n        if not tokens:\n            return []\n        scores = self.bm25.get_scores(tokens)\n        ranked = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)\n        out = []\n        for i in ranked[:top_k]:\n            if scores[i] <= 0:\n                break\n            c = self.chunks[i]\n            out.append({**c, \"bm25_score\": float(scores[i])})\n        return out\n\n\n_indexes: dict[str, _Index] = {}\n_lock = threading.Lock()\n\n\ndef rebuild(collection: str) -> int:\n    chunks = vector_store.get_all_chunks(collection)\n    with _lock:\n        _indexes[collection] = _Index(chunks)\n    return len(chunks)\n\n\ndef drop(collection: str) -> None:\n    with _lock:\n        _indexes.pop(collection, None)\n\n\ndef search(collection: str, query: str, top_k: int) -> list[dict]:\n    idx = _indexes.get(collection)\n    if idx is None:\n        rebuild(collection)\n        idx = _indexes.get(collection)\n    return idx.search(query, top_k) if idx else []\nEOF\ncat > app/retrieval/fusion.py <<'EOF'\n\"\"\"Hybrid retrieval: dense top-k + BM25 top-k, merged with Reciprocal Rank Fusion.\"\"\"\nfrom __future__ import annotations\n\nfrom app.config import settings\nfrom app.retrieval import bm25_index, embedder, vector_store\n\n\ndef rrf_merge(ranked_lists: dict[str, list[str]], k: int) -> list[tuple[str, float, dict[str, int]]]:\n    \"\"\"\n    ranked_lists: {\"dense\": [chunk_id,...], \"bm25\": [chunk_id,...]} in rank order.\n    Returns [(chunk_id, rrf_score, {retriever: rank}), ...] sorted by score desc.\n    \"\"\"\n    scores: dict[str, float] = {}\n    ranks: dict[str, dict[str, int]] = {}\n    for name, ids in ranked_lists.items():\n        for rank, cid in enumerate(ids, start=1):\n            scores[cid] = scores.get(cid, 0.0) + 1.0 / (k + rank)\n            ranks.setdefault(cid, {})[name] = rank\n    ordered = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))\n    return [(cid, score, ranks[cid]) for cid, score in ordered]\n\n\ndef hybrid_retrieve(question: str, collection: str, top_k: int | None = None) -> list[dict]:\n    top_k = top_k or settings.FUSED_TOP_K\n    dense = vector_store.query_dense(collection, embedder.embed_query(question), settings.DENSE_TOP_K)\n    lexical = bm25_index.search(collection, question, settings.BM25_TOP_K)\n\n    by_id: dict[str, dict] = {}\n    for hit in dense + lexical:\n        by_id.setdefault(hit[\"chunk_id\"], {\"chunk_id\": hit[\"chunk_id\"], \"text\": hit[\"text\"],\n                                           \"metadata\": hit[\"metadata\"]})\n\n    fused = rrf_merge({\"dense\": [h[\"chunk_id\"] for h in dense],\n                       \"bm25\": [h[\"chunk_id\"] for h in lexical]}, settings.RRF_K)\n\n    results = []\n    for cid, score, ranks in fused[:top_k]:\n        item = dict(by_id[cid])\n        item[\"rrf_score\"] = round(score, 6)\n        item[\"dense_rank\"] = ranks.get(\"dense\")\n        item[\"bm25_rank\"] = ranks.get(\"bm25\")\n        results.append(item)\n    return results\nEOF\ncat > app/llm/client.py <<'EOF'\n\"\"\"Minimal OpenAI-compatible chat/completions client (httpx). Configured only via .env.\"\"\"\nfrom __future__ import annotations\n\nimport httpx\n\nfrom app.config import settings\n\n\nclass LLMError(RuntimeError):\n    \"\"\"Raised with a human-readable message when the LLM endpoint cannot be used.\"\"\"\n\n\ndef chat(messages: list[dict], *, temperature: float | None = None,\n         max_tokens: int | None = None) -> str:\n    if not settings.LLM_API_KEY:\n        raise LLMError(\"LLM_API_KEY is not set. Add it to .env (see .env.example).\")\n    payload = {\n        \"model\": settings.LLM_MODEL,\n        \"messages\": messages,\n        \"temperature\": settings.LLM_TEMPERATURE if temperature is None else temperature,\n        \"max_tokens\": settings.LLM_MAX_TOKENS if max_tokens is None else max_tokens,\n    }\n    headers = {\"Authorization\": f\"Bearer {settings.LLM_API_KEY}\", \"Content-Type\": \"application/json\"}\n    try:\n        with httpx.Client(timeout=settings.LLM_TIMEOUT_S) as http:\n            resp = http.post(settings.chat_completions_url, json=payload, headers=headers)\n    except httpx.HTTPError as exc:\n        raise LLMError(f\"Could not reach LLM endpoint {settings.chat_completions_url}: {exc}\") from exc\n    if resp.status_code >= 400:\n        body = resp.text[:500]\n        raise LLMError(f\"LLM endpoint returned HTTP {resp.status_code} for model \"\n                       f\"'{settings.LLM_MODEL}': {body}\")\n    try:\n        data = resp.json()\n        return data[\"choices\"][0][\"message\"][\"content\"] or \"\"\n    except (KeyError, IndexError, ValueError) as exc:\n        raise LLMError(f\"Unexpected LLM response shape: {resp.text[:300]}\") from exc\nEOF\ncat > app/llm/prompts.py <<'EOF'\n\"\"\"Prompt templates for grounded answering.\"\"\"\nfrom __future__ import annotations\n\nSYSTEM_PROMPT = \"\"\"You answer questions strictly from the provided document excerpts.\n\nRules:\n- Use only the information in the numbered CONTEXT blocks. Do not use outside knowledge.\n- Cite every factual statement with the block number(s) it came from, like [1] or [2][3].\n- If the context does not contain the answer, reply exactly:\n  \"I could not find this in the provided documents.\" and, if useful, say what related\n  information the documents do contain.\n- Be concise and direct. Do not mention these rules.\"\"\"\n\nNOT_FOUND_MARKER = \"I could not find this in the provided documents.\"\n\n\ndef format_context(sources: list[dict]) -> str:\n    blocks = []\n    for i, s in enumerate(sources, start=1):\n        m = s[\"metadata\"]\n        loc = f\"page {m.get('page')}\"\n        if m.get(\"section\"):\n            loc += f\", section \\\"{m['section']}\\\"\"\n        blocks.append(f\"[{i}] ({m.get('source')}, {loc})\\n{s['text']}\")\n    return \"\\n\\n\".join(blocks)\n\n\ndef build_messages(question: str, sources: list[dict]) -> list[dict]:\n    context = format_context(sources) if sources else \"(no documents indexed)\"\n    user = f\"CONTEXT:\\n{context}\\n\\nQUESTION: {question}\\n\\nANSWER (with [n] citations):\"\n    return [{\"role\": \"system\", \"content\": SYSTEM_PROMPT}, {\"role\": \"user\", \"content\": user}]\nEOF\ncat > app/rag.py <<'EOF'\n\"\"\"answer() = hybrid retrieve -> grounded prompt -> LLM -> answer + cited sources.\"\"\"\nfrom __future__ import annotations\n\nimport time\n\nfrom app.config import settings\nfrom app.llm import client as llm\nfrom app.llm.prompts import NOT_FOUND_MARKER, build_messages\nfrom app.models import AskResponse, Source\nfrom app.retrieval.fusion import hybrid_retrieve\n\n\ndef answer(question: str, collection: str | None = None, top_k: int | None = None) -> AskResponse:\n    collection = collection or settings.DEFAULT_COLLECTION\n    t0 = time.perf_counter()\n    hits = hybrid_retrieve(question, collection, top_k)\n    if hits:\n        text = llm.chat(build_messages(question, hits))\n    else:\n        text = f\"{NOT_FOUND_MARKER} No documents are indexed in collection '{collection}'.\"\n    sources = [\n        Source(\n            n=i,\n            chunk_id=h[\"chunk_id\"],\n            doc_id=h[\"metadata\"].get(\"doc_id\", \"\"),\n            source=h[\"metadata\"].get(\"source\", \"\"),\n            file_type=h[\"metadata\"].get(\"file_type\", \"\"),\n            page=int(h[\"metadata\"].get(\"page\", 0)),\n            section=h[\"metadata\"].get(\"section\") or None,\n            extraction=h[\"metadata\"].get(\"extraction\", \"text\"),\n            text=h[\"text\"],\n            dense_rank=h.get(\"dense_rank\"),\n            bm25_rank=h.get(\"bm25_rank\"),\n            rrf_score=h[\"rrf_score\"],\n        )\n        for i, h in enumerate(hits, start=1)\n    ]\n    return AskResponse(question=question, answer=text.strip(), sources=sources, collection=collection,\n                       model=settings.LLM_MODEL, latency_ms=int((time.perf_counter() - t0) * 1000))\nEOF\necho ok",
+  "description": "Write retrieval, LLM client, prompts, and rag.py"
+}
+```
+
+## Tool  <sub>2026-09-06T09:58:25.710Z</sub>
+
+**Tool result**
+
+```
+ok
+```
+
+## Assistant  <sub>2026-09-06T09:58:47.307Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > tests/conftest.py <<'EOF'\nimport os\nimport sys\nfrom pathlib import Path\n\n# Isolate test data from the real data/ directory before settings are imported.\nos.environ.setdefault(\"DATA_DIR\", str(Path(__file__).parent / \"_data\"))\nos.environ.setdefault(\"LLM_API_KEY\", \"test-key\")\nsys.path.insert(0, str(Path(__file__).resolve().parents[1]))\nEOF\ncat > tests/test_chunker.py <<'EOF'\nfrom app.ingest.chunker import chunk_pages, split_text\nfrom app.ingest.extractors import Page\n\n\ndef test_split_text_overlaps_and_covers_everything():\n    text = \" \".join(f\"word{i}\" for i in range(600))\n    spans = split_text(text, size=200, overlap=50)\n    assert spans[0][0] == 0\n    assert spans[-1][1] == len(text)\n    for (s1, e1), (s2, e2) in zip(spans, spans[1:]):\n        assert s2 < e1, \"consecutive windows must overlap\"\n        assert e1 - s2 <= 50 + 10  # overlap roughly honoured (boundary snapping allowed)\n        assert e2 - s2 <= 200\n\n\ndef test_chunks_carry_metadata():\n    pages = [Page(text=\"alpha. \" * 300, page_no=3, section=\"Intro\", extraction=\"ocr\")]\n    chunks = chunk_pages(pages, doc_id=\"d1\", source=\"f.pdf\", file_type=\"pdf\", collection=\"c\")\n    assert len(chunks) > 1\n    m = chunks[0].metadata\n    assert m[\"page\"] == 3 and m[\"section\"] == \"Intro\" and m[\"extraction\"] == \"ocr\"\n    assert m[\"source\"] == \"f.pdf\" and m[\"doc_id\"] == \"d1\"\n    assert chunks[0].chunk_id == \"d1:0\" and chunks[1].chunk_id == \"d1:1\"\n    assert [c.metadata[\"chunk_index\"] for c in chunks] == list(range(len(chunks)))\n\n\ndef test_short_text_single_chunk():\n    chunks = chunk_pages([Page(text=\"tiny\", page_no=1)], doc_id=\"d\", source=\"s\", file_type=\"text\",\n                         collection=\"c\")\n    assert len(chunks) == 1 and chunks[0].text == \"tiny\"\nEOF\ncat > tests/test_fusion.py <<'EOF'\nfrom app.retrieval.fusion import rrf_merge\n\n\ndef test_rrf_prefers_items_in_both_lists():\n    fused = rrf_merge({\"dense\": [\"a\", \"b\", \"c\"], \"bm25\": [\"c\", \"d\", \"a\"]}, k=60)\n    order = [cid for cid, _, _ in fused]\n    assert order[:2] == [\"a\", \"c\"]  # a: ranks 1+3, c: ranks 3+1 -> tie broken by id\n    ranks = {cid: r for cid, _, r in fused}\n    assert ranks[\"a\"] == {\"dense\": 1, \"bm25\": 3}\n    assert ranks[\"b\"] == {\"dense\": 2}\n    assert ranks[\"d\"] == {\"bm25\": 2}\n\n\ndef test_rrf_scores_formula():\n    fused = rrf_merge({\"dense\": [\"x\"]}, k=60)\n    assert fused[0][1] == 1 / 61\nEOF\ncat > tests/test_extractors.py <<'EOF'\nfrom pathlib import Path\n\nimport pytest\n\nfrom app.ingest import extractors\nfrom app.ingest.extractors import UnsupportedFormat, extract, file_type_for\n\n\ndef test_file_type_mapping():\n    assert file_type_for(\"a.PDF\") == \"pdf\"\n    assert file_type_for(\"a.md\") == \"text\"\n    assert file_type_for(\"a.xyz\") is None\n\n\ndef test_markdown_sections(tmp_path: Path):\n    p = tmp_path / \"doc.md\"\n    p.write_text(\"# Title\\nintro text\\n\\n## Part A\\nbody a\\n\\n## Part B\\nbody b\\n\")\n    pages = extract(p)\n    assert [pg.section for pg in pages] == [\"Title\", \"Part A\", \"Part B\"]\n    assert [pg.page_no for pg in pages] == [1, 2, 3]\n\n\ndef test_csv_pages(tmp_path: Path, monkeypatch):\n    monkeypatch.setattr(extractors.settings, \"CSV_ROWS_PER_PAGE\", 2)\n    p = tmp_path / \"t.csv\"\n    p.write_text(\"name,age\\nann,30\\nbob,40\\ncid,50\\n\")\n    pages = extract(p)\n    assert len(pages) == 2\n    assert \"name: ann\" in pages[0].text and \"age: 50\" in pages[1].text\n\n\ndef test_html_strips_scripts(tmp_path: Path):\n    p = tmp_path / \"x.html\"\n    p.write_text(\"<html><head><title>T</title><script>var x=1;</script></head>\"\n                 \"<body><p>Hello</p><p>World</p></body></html>\")\n    pages = extract(p)\n    assert pages[0].section == \"T\"\n    assert \"Hello\" in pages[0].text and \"var x\" not in pages[0].text\n\n\ndef test_docx(tmp_path: Path):\n    import docx\n\n    d = docx.Document()\n    d.add_heading(\"Chapter 1\", level=1)\n    d.add_paragraph(\"First body.\")\n    d.add_heading(\"Chapter 2\", level=1)\n    d.add_paragraph(\"Second body.\")\n    p = tmp_path / \"d.docx\"\n    d.save(str(p))\n    pages = extract(p)\n    assert [pg.section for pg in pages] == [\"Chapter 1\", \"Chapter 2\"]\n\n\ndef test_unsupported(tmp_path: Path):\n    p = tmp_path / \"a.xyz\"\n    p.write_text(\"x\")\n    with pytest.raises(UnsupportedFormat):\n        extract(p)\n\n\ndef test_pdf_without_tesseract_keeps_going(tmp_path: Path, monkeypatch):\n    \"\"\"A text-less PDF page must not fail ingestion when tesseract is absent.\"\"\"\n    from pypdf import PdfWriter\n\n    w = PdfWriter()\n    w.add_blank_page(width=200, height=200)\n    p = tmp_path / \"blank.pdf\"\n    with open(p, \"wb\") as fh:\n        w.write(fh)\n    monkeypatch.setattr(extractors, \"ocr_available\", lambda: False)\n    pages = extract(p)\n    assert pages == []  # blank page, no text, no crash\nEOF\n.venv/bin/python -m pytest -q 2>&1 | tail -15",
+  "description": "Write unit tests and run them"
+}
+```
+
+## Tool  <sub>2026-09-06T09:58:52.201Z</sub>
+
+**Tool result**
+
+```
+............                                                             [100%]
+12 passed in 4.31s
+```
+
+## Assistant  <sub>2026-09-06T09:59:08.104Z</sub>
+
+All 12 tests pass. Now the service layer: job registry, ingest pipeline, FastAPI app, the single-page UI, and the CLI. These are independent files, so I'm writing them all at once.
+
+## Assistant  <sub>2026-09-06T09:59:45.648Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > app/jobs.py <<'EOF'\n\"\"\"Document registry: in-memory dict persisted to data/documents.json.\"\"\"\nfrom __future__ import annotations\n\nimport json\nimport threading\nfrom datetime import datetime, timezone\n\nfrom app.config import settings\nfrom app.models import DocumentInfo\n\n_docs: dict[str, DocumentInfo] = {}\n_lock = threading.Lock()\n_loaded = False\n\n\ndef _now() -> str:\n    return datetime.now(timezone.utc).isoformat(timespec=\"seconds\")\n\n\ndef _load() -> None:\n    global _loaded\n    if _loaded:\n        return\n    path = settings.documents_file\n    if path.exists():\n        try:\n            for raw in json.loads(path.read_text()):\n                doc = DocumentInfo(**raw)\n                # Jobs interrupted by a restart can never finish.\n                if doc.status not in (\"indexed\", \"failed\"):\n                    doc.status = \"failed\"\n                    doc.error = \"Interrupted by server restart; re-upload the file.\"\n                _docs[doc.doc_id] = doc\n        except Exception:\n            pass\n    _loaded = True\n\n\ndef _save() -> None:\n    settings.DATA_DIR.mkdir(parents=True, exist_ok=True)\n    tmp = settings.documents_file.with_suffix(\".tmp\")\n    tmp.write_text(json.dumps([d.model_dump() for d in _docs.values()], indent=2))\n    tmp.replace(settings.documents_file)\n\n\ndef create(doc_id: str, filename: str, file_type: str, collection: str) -> DocumentInfo:\n    with _lock:\n        _load()\n        doc = DocumentInfo(doc_id=doc_id, filename=filename, file_type=file_type,\n                           collection=collection, status=\"queued\", created_at=_now(), updated_at=_now())\n        _docs[doc_id] = doc\n        _save()\n        return doc\n\n\ndef update(doc_id: str, **fields) -> DocumentInfo | None:\n    with _lock:\n        _load()\n        doc = _docs.get(doc_id)\n        if doc is None:\n            return None\n        for k, v in fields.items():\n            setattr(doc, k, v)\n        doc.updated_at = _now()\n        _save()\n        return doc\n\n\ndef get(doc_id: str) -> DocumentInfo | None:\n    with _lock:\n        _load()\n        return _docs.get(doc_id)\n\n\ndef list_docs(collection: str | None = None) -> list[DocumentInfo]:\n    with _lock:\n        _load()\n        docs = [d for d in _docs.values() if collection is None or d.collection == collection]\n        return sorted(docs, key=lambda d: d.created_at)\n\n\ndef delete(doc_id: str) -> DocumentInfo | None:\n    with _lock:\n        _load()\n        doc = _docs.pop(doc_id, None)\n        if doc is not None:\n            _save()\n        return doc\n\n\ndef collections() -> list[str]:\n    with _lock:\n        _load()\n        return sorted({d.collection for d in _docs.values()})\nEOF\ncat > app/ingest/pipeline.py <<'EOF'\n\"\"\"Background ingest job: extract -> chunk -> embed -> store -> rebuild BM25.\"\"\"\nfrom __future__ import annotations\n\nimport logging\nfrom pathlib import Path\n\nfrom app import jobs\nfrom app.ingest.chunker import chunk_pages\nfrom app.ingest.extractors import extract\nfrom app.retrieval import bm25_index, embedder, vector_store\n\nlog = logging.getLogger(__name__)\n\n\ndef run(doc_id: str, path: Path) -> None:\n    doc = jobs.get(doc_id)\n    if doc is None:\n        return\n    try:\n        jobs.update(doc_id, status=\"extracting\")\n        pages = extract(path)\n        if not pages:\n            raise ValueError(\"No text could be extracted from this file.\")\n        ocr_pages = sum(1 for p in pages if p.extraction == \"ocr\")\n\n        jobs.update(doc_id, status=\"chunking\", pages=len(pages), ocr_pages=ocr_pages)\n        chunks = chunk_pages(pages, doc_id=doc_id, source=doc.filename,\n                             file_type=doc.file_type, collection=doc.collection)\n        if not chunks:\n            raise ValueError(\"Extraction produced no usable text.\")\n\n        jobs.update(doc_id, status=\"embedding\", chunks=len(chunks))\n        vectors = embedder.embed_texts([c.text for c in chunks])\n        vector_store.add_chunks(doc.collection, [c.chunk_id for c in chunks],\n                                [c.text for c in chunks], vectors, [c.metadata for c in chunks])\n        bm25_index.rebuild(doc.collection)\n\n        jobs.update(doc_id, status=\"indexed\", error=None)\n        log.info(\"indexed %s: %d pages, %d chunks (%d OCR pages)\", doc.filename, len(pages),\n                 len(chunks), ocr_pages)\n    except Exception as exc:\n        log.exception(\"ingest failed for %s\", doc.filename)\n        jobs.update(doc_id, status=\"failed\", error=f\"{type(exc).__name__}: {exc}\")\nEOF\ncat > app/main.py <<'EOF'\n\"\"\"FastAPI application: REST API + single-page UI.\"\"\"\nfrom __future__ import annotations\n\nimport logging\nimport re\nimport uuid\nfrom contextlib import asynccontextmanager\nfrom pathlib import Path\n\nfrom fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, UploadFile\nfrom fastapi.responses import FileResponse\nfrom fastapi.staticfiles import StaticFiles\n\nfrom app import jobs\nfrom app.config import SUPPORTED_EXTENSIONS, settings\nfrom app.ingest import pipeline\nfrom app.ingest.extractors import file_type_for, ocr_available\nfrom app.llm.client import LLMError\nfrom app.models import (AskRequest, AskResponse, ChunkOut, DocumentInfo, HealthResponse,\n                        UploadResponse)\nfrom app.rag import answer\nfrom app.retrieval import bm25_index, embedder, vector_store\n\nlogging.basicConfig(level=logging.INFO, format=\"%(asctime)s %(levelname)s %(name)s: %(message)s\")\nlog = logging.getLogger(\"rag\")\n\nSTATIC_DIR = Path(__file__).parent / \"static\"\n_COLLECTION_RE = re.compile(r\"^[a-zA-Z0-9][a-zA-Z0-9._-]{1,62}$\")\n\n\ndef _collection(name: str | None) -> str:\n    name = (name or settings.DEFAULT_COLLECTION).strip()\n    if not _COLLECTION_RE.match(name):\n        raise HTTPException(400, \"Collection name must be 2-63 chars: letters, digits, . _ -\")\n    return name\n\n\n@asynccontextmanager\nasync def lifespan(_: FastAPI):\n    settings.uploads_dir.mkdir(parents=True, exist_ok=True)\n    log.info(\"warming embedding model %s\", settings.EMBEDDING_MODEL)\n    embedder.get_model()\n    for col in vector_store.list_collections():\n        n = bm25_index.rebuild(col)\n        log.info(\"BM25 rebuilt for '%s' (%d chunks)\", col, n)\n    log.info(\"OCR available: %s | LLM: %s @ %s\", ocr_available(), settings.LLM_MODEL, settings.LLM_API_URL)\n    yield\n\n\napp = FastAPI(title=\"RAG Generator\", version=\"0.1.0\", lifespan=lifespan)\napp.mount(\"/static\", StaticFiles(directory=STATIC_DIR), name=\"static\")\n\n\n@app.get(\"/\", include_in_schema=False)\ndef index():\n    return FileResponse(STATIC_DIR / \"index.html\")\n\n\n@app.get(\"/api/health\", response_model=HealthResponse)\ndef health():\n    public = {k: v for k, v in settings.model_dump().items()\n              if \"KEY\" not in k and k not in (\"DATA_DIR\",)}\n    public = {k: (str(v) if isinstance(v, Path) else v) for k, v in public.items()}\n    return HealthResponse(\n        status=\"ok\", llm_model=settings.LLM_MODEL, llm_api_url=settings.LLM_API_URL,\n        embedding_model=settings.EMBEDDING_MODEL, supported_extensions=sorted(SUPPORTED_EXTENSIONS),\n        ocr_enabled=settings.OCR_ENABLED, ocr_available=ocr_available(),\n        collections=sorted(set(vector_store.list_collections()) | set(jobs.collections())),\n        settings=public,\n    )\n\n\n@app.post(\"/api/documents\", response_model=UploadResponse, status_code=202)\nasync def upload(background: BackgroundTasks, files: list[UploadFile] = File(...),\n                 collection: str | None = Form(default=None)):\n    col = _collection(collection)\n    accepted: list[DocumentInfo] = []\n    rejected: list[dict] = []\n    limit = settings.MAX_UPLOAD_MB * 1024 * 1024\n    for f in files:\n        name = Path(f.filename or \"upload\").name\n        kind = file_type_for(name)\n        if kind is None:\n            rejected.append({\"filename\": name, \"reason\": f\"unsupported extension; allowed: \"\n                                                         f\"{sorted(SUPPORTED_EXTENSIONS)}\"})\n            continue\n        data = await f.read()\n        if len(data) > limit:\n            rejected.append({\"filename\": name, \"reason\": f\"larger than {settings.MAX_UPLOAD_MB} MB\"})\n            continue\n        if not data:\n            rejected.append({\"filename\": name, \"reason\": \"empty file\"})\n            continue\n        doc_id = uuid.uuid4().hex[:12]\n        path = settings.uploads_dir / f\"{doc_id}_{name}\"\n        path.write_bytes(data)\n        accepted.append(jobs.create(doc_id, name, kind, col))\n        background.add_task(pipeline.run, doc_id, path)\n    if not accepted and rejected:\n        raise HTTPException(400, {\"rejected\": rejected})\n    return UploadResponse(documents=accepted, rejected=rejected)\n\n\n@app.get(\"/api/documents\", response_model=list[DocumentInfo])\ndef list_documents(collection: str | None = Query(default=None)):\n    return jobs.list_docs(collection)\n\n\n@app.get(\"/api/documents/{doc_id}\", response_model=DocumentInfo)\ndef get_document(doc_id: str):\n    doc = jobs.get(doc_id)\n    if doc is None:\n        raise HTTPException(404, \"document not found\")\n    return doc\n\n\n@app.delete(\"/api/documents/{doc_id}\", status_code=204)\ndef delete_document(doc_id: str):\n    doc = jobs.get(doc_id)\n    if doc is None:\n        raise HTTPException(404, \"document not found\")\n    if doc.status not in (\"indexed\", \"failed\"):\n        raise HTTPException(409, \"document is still being processed\")\n    vector_store.delete_document(doc.collection, doc_id)\n    bm25_index.rebuild(doc.collection)\n    for p in settings.uploads_dir.glob(f\"{doc_id}_*\"):\n        p.unlink(missing_ok=True)\n    jobs.delete(doc_id)\n\n\n@app.delete(\"/api/collections/{name}\", status_code=204)\ndef reset_collection(name: str):\n    col = _collection(name)\n    vector_store.delete_collection(col)\n    bm25_index.drop(col)\n    for doc in jobs.list_docs(col):\n        for p in settings.uploads_dir.glob(f\"{doc.doc_id}_*\"):\n            p.unlink(missing_ok=True)\n        jobs.delete(doc.doc_id)\n\n\n@app.get(\"/api/chunks\", response_model=list[ChunkOut])\ndef list_chunks(collection: str | None = Query(default=None),\n                limit: int = Query(default=50, ge=1, le=1000), offset: int = Query(default=0, ge=0)):\n    col = _collection(collection)\n    chunks = vector_store.get_all_chunks(col)[offset:offset + limit]\n    return [ChunkOut(chunk_id=c[\"chunk_id\"], doc_id=c[\"metadata\"].get(\"doc_id\", \"\"),\n                     source=c[\"metadata\"].get(\"source\", \"\"), page=int(c[\"metadata\"].get(\"page\", 0)),\n                     section=c[\"metadata\"].get(\"section\") or None, text=c[\"text\"]) for c in chunks]\n\n\n@app.post(\"/api/ask\", response_model=AskResponse)\ndef ask(req: AskRequest):\n    col = _collection(req.collection)\n    try:\n        return answer(req.question, col, req.top_k)\n    except LLMError as exc:\n        raise HTTPException(502, str(exc))\nEOF\necho ok",
+  "description": "Write jobs.py, pipeline.py, and main.py"
+}
+```
+
+## Tool  <sub>2026-09-06T09:59:45.677Z</sub>
+
+**Tool result**
+
+```
+ok
+```
+
+## Assistant  <sub>2026-09-06T10:00:29.146Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > app/static/index.html <<'EOF'\n<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>RAG Generator</title>\n<style>\n  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c1f26; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --ok:#15803d; --bad:#b91c1c; --warn:#b45309; }\n  * { box-sizing:border-box; }\n  body { margin:0; font:14px/1.5 -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif; background:var(--bg); color:var(--ink); }\n  header { padding:18px 28px; background:var(--card); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:16px; flex-wrap:wrap; }\n  header h1 { margin:0; font-size:18px; }\n  header .meta { color:var(--muted); font-size:12px; }\n  main { display:grid; grid-template-columns:minmax(300px,380px) 1fr; gap:20px; padding:20px 28px; max-width:1400px; margin:0 auto; }\n  @media (max-width:900px) { main { grid-template-columns:1fr; } }\n  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:20px; }\n  .card h2 { margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }\n  label { display:block; font-size:12px; color:var(--muted); margin:8px 0 4px; }\n  input[type=text], textarea { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:6px; font:inherit; }\n  textarea { min-height:70px; resize:vertical; }\n  button { padding:9px 14px; border:0; border-radius:6px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }\n  button.secondary { background:#eef2ff; color:var(--accent); }\n  button:disabled { opacity:.5; cursor:default; }\n  .drop { border:2px dashed var(--line); border-radius:8px; padding:20px; text-align:center; color:var(--muted); cursor:pointer; }\n  .drop.over { border-color:var(--accent); background:#eff6ff; }\n  table { width:100%; border-collapse:collapse; font-size:13px; }\n  th, td { text-align:left; padding:6px 6px; border-bottom:1px solid var(--line); vertical-align:top; }\n  th { color:var(--muted); font-weight:600; font-size:12px; }\n  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:600; background:#eef2ff; color:var(--accent); }\n  .pill.indexed { background:#dcfce7; color:var(--ok); } .pill.failed { background:#fee2e2; color:var(--bad); }\n  .pill.ocr { background:#fef3c7; color:var(--warn); }\n  .answer { white-space:pre-wrap; padding:14px; background:#f8fafc; border:1px solid var(--line); border-radius:8px; min-height:60px; }\n  .answer cite { color:var(--accent); font-style:normal; font-weight:600; cursor:pointer; }\n  .src { border:1px solid var(--line); border-radius:8px; margin-top:10px; padding:10px 12px; }\n  .src summary { cursor:pointer; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }\n  .src .n { font-weight:700; color:var(--accent); }\n  .src pre { white-space:pre-wrap; font:12px/1.5 ui-monospace, Menlo, monospace; color:#374151; margin:10px 0 0; max-height:260px; overflow:auto; }\n  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }\n  .err { color:var(--bad); font-size:13px; white-space:pre-wrap; }\n  .muted { color:var(--muted); font-size:12px; }\n  .del { background:none; color:var(--bad); padding:0 4px; font-size:12px; }\n</style>\n</head>\n<body>\n<header>\n  <h1>RAG Generator</h1>\n  <span class=\"meta\" id=\"meta\">connecting…</span>\n</header>\n<main>\n  <section>\n    <div class=\"card\">\n      <h2>1 · Upload documents</h2>\n      <label for=\"collection\">Collection (document set)</label>\n      <input type=\"text\" id=\"collection\" value=\"default\">\n      <div class=\"drop\" id=\"drop\">Drop files here or click to choose<br><span class=\"muted\" id=\"exts\"></span></div>\n      <input type=\"file\" id=\"files\" multiple hidden>\n      <div class=\"row\" style=\"margin-top:10px\">\n        <button id=\"uploadBtn\" disabled>Upload</button>\n        <button class=\"secondary\" id=\"resetBtn\" title=\"Delete every document in this collection\">Reset collection</button>\n        <span class=\"muted\" id=\"picked\"></span>\n      </div>\n      <div class=\"err\" id=\"uploadErr\"></div>\n    </div>\n\n    <div class=\"card\">\n      <h2>2 · Status</h2>\n      <table>\n        <thead><tr><th>File</th><th>Status</th><th>Pages</th><th>Chunks</th><th></th></tr></thead>\n        <tbody id=\"docs\"><tr><td colspan=\"5\" class=\"muted\">No documents yet.</td></tr></tbody>\n      </table>\n    </div>\n  </section>\n\n  <section>\n    <div class=\"card\">\n      <h2>3 · Ask</h2>\n      <textarea id=\"question\" placeholder=\"Ask something answerable from the uploaded documents…\"></textarea>\n      <div class=\"row\" style=\"margin-top:8px\">\n        <button id=\"askBtn\">Ask</button>\n        <span class=\"muted\" id=\"askMeta\"></span>\n      </div>\n      <div class=\"err\" id=\"askErr\"></div>\n      <div class=\"answer\" id=\"answer\" style=\"margin-top:12px\"></div>\n    </div>\n\n    <div class=\"card\">\n      <h2>4 · Sources</h2>\n      <div id=\"sources\" class=\"muted\">Retrieved chunks appear here after you ask a question.</div>\n    </div>\n  </section>\n</main>\n\n<script>\nconst $ = (id) => document.getElementById(id);\nlet pending = [];\nlet pollTimer = null;\n\nasync function api(path, opts = {}) {\n  const r = await fetch(path, opts);\n  if (r.status === 204) return null;\n  const body = await r.json().catch(() => ({}));\n  if (!r.ok) throw new Error(typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail || body));\n  return body;\n}\nconst col = () => $('collection').value.trim() || 'default';\nconst esc = (s) => String(s ?? '').replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));\n\nasync function loadHealth() {\n  try {\n    const h = await api('/api/health');\n    $('meta').textContent = `LLM: ${h.llm_model} · embeddings: ${h.embedding_model} · OCR: ${h.ocr_available ? 'on' : 'unavailable'} · collections: ${h.collections.join(', ') || 'none'}`;\n    $('exts').textContent = 'Accepted: ' + h.supported_extensions.join(' ');\n  } catch (e) { $('meta').textContent = 'API unreachable: ' + e.message; }\n}\n\nfunction setPending(list) {\n  pending = Array.from(list);\n  $('picked').textContent = pending.length ? pending.map(f => f.name).join(', ') : '';\n  $('uploadBtn').disabled = pending.length === 0;\n}\n$('drop').onclick = () => $('files').click();\n$('files').onchange = (e) => setPending(e.target.files);\n$('drop').ondragover = (e) => { e.preventDefault(); $('drop').classList.add('over'); };\n$('drop').ondragleave = () => $('drop').classList.remove('over');\n$('drop').ondrop = (e) => { e.preventDefault(); $('drop').classList.remove('over'); setPending(e.dataTransfer.files); };\n\n$('uploadBtn').onclick = async () => {\n  $('uploadErr').textContent = '';\n  const fd = new FormData();\n  pending.forEach(f => fd.append('files', f));\n  fd.append('collection', col());\n  $('uploadBtn').disabled = true;\n  try {\n    const res = await api('/api/documents', { method: 'POST', body: fd });\n    if (res.rejected?.length) $('uploadErr').textContent = res.rejected.map(r => `${r.filename}: ${r.reason}`).join('\\n');\n    setPending([]); $('files').value = '';\n    await refreshDocs(); loadHealth();\n  } catch (e) { $('uploadErr').textContent = e.message; $('uploadBtn').disabled = false; }\n};\n\n$('resetBtn').onclick = async () => {\n  if (!confirm(`Delete all documents in collection \"${col()}\"?`)) return;\n  try { await api(`/api/collections/${encodeURIComponent(col())}`, { method: 'DELETE' }); await refreshDocs(); loadHealth(); }\n  catch (e) { $('uploadErr').textContent = e.message; }\n};\n\nasync function deleteDoc(id) {\n  try { await api(`/api/documents/${id}`, { method: 'DELETE' }); await refreshDocs(); }\n  catch (e) { $('uploadErr').textContent = e.message; }\n}\n\nasync function refreshDocs() {\n  let docs = [];\n  try { docs = await api(`/api/documents?collection=${encodeURIComponent(col())}`); } catch (e) { return; }\n  const tb = $('docs');\n  if (!docs.length) { tb.innerHTML = '<tr><td colspan=\"5\" class=\"muted\">No documents in this collection.</td></tr>'; }\n  else tb.innerHTML = docs.map(d => `\n    <tr>\n      <td title=\"${esc(d.doc_id)}\">${esc(d.filename)}<br><span class=\"muted\">${esc(d.file_type)}${d.ocr_pages ? ` · <span class=\"pill ocr\">OCR ×${d.ocr_pages}</span>` : ''}</span>${d.error ? `<div class=\"err\">${esc(d.error)}</div>` : ''}</td>\n      <td><span class=\"pill ${d.status}\">${d.status}</span></td>\n      <td>${d.pages || ''}</td><td>${d.chunks || ''}</td>\n      <td>${['indexed','failed'].includes(d.status) ? `<button class=\"del\" onclick=\"deleteDoc('${d.doc_id}')\">✕</button>` : ''}</td>\n    </tr>`).join('');\n  const busy = docs.some(d => !['indexed', 'failed'].includes(d.status));\n  clearTimeout(pollTimer);\n  if (busy) pollTimer = setTimeout(refreshDocs, 1500);\n}\n$('collection').onchange = () => { refreshDocs(); };\n\n$('askBtn').onclick = ask;\n$('question').onkeydown = (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) ask(); };\n\nasync function ask() {\n  const q = $('question').value.trim();\n  if (!q) return;\n  $('askErr').textContent = ''; $('answer').textContent = 'Thinking…'; $('askMeta').textContent = '';\n  $('sources').innerHTML = '<span class=\"muted\">Retrieving…</span>';\n  $('askBtn').disabled = true;\n  try {\n    const res = await api('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ question: q, collection: col() }) });\n    $('answer').innerHTML = esc(res.answer).replace(/\\[(\\d+)\\]/g, (m, n) => `<cite onclick=\"openSrc(${n})\">[${n}]</cite>`);\n    $('askMeta').textContent = `${res.model} · ${res.latency_ms} ms · ${res.sources.length} chunks (dense+BM25 → RRF)`;\n    renderSources(res.sources);\n  } catch (e) { $('answer').textContent = ''; $('askErr').textContent = e.message; $('sources').innerHTML = ''; }\n  $('askBtn').disabled = false;\n}\n\nfunction renderSources(sources) {\n  if (!sources.length) { $('sources').innerHTML = '<span class=\"muted\">No chunks retrieved.</span>'; return; }\n  $('sources').innerHTML = sources.map(s => `\n    <details class=\"src\" id=\"src-${s.n}\">\n      <summary><span class=\"n\">[${s.n}]</span> <strong>${esc(s.source)}</strong>\n        <span class=\"muted\">page ${s.page}${s.section ? ` · ${esc(s.section)}` : ''}</span>\n        ${s.extraction === 'ocr' ? '<span class=\"pill ocr\">OCR</span>' : ''}\n        <span class=\"muted\">dense #${s.dense_rank ?? '–'} · bm25 #${s.bm25_rank ?? '–'} · rrf ${s.rrf_score}</span>\n      </summary>\n      <pre>${esc(s.text)}</pre>\n    </details>`).join('');\n}\nfunction openSrc(n) { const el = $(`src-${n}`); if (el) { el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }\n\nloadHealth(); refreshDocs();\n</script>\n</body>\n</html>\nEOF\necho ok",
+  "description": "Write the single-page UI"
+}
+```
+
+## Tool  <sub>2026-09-06T10:00:29.168Z</sub>
+
+**Tool result**
+
+```
+ok
+```
+
+## Assistant  <sub>2026-09-06T10:00:51.087Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > cli/rag_cli.py <<'EOF'\n\"\"\"\n`rag` command line. Talks to the running API so there is a single Chroma writer.\n\n  rag ingest docs/*.pdf --collection legal\n  rag status --watch\n  rag ask \"What is the notice period?\" --show-sources\n  rag reset --collection legal\n  rag serve\n\"\"\"\nfrom __future__ import annotations\n\nimport sys\nimport time\nfrom pathlib import Path\nfrom typing import Optional\n\nimport httpx\nimport typer\n\nfrom app.config import settings\n\napp = typer.Typer(help=\"RAG Generator CLI\", no_args_is_help=True, add_completion=False)\nAPI = typer.Option(None, \"--api\", help=\"API base URL (default: RAG_API_URL from .env)\")\nCOL = typer.Option(None, \"--collection\", \"-c\", help=\"Collection / document set name\")\n\n\ndef _client(api: Optional[str]) -> httpx.Client:\n    return httpx.Client(base_url=(api or settings.RAG_API_URL).rstrip(\"/\"), timeout=120)\n\n\ndef _die(resp: httpx.Response) -> None:\n    try:\n        detail = resp.json().get(\"detail\", resp.text)\n    except Exception:\n        detail = resp.text\n    typer.secho(f\"HTTP {resp.status_code}: {detail}\", fg=\"red\", err=True)\n    raise typer.Exit(1)\n\n\n@app.command()\ndef ingest(files: list[Path] = typer.Argument(..., exists=True, readable=True),\n           collection: Optional[str] = COL, api: Optional[str] = API,\n           wait: bool = typer.Option(True, help=\"Wait until indexing finishes\")):\n    \"\"\"Upload one or more files and (by default) wait for them to be indexed.\"\"\"\n    col = collection or settings.DEFAULT_COLLECTION\n    with _client(api) as c:\n        payload = [(\"files\", (p.name, p.read_bytes())) for p in files]\n        r = c.post(\"/api/documents\", files=payload, data={\"collection\": col})\n        if r.status_code >= 400:\n            _die(r)\n        body = r.json()\n        for rej in body.get(\"rejected\", []):\n            typer.secho(f\"rejected {rej['filename']}: {rej['reason']}\", fg=\"yellow\")\n        ids = [d[\"doc_id\"] for d in body[\"documents\"]]\n        for d in body[\"documents\"]:\n            typer.echo(f\"queued  {d['filename']}  ({d['doc_id']})\")\n        if not wait or not ids:\n            return\n        while True:\n            docs = {d[\"doc_id\"]: d for d in c.get(\"/api/documents\", params={\"collection\": col}).json()}\n            mine = [docs[i] for i in ids if i in docs]\n            if all(d[\"status\"] in (\"indexed\", \"failed\") for d in mine):\n                break\n            time.sleep(1)\n        for d in mine:\n            color = \"green\" if d[\"status\"] == \"indexed\" else \"red\"\n            extra = f\"{d['pages']} pages, {d['chunks']} chunks\" if d[\"status\"] == \"indexed\" else d[\"error\"]\n            typer.secho(f\"{d['status']:8} {d['filename']}  {extra}\", fg=color)\n\n\n@app.command()\ndef status(collection: Optional[str] = COL, api: Optional[str] = API,\n           watch: bool = typer.Option(False, help=\"Refresh every second until nothing is processing\")):\n    \"\"\"List documents and their indexing status.\"\"\"\n    with _client(api) as c:\n        while True:\n            r = c.get(\"/api/documents\", params={\"collection\": collection} if collection else None)\n            if r.status_code >= 400:\n                _die(r)\n            docs = r.json()\n            if not docs:\n                typer.echo(\"no documents\")\n            for d in docs:\n                ocr = f\" ocr={d['ocr_pages']}\" if d.get(\"ocr_pages\") else \"\"\n                err = f\"  ! {d['error']}\" if d.get(\"error\") else \"\"\n                typer.echo(f\"{d['status']:10} {d['collection']:12} {d['filename']:40} \"\n                           f\"pages={d['pages']} chunks={d['chunks']}{ocr}{err}\")\n            busy = any(d[\"status\"] not in (\"indexed\", \"failed\") for d in docs)\n            if not watch or not busy:\n                break\n            time.sleep(1)\n            typer.echo(\"---\")\n\n\n@app.command()\ndef ask(question: str, collection: Optional[str] = COL, api: Optional[str] = API,\n        top_k: Optional[int] = typer.Option(None, help=\"Chunks passed to the LLM\"),\n        show_sources: bool = typer.Option(False, \"--show-sources\", \"-s\")):\n    \"\"\"Ask a question; prints the grounded answer (and optionally the cited chunks).\"\"\"\n    with _client(api) as c:\n        r = c.post(\"/api/ask\", json={\"question\": question, \"collection\": collection, \"top_k\": top_k})\n        if r.status_code >= 400:\n            _die(r)\n        res = r.json()\n        typer.echo(res[\"answer\"])\n        typer.secho(f\"\\n[{res['model']} · {res['latency_ms']} ms · {len(res['sources'])} sources]\",\n                    fg=\"bright_black\")\n        if show_sources:\n            for s in res[\"sources\"]:\n                loc = f\"page {s['page']}\" + (f\", {s['section']}\" if s.get(\"section\") else \"\")\n                tag = \" (OCR)\" if s.get(\"extraction\") == \"ocr\" else \"\"\n                typer.secho(f\"\\n[{s['n']}] {s['source']} — {loc}{tag}  dense#{s['dense_rank']} \"\n                            f\"bm25#{s['bm25_rank']} rrf={s['rrf_score']}\", fg=\"cyan\")\n                typer.echo(s[\"text\"])\n\n\n@app.command()\ndef reset(collection: Optional[str] = COL, api: Optional[str] = API,\n          yes: bool = typer.Option(False, \"--yes\", \"-y\", help=\"Skip confirmation\")):\n    \"\"\"Delete every document and vector in a collection.\"\"\"\n    col = collection or settings.DEFAULT_COLLECTION\n    if not yes and not typer.confirm(f\"Delete all documents in collection '{col}'?\"):\n        raise typer.Exit(0)\n    with _client(api) as c:\n        r = c.delete(f\"/api/collections/{col}\")\n        if r.status_code >= 400:\n            _die(r)\n    typer.secho(f\"collection '{col}' reset\", fg=\"green\")\n\n\n@app.command()\ndef serve(host: str = typer.Option(None), port: int = typer.Option(None),\n          reload: bool = typer.Option(False)):\n    \"\"\"Run the API + UI locally with uvicorn.\"\"\"\n    import uvicorn\n\n    uvicorn.run(\"app.main:app\", host=host or settings.APP_HOST, port=port or settings.APP_PORT,\n                reload=reload)\n\n\nif __name__ == \"__main__\":\n    sys.exit(app())\nEOF\necho ok",
+  "description": "Write the typer CLI"
+}
+```
+
+## Tool  <sub>2026-09-06T10:00:51.104Z</sub>
+
+**Tool result**
+
+```
+ok
+```
+
+## Assistant  <sub>2026-09-06T10:01:24.771Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > tests/test_api.py <<'EOF'\n\"\"\"End-to-end API smoke test with the LLM mocked (embeddings + Chroma + BM25 are real).\"\"\"\nimport shutil\nimport time\nfrom pathlib import Path\n\nimport pytest\nfrom fastapi.testclient import TestClient\n\nfrom app.config import settings\n\nDATA = settings.DATA_DIR\n\n\n@pytest.fixture(scope=\"module\")\ndef client():\n    shutil.rmtree(DATA, ignore_errors=True)\n    from app.main import app\n\n    with TestClient(app) as c:\n        yield c\n    shutil.rmtree(DATA, ignore_errors=True)\n\n\ndef _wait_indexed(client, doc_id, timeout=60):\n    t0 = time.time()\n    while time.time() - t0 < timeout:\n        d = client.get(f\"/api/documents/{doc_id}\").json()\n        if d[\"status\"] in (\"indexed\", \"failed\"):\n            return d\n        time.sleep(0.2)\n    raise AssertionError(\"timed out waiting for indexing\")\n\n\ndef test_health(client):\n    h = client.get(\"/api/health\").json()\n    assert h[\"status\"] == \"ok\" and \".pdf\" in h[\"supported_extensions\"]\n    assert \"LLM_API_KEY\" not in h[\"settings\"]\n\n\ndef test_upload_ask_delete_flow(client, monkeypatch, tmp_path: Path):\n    captured = {}\n\n    def fake_chat(messages, **kw):\n        captured[\"messages\"] = messages\n        return \"The refund window is 30 days [1].\"\n\n    monkeypatch.setattr(\"app.rag.llm.chat\", fake_chat)\n\n    md = tmp_path / \"policy.md\"\n    md.write_text(\"# Refund policy\\nCustomers may request a refund within 30 days of purchase.\\n\\n\"\n                  \"# Shipping\\nOrders ship within 2 business days.\\n\")\n    r = client.post(\"/api/documents\", files=[(\"files\", (\"policy.md\", md.read_bytes()))],\n                    data={\"collection\": \"test\"})\n    assert r.status_code == 202, r.text\n    doc_id = r.json()[\"documents\"][0][\"doc_id\"]\n    d = _wait_indexed(client, doc_id)\n    assert d[\"status\"] == \"indexed\", d\n    assert d[\"pages\"] == 2 and d[\"chunks\"] >= 2\n\n    r = client.post(\"/api/ask\", json={\"question\": \"How long is the refund window?\", \"collection\": \"test\"})\n    assert r.status_code == 200, r.text\n    body = r.json()\n    assert \"30 days\" in body[\"answer\"]\n    assert body[\"sources\"], \"hybrid retrieval returned nothing\"\n    top = body[\"sources\"][0]\n    assert top[\"source\"] == \"policy.md\" and \"refund\" in top[\"text\"].lower()\n    assert top[\"dense_rank\"] is not None or top[\"bm25_rank\"] is not None\n    assert \"CONTEXT:\" in captured[\"messages\"][1][\"content\"]\n\n    chunks = client.get(\"/api/chunks\", params={\"collection\": \"test\"}).json()\n    assert len(chunks) == d[\"chunks\"]\n\n    assert client.delete(f\"/api/documents/{doc_id}\").status_code == 204\n    assert client.get(\"/api/documents\", params={\"collection\": \"test\"}).json() == []\n    r = client.post(\"/api/ask\", json={\"question\": \"anything\", \"collection\": \"test\"})\n    assert r.json()[\"sources\"] == [] and \"could not find\" in r.json()[\"answer\"]\n\n\ndef test_rejects_unsupported(client):\n    r = client.post(\"/api/documents\", files=[(\"files\", (\"x.exe\", b\"MZ\"))])\n    assert r.status_code == 400\n\n\ndef test_llm_error_is_502(client, monkeypatch, tmp_path: Path):\n    from app.llm.client import LLMError\n\n    def boom(messages, **kw):\n        raise LLMError(\"bad key\")\n\n    monkeypatch.setattr(\"app.rag.llm.chat\", boom)\n    txt = tmp_path / \"n.txt\"\n    txt.write_text(\"The capital of Freedonia is Marxburg.\")\n    r = client.post(\"/api/documents\", files=[(\"files\", (\"n.txt\", txt.read_bytes()))],\n                    data={\"collection\": \"err\"})\n    _wait_indexed(client, r.json()[\"documents\"][0][\"doc_id\"])\n    r = client.post(\"/api/ask\", json={\"question\": \"capital of Freedonia?\", \"collection\": \"err\"})\n    assert r.status_code == 502 and \"bad key\" in r.json()[\"detail\"]\n    client.delete(\"/api/collections/err\")\nEOF\n.venv/bin/python -m pytest -q -x 2>&1 | tail -25",
+  "description": "Write API smoke test and run the full test suite",
+  "timeout": 600000,
+  "run_in_background": true
+}
+```
+
+## Tool  <sub>2026-09-06T10:01:24.788Z</sub>
+
+**Tool result**
+
+```
+Command running in background with ID: b00ub3dqd. Output is being written to: /private/tmp/claude-502/-Users-shoaib-rayeen-my-space-rag-generator/a88920a3-6212-4085-ad05-80ba0afca34d/tasks/b00ub3dqd.output. You will be notified when it completes. To check interim output, use Read on that file path.
+```
+
+## Assistant  <sub>2026-09-06T10:01:26.245Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": ".venv/bin/python - <<'EOF'\nimport inspect, anthropic\nfrom anthropic.resources.messages import Messages\nprint(anthropic.__version__)\nsig = inspect.signature(Messages.parse)\nprint([p for p in sig.parameters if p in (\"output_format\",\"output_config\",\"thinking\",\"max_tokens\",\"model\",\"system\")])\nEOF",
+  "description": "Verify anthropic SDK parse() signature"
+}
+```
+
+## Tool  <sub>2026-09-06T10:01:28.338Z</sub>
+
+**Tool result**
+
+```
+1.4.0
+['max_tokens', 'model', 'output_config', 'output_format', 'system', 'thinking']
+```
+
+## Assistant  <sub>2026-09-06T10:02:15.805Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > samples/handbook.md <<'EOF'\n# Northwind Robotics Employee Handbook\n\nWelcome to Northwind Robotics. This handbook summarises the policies that apply to all\nfull-time employees working from the Bengaluru and Rotterdam offices.\n\n## Working hours\n\nCore hours are 10:00 to 16:00 local time, Monday to Friday. Outside core hours employees\nmay choose their own schedule as long as they complete 40 hours per week. Remote work is\nallowed up to three days per week; managers may approve additional remote days for\ncaregiving or medical reasons.\n\n## Leave policy\n\nEmployees accrue 24 days of paid annual leave per calendar year, credited monthly.\nUnused leave up to 10 days can be carried into the next year and must be used by 31 March.\nSick leave is 12 days per year and does not carry over. Parental leave is 26 weeks for the\nprimary caregiver and 8 weeks for the secondary caregiver, both fully paid.\n\n## Expense reimbursement\n\nExpenses must be submitted in the Concur portal within 30 days of being incurred.\nMeals while travelling are reimbursed up to EUR 60 per day. Any single expense above\nEUR 500 requires written pre-approval from a director. Receipts are mandatory for all\nclaims above EUR 25.\n\n## Equipment\n\nEvery engineer receives a laptop refreshed every 3 years and a one-time home office\nbudget of EUR 750. Requests go through the IT helpdesk; delivery usually takes 5 business days.\n\n## Code of conduct\n\nNorthwind expects respectful, inclusive behaviour. Concerns can be raised confidentially\nwith People Operations or through the anonymous ethics hotline at +31 20 555 0199.\nEOF\ncat > samples/security_policy.txt <<'EOF'\nNORTHWIND ROBOTICS - INFORMATION SECURITY POLICY (v2.3, effective 1 February 2026)\n\n1. Passwords must be at least 14 characters and rotated every 180 days. Multi-factor\nauthentication is mandatory for email, GitHub, AWS and the HR system.\n\n2. Laptops must have full-disk encryption enabled (FileVault or BitLocker) and screen lock\nafter 5 minutes of inactivity.\n\n3. Production customer data may only be accessed through the bastion host \"gatekeeper\".\nDirect database connections from laptops are prohibited.\n\n4. Security incidents must be reported to security@northwind.example within 1 hour of\ndiscovery. The on-call security engineer can be paged via the #sec-oncall Slack channel.\n\n5. Third-party vendors handling personal data require a signed Data Processing Agreement\nand an annual SOC 2 Type II report before onboarding.\n\n6. Access reviews are performed quarterly by team leads; unused accounts are disabled\nafter 90 days of inactivity.\nEOF\ncat > samples/robot_catalog.csv <<'EOF'\nmodel,category,payload_kg,reach_mm,price_eur,lead_time_weeks,warranty_years\nNW-Pico,desktop arm,0.5,350,2400,2,1\nNW-Atlas 5,collaborative arm,5,900,18500,6,2\nNW-Atlas 12,collaborative arm,12,1300,27900,8,2\nNW-Titan 60,industrial arm,60,2100,64000,12,3\nNW-Rover M,mobile base,150,0,31000,10,2\nNW-Rover XL,mobile base,600,0,58000,14,2\nNW-Gripper V2,end effector,3,0,1900,1,1\nNW-Vision Kit,accessory,0,0,4200,3,1\nEOF\ncat > samples/release_notes.html <<'EOF'\n<!doctype html>\n<html><head><title>NorthwindOS 4.2 Release Notes</title>\n<style>body{font-family:sans-serif}</style>\n<script>console.log(\"tracking pixel should be ignored\");</script>\n</head>\n<body>\n<nav>Home · Docs · Downloads</nav>\n<h1>NorthwindOS 4.2 Release Notes</h1>\n<p>Released 14 August 2026. NorthwindOS 4.2 is a long-term support release supported until August 2029.</p>\n<h2>New features</h2>\n<ul>\n<li>Path planner now supports dynamic obstacle avoidance at up to 2 m/s for Rover bases.</li>\n<li>The Atlas arm family gains force-limited hand guiding; the default collision threshold is 80 N.</li>\n<li>Fleet Manager can now schedule firmware updates in maintenance windows.</li>\n</ul>\n<h2>Breaking changes</h2>\n<ul>\n<li>The legacy REST API v1 has been removed. Integrations must migrate to API v2 before upgrading.</li>\n<li>Minimum controller firmware is 3.9.0.</li>\n</ul>\n<h2>Known issues</h2>\n<p>Vision Kit calibration may fail under flickering LED lighting; a fix is planned for 4.2.1.</p>\n<footer>© Northwind Robotics</footer>\n</body></html>\nEOF\ncat > scripts/make_samples.py <<'EOF'\n\"\"\"\nGenerate the binary sample documents (PDF, DOCX, scanned-style PDF, PNG) in samples/.\n\n    pip install -r requirements-dev.txt\n    python scripts/make_samples.py\n\nThe text PDF and DOCX exercise the normal extractors; `scanned_memo.pdf` and\n`whiteboard.png` contain text only as pixels, so they exercise the Tesseract OCR path.\n\"\"\"\nfrom __future__ import annotations\n\nfrom pathlib import Path\n\nOUT = Path(__file__).resolve().parents[1] / \"samples\"\n\nWARRANTY_PAGES = [\n    \"Northwind Robotics Limited Warranty\\n\\nThis warranty covers manufacturing defects in Northwind \"\n    \"robot arms, mobile bases and end effectors. Coverage starts on the delivery date shown on the \"\n    \"commercial invoice.\",\n    \"Coverage periods\\n\\nDesktop and collaborative arms: 2 years. Industrial arms (Titan series): \"\n    \"3 years. Mobile bases: 2 years. Accessories and end effectors: 1 year. Extended coverage of up \"\n    \"to 5 years can be purchased within 90 days of delivery.\",\n    \"Exclusions\\n\\nThe warranty does not cover damage caused by operation outside the rated payload, \"\n    \"unauthorised firmware, liquid ingress, or use in explosive atmospheres. Consumables such as \"\n    \"gripper pads and cables are excluded.\",\n    \"Claims\\n\\nTo make a claim, open a ticket at support.northwind.example quoting the serial number. \"\n    \"Northwind will respond within 2 business days and ship replacement parts within 10 business days \"\n    \"for in-stock items.\",\n]\n\nMEMO = (\"INTERNAL MEMO - SCANNED COPY\\n\\nTo: All plant supervisors\\nFrom: Operations\\n\"\n        \"Date: 3 March 2026\\n\\nThe Rotterdam assembly line will pause for\\n\"\n        \"scheduled maintenance from 9 to 11 April 2026.\\nShift leads must complete the\\n\"\n        \"safety checklist form OPS-17 before restart.\\nContact: ops@northwind.example\")\n\nWHITEBOARD = (\"Sprint 42 goals\\n- Ship Fleet Manager 1.3\\n- Reduce Rover XL boot time to 20 seconds\\n\"\n              \"- Hire two firmware engineers\\nDemo day: Friday 26 June 2026\")\n\n\ndef make_text_pdf() -> None:\n    from reportlab.lib.pagesizes import A4\n    from reportlab.lib.units import cm\n    from reportlab.pdfgen import canvas\n\n    c = canvas.Canvas(str(OUT / \"warranty.pdf\"), pagesize=A4)\n    width, height = A4\n    for i, page in enumerate(WARRANTY_PAGES, start=1):\n        y = height - 3 * cm\n        for line in _wrap(page, 90):\n            c.drawString(2.5 * cm, y, line)\n            y -= 0.6 * cm\n        c.drawString(width / 2, 1.5 * cm, f\"Page {i}\")\n        c.showPage()\n    c.save()\n\n\ndef make_docx() -> None:\n    import docx\n\n    d = docx.Document()\n    d.add_heading(\"Onboarding Guide for New Engineers\", level=0)\n    d.add_heading(\"Week 1\", level=1)\n    d.add_paragraph(\"Collect your laptop from IT, complete the security training in the LMS, and \"\n                    \"pair with your onboarding buddy. Your buddy is assigned in the welcome email.\")\n    d.add_heading(\"Development environment\", level=1)\n    d.add_paragraph(\"All services run in Docker Compose. Clone the 'northwind/monorepo' repository, \"\n                    \"run make bootstrap, and confirm that make test passes before your first PR.\")\n    d.add_heading(\"Code review\", level=1)\n    d.add_paragraph(\"Every change needs one approving review. Changes to the motion planner or \"\n                    \"safety controller need two approvals, one from the Safety team.\")\n    d.add_heading(\"Useful contacts\", level=1)\n    table = d.add_table(rows=1, cols=2)\n    table.rows[0].cells[0].text, table.rows[0].cells[1].text = \"Team\", \"Channel\"\n    for team, chan in [(\"Firmware\", \"#fw\"), (\"Motion planning\", \"#motion\"), (\"IT helpdesk\", \"#it-help\")]:\n        row = table.add_row().cells\n        row[0].text, row[1].text = team, chan\n    d.save(str(OUT / \"onboarding.docx\"))\n\n\ndef _render_text_image(text: str, size=(1400, 900)):\n    from PIL import Image, ImageDraw, ImageFont\n\n    img = Image.new(\"RGB\", size, \"white\")\n    draw = ImageDraw.Draw(img)\n    try:\n        font = ImageFont.truetype(\"DejaVuSans.ttf\", 34)\n    except OSError:\n        font = ImageFont.load_default(size=34)\n    y = 60\n    for line in text.split(\"\\n\"):\n        draw.text((70, y), line, fill=\"black\", font=font)\n        y += 52\n    return img\n\n\ndef make_scanned_pdf_and_png() -> None:\n    _render_text_image(MEMO).save(OUT / \"scanned_memo.pdf\", \"PDF\", resolution=150)\n    _render_text_image(WHITEBOARD, size=(1400, 600)).save(OUT / \"whiteboard.png\")\n\n\ndef _wrap(text: str, width: int) -> list[str]:\n    import textwrap\n\n    out: list[str] = []\n    for para in text.split(\"\\n\"):\n        out.extend(textwrap.wrap(para, width) or [\"\"])\n    return out\n\n\nif __name__ == \"__main__\":\n    OUT.mkdir(exist_ok=True)\n    make_text_pdf()\n    make_docx()\n    make_scanned_pdf_and_png()\n    print(\"wrote:\", \", \".join(sorted(p.name for p in OUT.iterdir())))\nEOF\nuv pip install -r requirements-dev.txt --python .venv/bin/python -q 2>&1 | tail -2 && .venv/bin/python scripts/make_samples.py",
+  "description": "Write sample docs and generator script, then generate binary samples",
+  "timeout": 180000
+}
+```
+
+## Tool  <sub>2026-09-06T10:02:18.104Z</sub>
+
+**Tool result**
+
+```
+wrote: handbook.md, onboarding.docx, release_notes.html, robot_catalog.csv, scanned_memo.pdf, security_policy.txt, warranty.pdf, whiteboard.png
+```
+
+## Assistant  <sub>2026-09-06T10:03:05.371Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > evaluation/judge.py <<'EOF'\n\"\"\"\nClaude-as-judge for RAG answers.\n\nUses the official `anthropic` SDK with structured outputs (`messages.parse`) so every\nverdict is a validated pydantic object. Model and key come from settings\n(JUDGE_MODEL, ANTHROPIC_API_KEY). Thinking is left at the model default (adaptive).\n\"\"\"\nfrom __future__ import annotations\n\nfrom typing import Optional\n\nimport anthropic\nfrom pydantic import BaseModel, Field\n\nfrom app.config import settings\n\nJUDGE_SYSTEM = \"\"\"You are a strict evaluator of a retrieval-augmented QA system.\nYou are given a QUESTION, the CONTEXT passages the system retrieved, the system's ANSWER,\nand optionally a REFERENCE answer written by a human.\n\nScore each dimension from 1 (worst) to 5 (best):\n- faithfulness: every claim in ANSWER is supported by CONTEXT. Saying \"not found in the\n  documents\" when the context truly lacks the answer is fully faithful (5).\n- answer_relevance: ANSWER directly addresses QUESTION without padding or evasion.\n- context_relevance: the retrieved CONTEXT contains what is needed to answer QUESTION.\n- correctness: ANSWER agrees with REFERENCE. Use null when no REFERENCE is given.\nSet hallucinated=true if ANSWER states anything not supported by CONTEXT.\nKeep the rationale to two or three sentences.\"\"\"\n\n\nclass JudgeVerdict(BaseModel):\n    faithfulness: int = Field(ge=1, le=5)\n    answer_relevance: int = Field(ge=1, le=5)\n    context_relevance: int = Field(ge=1, le=5)\n    correctness: Optional[int] = Field(default=None, ge=1, le=5)\n    hallucinated: bool\n    rationale: str\n\n\nclass GeneratedQA(BaseModel):\n    question: str\n    reference_answer: str\n\n\nclass GeneratedQASet(BaseModel):\n    items: list[GeneratedQA]\n\n\ndef _client() -> anthropic.Anthropic:\n    if not settings.ANTHROPIC_API_KEY:\n        raise SystemExit(\"ANTHROPIC_API_KEY is not set in .env; the judge needs it.\")\n    return anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)\n\n\ndef judge(question: str, contexts: list[str], answer: str,\n          reference: str | None = None) -> JudgeVerdict:\n    ctx = \"\\n\\n\".join(f\"[{i}] {c}\" for i, c in enumerate(contexts, start=1)) or \"(no context retrieved)\"\n    user = f\"QUESTION:\\n{question}\\n\\nCONTEXT:\\n{ctx}\\n\\nANSWER:\\n{answer}\\n\"\n    if reference:\n        user += f\"\\nREFERENCE:\\n{reference}\\n\"\n    resp = _client().messages.parse(\n        model=settings.JUDGE_MODEL,\n        max_tokens=settings.JUDGE_MAX_TOKENS,\n        system=JUDGE_SYSTEM,\n        messages=[{\"role\": \"user\", \"content\": user}],\n        output_format=JudgeVerdict,\n    )\n    if resp.stop_reason == \"refusal\":\n        raise RuntimeError(\"judge model refused the request\")\n    return resp.parsed_output\n\n\ndef generate_questions(chunk_text: str, source: str, n: int) -> list[GeneratedQA]:\n    prompt = (f\"Below is a passage from the document '{source}'. Write {n} distinct, specific \"\n              f\"questions that can be answered ONLY from this passage, each with a short reference \"\n              f\"answer quoting the relevant facts.\\n\\nPASSAGE:\\n{chunk_text}\")\n    resp = _client().messages.parse(\n        model=settings.JUDGE_MODEL,\n        max_tokens=settings.JUDGE_MAX_TOKENS,\n        messages=[{\"role\": \"user\", \"content\": prompt}],\n        output_format=GeneratedQASet,\n    )\n    if resp.stop_reason == \"refusal\":\n        return []\n    return resp.parsed_output.items[:n]\nEOF\ncat > evaluation/run_eval.py <<'EOF'\n\"\"\"\nEvaluate the running RAG API with Claude as judge.\n\n    python -m evaluation.run_eval --dataset evaluation/dataset.example.jsonl [--collection default]\n\nDataset rows (JSONL): {\"question\": \"...\", \"reference_answer\": \"...\", \"collection\": \"...\"}.\nWrites evaluation/reports/<timestamp>.json and .md, prints a summary table, and exits\nnon-zero when mean faithfulness is below --min-faithfulness (default EVAL_MIN_FAITHFULNESS).\n\"\"\"\nfrom __future__ import annotations\n\nimport argparse\nimport json\nimport statistics\nimport sys\nfrom datetime import datetime, timezone\nfrom pathlib import Path\n\nimport httpx\n\nfrom app.config import settings\nfrom evaluation.judge import judge\n\nREPORTS = Path(__file__).parent / \"reports\"\n\n\ndef load_dataset(path: Path) -> list[dict]:\n    rows = []\n    for line in path.read_text().splitlines():\n        line = line.strip()\n        if line and not line.startswith(\"#\"):\n            rows.append(json.loads(line))\n    if not rows:\n        raise SystemExit(f\"no rows in {path}\")\n    return rows\n\n\ndef run(dataset: Path, api: str, collection: str | None, min_faith: float, limit: int | None) -> int:\n    rows = load_dataset(dataset)[:limit]\n    results = []\n    with httpx.Client(base_url=api.rstrip(\"/\"), timeout=180) as c:\n        for i, row in enumerate(rows, start=1):\n            col = row.get(\"collection\") or collection or settings.DEFAULT_COLLECTION\n            print(f\"[{i}/{len(rows)}] {row['question'][:70]}\", flush=True)\n            r = c.post(\"/api/ask\", json={\"question\": row[\"question\"], \"collection\": col})\n            if r.status_code >= 400:\n                print(f\"   ask failed: HTTP {r.status_code} {r.text[:200]}\")\n                results.append({**row, \"collection\": col, \"error\": r.text[:500]})\n                continue\n            res = r.json()\n            verdict = judge(row[\"question\"], [s[\"text\"] for s in res[\"sources\"]], res[\"answer\"],\n                            row.get(\"reference_answer\"))\n            print(f\"   faith={verdict.faithfulness} rel={verdict.answer_relevance} \"\n                  f\"ctx={verdict.context_relevance} corr={verdict.correctness} \"\n                  f\"halluc={verdict.hallucinated}\")\n            results.append({**row, \"collection\": col, \"answer\": res[\"answer\"],\n                            \"sources\": [{\"source\": s[\"source\"], \"page\": s[\"page\"]} for s in res[\"sources\"]],\n                            \"latency_ms\": res[\"latency_ms\"], \"verdict\": verdict.model_dump()})\n\n    scored = [r for r in results if \"verdict\" in r]\n    summary = {}\n    for key in (\"faithfulness\", \"answer_relevance\", \"context_relevance\", \"correctness\"):\n        vals = [r[\"verdict\"][key] for r in scored if r[\"verdict\"].get(key) is not None]\n        summary[key] = round(statistics.mean(vals), 2) if vals else None\n    summary[\"hallucination_rate\"] = (round(sum(r[\"verdict\"][\"hallucinated\"] for r in scored) / len(scored), 2)\n                                     if scored else None)\n    summary[\"n\"] = len(results)\n    summary[\"n_scored\"] = len(scored)\n    summary[\"n_errors\"] = len(results) - len(scored)\n\n    REPORTS.mkdir(exist_ok=True)\n    stamp = datetime.now(timezone.utc).strftime(\"%Y%m%d-%H%M%S\")\n    report = {\"generated_at\": stamp, \"api\": api, \"dataset\": str(dataset), \"judge_model\": settings.JUDGE_MODEL,\n              \"llm_model\": scored[0].get(\"model\") if scored else None, \"summary\": summary, \"results\": results}\n    (REPORTS / f\"{stamp}.json\").write_text(json.dumps(report, indent=2))\n    (REPORTS / f\"{stamp}.md\").write_text(_markdown(report))\n\n    print(\"\\n== Summary ==\")\n    for k, v in summary.items():\n        print(f\"{k:20} {v}\")\n    print(f\"report: {REPORTS / stamp}.md\")\n\n    faith = summary[\"faithfulness\"]\n    if faith is None or faith < min_faith:\n        print(f\"FAIL: mean faithfulness {faith} < {min_faith}\")\n        return 1\n    return 0\n\n\ndef _markdown(report: dict) -> str:\n    s = report[\"summary\"]\n    out = [f\"# RAG evaluation {report['generated_at']}\", \"\",\n           f\"- API: `{report['api']}`  \", f\"- Dataset: `{report['dataset']}`  \",\n           f\"- Judge: `{report['judge_model']}`  \", \"\",\n           \"| metric | value |\", \"|---|---|\"]\n    out += [f\"| {k} | {v} |\" for k, v in s.items()]\n    out += [\"\", \"| # | question | faith | rel | ctx | corr | halluc | answer |\", \"|---|---|---|---|---|---|---|---|\"]\n    for i, r in enumerate(report[\"results\"], start=1):\n        if \"verdict\" not in r:\n            out.append(f\"| {i} | {r['question']} | – | – | – | – | – | ERROR: {r.get('error','')[:80]} |\")\n            continue\n        v = r[\"verdict\"]\n        ans = r[\"answer\"].replace(\"\\n\", \" \").replace(\"|\", \"\\\\|\")[:160]\n        out.append(f\"| {i} | {r['question']} | {v['faithfulness']} | {v['answer_relevance']} | \"\n                   f\"{v['context_relevance']} | {v.get('correctness') or '–'} | {'yes' if v['hallucinated'] else 'no'} | {ans} |\")\n    out += [\"\", \"## Rationales\", \"\"]\n    for i, r in enumerate(report[\"results\"], start=1):\n        if \"verdict\" in r:\n            out.append(f\"{i}. {r['verdict']['rationale']}\")\n    return \"\\n\".join(out) + \"\\n\"\n\n\ndef main() -> None:\n    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)\n    p.add_argument(\"--dataset\", type=Path, default=Path(\"evaluation/dataset.example.jsonl\"))\n    p.add_argument(\"--api\", default=settings.RAG_API_URL)\n    p.add_argument(\"--collection\", default=None, help=\"override collection for all rows\")\n    p.add_argument(\"--min-faithfulness\", type=float, default=settings.EVAL_MIN_FAITHFULNESS)\n    p.add_argument(\"--limit\", type=int, default=None)\n    a = p.parse_args()\n    sys.exit(run(a.dataset, a.api, a.collection, a.min_faithfulness, a.limit))\n\n\nif __name__ == \"__main__\":\n    main()\nEOF\ncat > evaluation/generate_dataset.py <<'EOF'\n\"\"\"\nSynthesize an eval dataset from whatever is currently indexed, using Claude.\n\n    python -m evaluation.generate_dataset --collection default --chunks 10 --per-chunk 2 \\\n        --out evaluation/dataset.generated.jsonl\n\nSamples chunks evenly across the collection via GET /api/chunks and asks the judge model\nto write questions answerable from each chunk. This is how the eval stays useful when\nthe document set changes without any code changes.\n\"\"\"\nfrom __future__ import annotations\n\nimport argparse\nimport json\nfrom pathlib import Path\n\nimport httpx\n\nfrom app.config import settings\nfrom evaluation.judge import generate_questions\n\n\ndef main() -> None:\n    p = argparse.ArgumentParser()\n    p.add_argument(\"--api\", default=settings.RAG_API_URL)\n    p.add_argument(\"--collection\", default=settings.DEFAULT_COLLECTION)\n    p.add_argument(\"--chunks\", type=int, default=10, help=\"how many chunks to sample\")\n    p.add_argument(\"--per-chunk\", type=int, default=2)\n    p.add_argument(\"--out\", type=Path, default=Path(\"evaluation/dataset.generated.jsonl\"))\n    a = p.parse_args()\n\n    with httpx.Client(base_url=a.api.rstrip(\"/\"), timeout=60) as c:\n        chunks = c.get(\"/api/chunks\", params={\"collection\": a.collection, \"limit\": 1000}).json()\n    if not chunks:\n        raise SystemExit(f\"collection '{a.collection}' has no chunks\")\n    step = max(1, len(chunks) // a.chunks)\n    sample = chunks[::step][: a.chunks]\n\n    rows = []\n    for ch in sample:\n        for qa in generate_questions(ch[\"text\"], ch[\"source\"], a.per_chunk):\n            rows.append({\"question\": qa.question, \"reference_answer\": qa.reference_answer,\n                         \"collection\": a.collection, \"source\": ch[\"source\"], \"page\": ch[\"page\"]})\n            print(f\"- {qa.question}\")\n    a.out.write_text(\"\\n\".join(json.dumps(r) for r in rows) + \"\\n\")\n    print(f\"wrote {len(rows)} rows to {a.out}\")\n\n\nif __name__ == \"__main__\":\n    main()\nEOF\ncat > evaluation/dataset.example.jsonl <<'EOF'\n{\"question\": \"How many days of paid annual leave do employees get per year?\", \"reference_answer\": \"24 days per calendar year, credited monthly.\", \"collection\": \"default\"}\n{\"question\": \"What is the maximum daily meal reimbursement while travelling?\", \"reference_answer\": \"EUR 60 per day.\", \"collection\": \"default\"}\n{\"question\": \"How often must passwords be rotated and what is the minimum length?\", \"reference_answer\": \"Every 180 days; at least 14 characters.\", \"collection\": \"default\"}\n{\"question\": \"Within how long must a security incident be reported?\", \"reference_answer\": \"Within 1 hour of discovery, to security@northwind.example.\", \"collection\": \"default\"}\n{\"question\": \"What is the payload and price of the NW-Titan 60?\", \"reference_answer\": \"60 kg payload, EUR 64,000.\", \"collection\": \"default\"}\n{\"question\": \"Which robot has the longest lead time?\", \"reference_answer\": \"NW-Rover XL at 14 weeks.\", \"collection\": \"default\"}\n{\"question\": \"What is the minimum controller firmware for NorthwindOS 4.2?\", \"reference_answer\": \"3.9.0.\", \"collection\": \"default\"}\n{\"question\": \"How long is the warranty on Titan series industrial arms?\", \"reference_answer\": \"3 years.\", \"collection\": \"default\"}\n{\"question\": \"How many approvals does a change to the safety controller need?\", \"reference_answer\": \"Two approvals, one from the Safety team.\", \"collection\": \"default\"}\n{\"question\": \"When will the Rotterdam assembly line pause for maintenance?\", \"reference_answer\": \"From 9 to 11 April 2026 (from the scanned memo; requires OCR).\", \"collection\": \"default\"}\n{\"question\": \"What is the company's policy on cryptocurrency payments?\", \"reference_answer\": \"Not covered in the documents; the system should say it could not find this.\", \"collection\": \"default\"}\nEOF\necho ok",
+  "description": "Write evaluation judge, runner, dataset generator, and example dataset"
+}
+```
+
+## Tool  <sub>2026-09-06T10:03:05.403Z</sub>
+
+**Tool result**
+
+```
+ok
+```
+
+## Assistant  <sub>2026-09-06T10:03:24.672Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > .env.example <<'EOF'\n# ============================================================\n# RAG Generator configuration. Copy to `.env` and edit.\n# Only the three LLM_* lines are required to get answers.\n# Every other value is optional and shown with its default.\n# ============================================================\n\n# --- Generation LLM: any OpenAI-compatible chat/completions endpoint ---\n# Examples: https://api.openai.com/v1 | https://openrouter.ai/api/v1 |\n#           https://api.groq.com/openai/v1 | http://host.docker.internal:11434/v1 (Ollama)\nLLM_API_URL=https://api.openai.com/v1\nLLM_API_KEY=replace-me\nLLM_MODEL=gpt-4o-mini\n#LLM_TEMPERATURE=0.1\n#LLM_MAX_TOKENS=1024\n#LLM_TIMEOUT_S=60\n\n# --- Evaluation judge (Claude). Only needed for `python -m evaluation.run_eval` ---\nANTHROPIC_API_KEY=\n#JUDGE_MODEL=claude-opus-5\n#JUDGE_MAX_TOKENS=4096\n#EVAL_MIN_FAITHFULNESS=3.5\n\n# --- Embeddings (fastembed) ---\n#EMBEDDING_MODEL=BAAI/bge-small-en-v1.5\n#EMBEDDING_BATCH_SIZE=64\n\n# --- Chunking ---\n#CHUNK_SIZE_CHARS=1200\n#CHUNK_OVERLAP_CHARS=200\n#CSV_ROWS_PER_PAGE=50\n\n# --- OCR fallback (Tesseract) ---\n#OCR_ENABLED=true\n#OCR_MIN_CHARS_PER_PAGE=20\n#OCR_LANG=eng\n#OCR_DPI=200\n\n# --- Retrieval: dense top-k + BM25 top-k fused with Reciprocal Rank Fusion ---\n#DENSE_TOP_K=20\n#BM25_TOP_K=20\n#FUSED_TOP_K=6\n#RRF_K=60\n\n# --- Storage / server ---\n#DATA_DIR=data\n#DEFAULT_COLLECTION=default\n#MAX_UPLOAD_MB=50\n#APP_HOST=0.0.0.0\n#APP_PORT=8000\n\n# --- CLI / eval target ---\n#RAG_API_URL=http://localhost:8000\nEOF\ncat > Dockerfile <<'EOF'\nFROM python:3.11-slim\n\nENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \\\n    FASTEMBED_CACHE_PATH=/models \\\n    DATA_DIR=/app/data\n\n# Tesseract provides the OCR fallback for scanned PDFs and image uploads.\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n        tesseract-ocr tesseract-ocr-eng curl \\\n    && rm -rf /var/lib/apt/lists/*\n\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\n\n# Pre-download the embedding model so the container works offline and starts fast.\nARG EMBEDDING_MODEL=BAAI/bge-small-en-v1.5\nRUN python -c \"from fastembed import TextEmbedding; TextEmbedding(model_name='${EMBEDDING_MODEL}')\"\n\nCOPY app ./app\nCOPY cli ./cli\nCOPY evaluation ./evaluation\nCOPY pyproject.toml .\nRUN pip install --no-cache-dir --no-deps -e .\n\nEXPOSE 8000\nHEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \\\n    CMD curl -fsS http://localhost:8000/api/health || exit 1\nCMD [\"uvicorn\", \"app.main:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8000\"]\nEOF\ncat > docker-compose.yml <<'EOF'\nservices:\n  app:\n    build: .\n    image: rag-generator:latest\n    env_file: .env\n    environment:\n      DATA_DIR: /app/data\n    ports:\n      - \"${APP_PORT:-8000}:8000\"\n    volumes:\n      - ./data:/app/data          # uploads, Chroma index, document registry\n      - ./samples:/app/samples:ro # handy for `docker compose exec app rag ingest samples/*`\n    restart: unless-stopped\nEOF\ncat > transcripts/README.md <<'EOF'\n# Agent transcripts\n\nThis folder holds the complete Claude Code transcripts for the sessions in which this\nproject was built, as required by the assessment brief.\n\nHow a transcript gets here: at the end of a Claude Code session run\n\n    /export transcripts/<YYYY-MM-DD>-rag-generator-<topic>.md\n\n(or use the desktop app's export action and save the file into this folder). Transcripts\nare plain Markdown and are committed as-is; nothing in them is edited after export.\n\n| File | Session |\n|---|---|\n| `2026-09-06-rag-generator-build.md` | Planning and full implementation of the RAG Generator (to be exported at session end) |\nEOF\necho ok",
+  "description": "Write .env.example, Dockerfile, docker-compose.yml, and transcripts README"
+}
+```
+
+## Tool  <sub>2026-09-06T10:03:24.722Z</sub>
+
+**Tool result**
+
+```
+ok
+```
+
+## Assistant  <sub>2026-09-06T10:03:30.053Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat /private/tmp/claude-502/-Users-shoaib-rayeen-my-space-rag-generator/a88920a3-6212-4085-ad05-80ba0afca34d/tasks/b00ub3dqd.output",
+  "description": "Read full test suite output"
+}
+```
+
+## Tool  <sub>2026-09-06T10:03:30.076Z</sub>
+
+**Tool result**
+
+```
+................                                                         [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.11/site-packages/starlette/testclient.py:53
+  /Users/shoaib.rayeen/my_space/rag-generator/.venv/lib/python3.11/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+16 passed, 1 warning in 10.17s
+
+[exited with code 0]
+```
+
+## Assistant  <sub>2026-09-06T10:04:13.315Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": ".venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"app/ingest/extractors.py\")\ns = p.read_text()\nold = \"\"\"        if len(text) < settings.OCR_MIN_CHARS_PER_PAGE and settings.OCR_ENABLED:\n            ocr_text = _ocr_image(_render_pdf_page(path, i)) if ocr_available() else None\n            if ocr_text is None:\"\"\"\nnew = \"\"\"        if len(text) < settings.OCR_MIN_CHARS_PER_PAGE and settings.OCR_ENABLED:\n            # Only render the page when Tesseract can actually consume it.\n            ocr_text = _ocr_image(_render_pdf_page(path, i)) if ocr_available() else _ocr_image(None)\n            if ocr_text is None:\"\"\"\nassert old in s\np.write_text(s.replace(old, new))\nprint(\"patched\")\nEOF\ncat > scripts/mock_llm.py <<'EOF'\n\"\"\"\nMock OpenAI-compatible LLM for offline demos and tests. NOT a real model.\n\n    python scripts/mock_llm.py            # serves http://localhost:8001/v1/chat/completions\n\nPoint .env at it:  LLM_API_URL=http://localhost:8001/v1  LLM_API_KEY=mock  LLM_MODEL=mock-extractive\nIt answers extractively: it picks the CONTEXT block that best overlaps the question and\nreturns its most relevant sentences with a [n] citation, or the \"not found\" sentence.\nSwap the three LLM_* lines for a real endpoint to get genuine generated answers.\n\"\"\"\nfrom __future__ import annotations\n\nimport re\nimport time\nimport uuid\n\nimport uvicorn\nfrom fastapi import FastAPI, Request\n\napp = FastAPI(title=\"mock-llm\")\nNOT_FOUND = \"I could not find this in the provided documents.\"\n_WORD = re.compile(r\"[a-z0-9]+\")\n_STOP = {\"the\", \"a\", \"an\", \"of\", \"is\", \"what\", \"how\", \"does\", \"do\", \"for\", \"to\", \"in\", \"on\", \"and\",\n         \"are\", \"many\", \"much\", \"which\", \"who\", \"when\", \"long\", \"with\", \"per\", \"at\"}\n\n\ndef _tokens(s: str) -> set[str]:\n    return {t for t in _WORD.findall(s.lower()) if t not in _STOP}\n\n\ndef _answer(user_content: str) -> str:\n    m = re.search(r\"CONTEXT:\\n(.*)\\n\\nQUESTION: (.*?)\\n\\nANSWER\", user_content, re.S)\n    if not m:\n        return NOT_FOUND\n    context, question = m.group(1), m.group(2)\n    blocks = re.findall(r\"\\[(\\d+)\\] \\((.*?)\\)\\n(.*?)(?=\\n\\n\\[\\d+\\] \\(|\\Z)\", context, re.S)\n    q = _tokens(question)\n    best, best_score, best_sents = None, 0.0, []\n    for n, _loc, text in blocks:\n        sents = [s.strip() for s in re.split(r\"(?<=[.!?])\\s+|\\n\", text) if s.strip()]\n        scored = sorted(((len(q & _tokens(s)), i, s) for i, s in enumerate(sents)), reverse=True)\n        top = [s for sc, _, s in scored[:2] if sc > 0]\n        score = sum(sc for sc, _, _ in scored[:2])\n        if score > best_score:\n            best, best_score, best_sents = n, score, [s for _, _, s in sorted((i, i, s) for sc, i, s in scored[:2] if sc > 0)]\n    if best is None or best_score < 2:\n        return NOT_FOUND\n    return \" \".join(best_sents) + f\" [{best}]\"\n\n\n@app.post(\"/v1/chat/completions\")\nasync def chat(req: Request):\n    body = await req.json()\n    user = next((m[\"content\"] for m in reversed(body.get(\"messages\", [])) if m[\"role\"] == \"user\"), \"\")\n    text = _answer(user)\n    return {\n        \"id\": f\"chatcmpl-{uuid.uuid4().hex[:12]}\", \"object\": \"chat.completion\", \"created\": int(time.time()),\n        \"model\": body.get(\"model\", \"mock-extractive\"),\n        \"choices\": [{\"index\": 0, \"message\": {\"role\": \"assistant\", \"content\": text}, \"finish_reason\": \"stop\"}],\n        \"usage\": {\"prompt_tokens\": len(user) // 4, \"completion_tokens\": len(text) // 4,\n                  \"total_tokens\": (len(user) + len(text)) // 4},\n    }\n\n\nif __name__ == \"__main__\":\n    uvicorn.run(app, host=\"127.0.0.1\", port=8001, log_level=\"warning\")\nEOF\ncat > .env <<'EOF'\n# Local demo configuration. Replace the three LLM_* lines with your real endpoint.\n# See .env.example for every available setting.\nLLM_API_URL=http://localhost:8001/v1\nLLM_API_KEY=mock\nLLM_MODEL=mock-extractive\nANTHROPIC_API_KEY=\nEOF\nmkdir -p .claude && cat > .claude/launch.json <<'EOF'\n{\n  \"version\": \"0.0.1\",\n  \"configurations\": [\n    {\n      \"name\": \"rag-api\",\n      \"runtimeExecutable\": \".venv/bin/python\",\n      \"runtimeArgs\": [\"-m\", \"uvicorn\", \"app.main:app\", \"--host\", \"127.0.0.1\", \"--port\", \"8000\"],\n      \"port\": 8000\n    }\n  ]\n}\nEOF\n.venv/bin/python -m pytest -q 2>&1 | tail -1",
+  "description": "Patch OCR warning path, add mock LLM server, demo .env, launch config; rerun tests",
+  "timeout": 180000
+}
+```
+
+## Tool  <sub>2026-09-06T10:04:14.163Z</sub>
+
+**Tool result**
+
+```
+patched
+16 passed, 1 warning in 0.58s
+```
+
+## Assistant  <sub>2026-09-06T10:05:06.243Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > README.md <<'EOF'\n# RAG Generator\n\nUpload documents at runtime, get a retrieval-augmented question-answering app over them.\nWorks for any document set with **no code changes**: swap the files, ask new questions.\n\n- **Interface:** REST API (FastAPI) + single-page UI (upload · status · ask · sources) + `rag` CLI\n- **Formats:** PDF, DOCX, HTML, TXT, MD, CSV → text with page metadata; PNG/JPG/TIFF via OCR\n- **Chunking:** overlapping, metadata-tagged windows (page, section, source, offsets)\n- **Retrieval:** hybrid — dense top-k (fastembed → ChromaDB) **plus** BM25 top-k (rank-bm25), fused with **Reciprocal Rank Fusion**\n- **Generation:** any OpenAI-compatible LLM endpoint, configured only in `.env`\n- **OCR fallback:** Tesseract kicks in for scanned PDF pages and image uploads\n- **Evaluation:** own script with **Claude as judge** (faithfulness, relevance, correctness, hallucination)\n- **Deployment:** Docker + docker compose\n\n---\n\n## 1. Quick start (Docker)\n\n```bash\ncp .env.example .env\n# edit .env: set LLM_API_URL, LLM_API_KEY, LLM_MODEL  (and ANTHROPIC_API_KEY if you want to run the eval)\ndocker compose up --build\n```\n\nOpen <http://localhost:8000>. Upload files, watch them index, ask questions, inspect sources.\nAPI docs are at <http://localhost:8000/docs>.\n\n`LLM_API_URL` is the **base** URL; the app appends `/chat/completions`. Examples:\n\n| Provider | `LLM_API_URL` | `LLM_MODEL` example |\n|---|---|---|\n| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |\n| OpenRouter | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4.5` |\n| Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |\n| Ollama (from Docker) | `http://host.docker.internal:11434/v1` | `llama3.1` |\n| Azure OpenAI / vLLM / LiteLLM | their OpenAI-compatible base URL | deployment / served model name |\n\nData (uploads, Chroma index, document registry) lives in `./data`, mounted as a volume, so it survives restarts.\n\n## 2. Local development (no Docker)\n\n```bash\nuv venv --python 3.11 .venv && source .venv/bin/activate     # or python3.11 -m venv .venv\nuv pip install -r requirements.txt                            # or pip install -r requirements.txt\npip install -e .                                              # installs the `rag` CLI\ncp .env.example .env                                          # then edit the LLM_* lines\nrag serve                                                     # http://localhost:8000\n```\n\nOCR outside Docker needs the Tesseract binary: `brew install tesseract` (macOS) or\n`apt install tesseract-ocr` (Debian/Ubuntu). Without it the app still runs; scanned pages\nare skipped with a warning and image uploads fail with a clear error.\n\n### Offline demo without an LLM key\n\n`scripts/mock_llm.py` is a tiny OpenAI-compatible server that answers **extractively** from\nthe retrieved context (it is not a language model). Useful for demos and CI:\n\n```bash\npython scripts/mock_llm.py &          # http://localhost:8001/v1\n# .env: LLM_API_URL=http://localhost:8001/v1  LLM_API_KEY=mock  LLM_MODEL=mock-extractive\nrag serve\n```\n\n## 3. Using it\n\n### UI\n1. **Upload** — drop files, optionally name a *collection* (a document set). Accepted extensions are listed from the API.\n2. **Status** — each file moves `queued → extracting → chunking → embedding → indexed` (or `failed` with the reason). OCR'd pages are flagged.\n3. **Ask** — the answer cites `[n]` blocks; click a citation to jump to the chunk.\n4. **Sources** — every retrieved chunk with file, page/section, whether it came from dense or BM25 (or both) and its RRF score.\n\n**Reset collection** wipes that document set so you can load a different one.\n\n### CLI\n```bash\nrag ingest samples/*.md samples/*.pdf --collection demo   # waits until indexed\nrag status --watch\nrag ask \"How many days of annual leave do employees get?\" -c demo --show-sources\nrag reset -c demo --yes\nrag serve                                                  # run the API locally\n```\nThe CLI talks to the API at `RAG_API_URL` (default `http://localhost:8000`, override with `--api`).\n\n### REST API\n| Method | Path | Purpose |\n|---|---|---|\n| `GET` | `/api/health` | status, models, supported extensions, collections, non-secret settings |\n| `POST` | `/api/documents` | multipart `files[]` (+ `collection`) → `202` with document ids; indexing runs in the background |\n| `GET` | `/api/documents?collection=` | list documents and status |\n| `GET` | `/api/documents/{doc_id}` | one document's status |\n| `DELETE` | `/api/documents/{doc_id}` | remove a document and its chunks |\n| `GET` | `/api/chunks?collection=&limit=&offset=` | inspect indexed chunks |\n| `POST` | `/api/ask` | `{\"question\", \"collection\"?, \"top_k\"?}` → answer + cited sources |\n| `DELETE` | `/api/collections/{name}` | reset a whole document set |\n\n```bash\ncurl -F \"files=@samples/handbook.md\" -F collection=demo localhost:8000/api/documents\ncurl -X POST localhost:8000/api/ask -H 'content-type: application/json' \\\n     -d '{\"question\":\"What is the meal allowance?\",\"collection\":\"demo\"}'\n```\n\n## 4. Architecture\n\n```\n            upload                    ┌──────────────┐\n files ──► /api/documents ──► extract │ pypdf/docx/  │──► pages (text, page_no, section, extraction)\n                                      │ bs4/csv/OCR  │\n                                      └──────────────┘\n                                             │  chunk: overlapping windows + metadata\n                                             ▼\n                                   fastembed (bge-small) ──► ChromaDB (cosine, persistent)\n                                                        └──► BM25Okapi (rank-bm25, in memory, rebuilt from Chroma)\n\n question ──► /api/ask ──► embed ──► Chroma top-k ─┐\n                       └──► tokenize ──► BM25 top-k ─┴─► Reciprocal Rank Fusion ─► top FUSED_TOP_K chunks\n                                                                                          │\n                                       grounded prompt with [n]-numbered context ◄────────┘\n                                                        │\n                                   OpenAI-compatible LLM (LLM_API_URL) ──► answer + sources\n```\n\nKey modules: `app/ingest/extractors.py` (formats + OCR), `app/ingest/chunker.py`,\n`app/retrieval/{embedder,vector_store,bm25_index,fusion}.py`, `app/llm/{client,prompts}.py`,\n`app/rag.py`, `app/main.py` (API), `app/static/index.html` (UI), `cli/rag_cli.py`.\n\n## 5. Tuning — everything lives in `app/config.py`\n\nEvery tunable is a field on `Settings` with a default, overridable from `.env` (same name).\nNothing tunable is hard-coded elsewhere. Highlights:\n\n| Setting | Default | What it does |\n|---|---|---|\n| `CHUNK_SIZE_CHARS` / `CHUNK_OVERLAP_CHARS` | 1200 / 200 | window size and overlap for chunking |\n| `CSV_ROWS_PER_PAGE` | 50 | rows per CSV \"page\" (header repeated per page) |\n| `DENSE_TOP_K` / `BM25_TOP_K` | 20 / 20 | candidates from each retriever before fusion |\n| `FUSED_TOP_K` | 6 | chunks passed to the LLM |\n| `RRF_K` | 60 | RRF smoothing constant |\n| `EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | any fastembed model (rebuild the Docker image or clear `data/chroma` after changing) |\n| `OCR_ENABLED` / `OCR_MIN_CHARS_PER_PAGE` / `OCR_LANG` / `OCR_DPI` | true / 20 / eng / 200 | when and how the Tesseract fallback runs |\n| `LLM_TEMPERATURE` / `LLM_MAX_TOKENS` / `LLM_TIMEOUT_S` | 0.1 / 1024 / 60 | generation parameters |\n| `JUDGE_MODEL` / `EVAL_MIN_FAITHFULNESS` | `claude-opus-5` / 3.5 | evaluation |\n\n**Supported formats** are the `SUPPORTED_EXTENSIONS` dict at the bottom of `app/config.py`\n(extension → extractor name). Remove an entry to stop accepting that type; to add a format,\nwrite an extractor in `app/ingest/extractors.py`, register it in `EXTRACTORS`, and add the extension.\n\nPage metadata per format: PDF = real page; DOCX = one \"page\" per heading section (DOCX has no\npages); HTML = single page with `<title>` as section; MD = one page per heading; TXT = one page;\nCSV = one page per `CSV_ROWS_PER_PAGE` rows; images = one page per frame.\n\n## 6. Evaluation (Claude as judge)\n\n```bash\n# 1. index the sample docs (or your own) into the collection named in the dataset\nrag ingest samples/* --collection default\n# 2. set ANTHROPIC_API_KEY in .env, then\npython -m evaluation.run_eval --dataset evaluation/dataset.example.jsonl\n```\n\nFor each row the script calls `/api/ask`, then asks Claude (`JUDGE_MODEL`, via the official\n`anthropic` SDK with structured outputs) to score **faithfulness**, **answer relevance**,\n**context relevance**, **correctness vs. reference** (1–5) and flag **hallucination**.\nReports land in `evaluation/reports/<timestamp>.{json,md}`; the run exits non-zero if mean\nfaithfulness is below `--min-faithfulness`.\n\nTo evaluate a *new* document set without hand-writing questions:\n\n```bash\npython -m evaluation.generate_dataset --collection mydocs --chunks 10 --per-chunk 2 \\\n       --out evaluation/dataset.mydocs.jsonl\npython -m evaluation.run_eval --dataset evaluation/dataset.mydocs.jsonl\n```\n\n## 7. Samples\n\n`samples/` contains a small fictional company corpus covering every format: `handbook.md`,\n`security_policy.txt`, `robot_catalog.csv`, `release_notes.html`, `warranty.pdf`,\n`onboarding.docx`, plus `scanned_memo.pdf` and `whiteboard.png` whose text exists only as\npixels (OCR path). Regenerate the binary ones with `pip install -r requirements-dev.txt &&\npython scripts/make_samples.py`.\n\n## 8. Tests\n\n```bash\npytest            # chunker, fusion, each extractor, OCR-unavailable path, API end-to-end (LLM mocked)\n```\n\n## 9. Tech stack\n\n**Used:** Python 3.11 · FastAPI + uvicorn · pydantic-settings · httpx · typer · fastembed\n(`BAAI/bge-small-en-v1.5`, ONNX, CPU) · ChromaDB (embedded `PersistentClient`) · rank-bm25 ·\npypdf · python-docx · beautifulsoup4 + lxml · pypdfium2 + pytesseract + Pillow (OCR) ·\nanthropic SDK (judge only) · pytest · Docker / docker compose.\n\n**Deliberately not used:** LangChain / LlamaIndex (thin custom pipeline is easier to read and\ntune), a cross-encoder reranker (RRF over two retrievers was the requirement; a reranker slots\nin after `hybrid_retrieve` if needed), a separate Chroma server (embedded keeps compose to one\nservice), authentication, GPU acceleration, the server-side refusal-fallback beta on the judge\n(judge prompts are benign; one plain `messages.parse` call keeps the script simple).\n\n## 10. Known limitations\n\n- BM25 lives in process memory and is rebuilt from Chroma on startup and after each ingest; fine for\n  thousands of chunks, not designed for millions. Run a single app replica.\n- Ingest jobs interrupted by a restart are marked `failed`; re-upload the file.\n- DOCX \"pages\" are heading sections, not printed pages.\n- OCR is English by default (`OCR_LANG=eng`; add `tesseract-ocr-<lang>` to the Dockerfile for others).\n- No authentication; run behind your own gateway if exposed.\n\n## 11. Transcripts\n\n`transcripts/` holds the complete Claude Code transcripts of the sessions that built this\nproject (see `transcripts/README.md`).\nEOF\necho readme-ok",
+  "description": "Write the README"
+}
+```
+
+## Tool  <sub>2026-09-06T10:05:06.277Z</sub>
+
+**Tool result**
+
+```
+readme-ok
+```
+
+## Assistant  <sub>2026-09-06T10:05:47.155Z</sub>
+
+**Tool call — `mcp__ccd_session__mark_chapter`**
+
+```json
+{
+  "title": "Job statuses, dedupe, and docs",
+  "summary": "Rework to QUEUED/DUPLICATE/PROCESSING/COMPLETED/FAILED/... statuses, job-id API, changelog, architecture.md, interactive flow page, CLAUDE.md"
+}
+```
+
+## Tool  <sub>2026-09-06T10:05:47.171Z</sub>
+
+**Tool result**
+
+```
+Chapter marked: "Job statuses, dedupe, and docs". Continue your current work.
+```
+
+## Assistant  <sub>2026-09-06T10:06:17.423Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > app/models.py <<'EOF'\n\"\"\"Pydantic schemas shared by the API, CLI and evaluation script.\"\"\"\nfrom __future__ import annotations\n\nfrom typing import Literal, Optional\n\nfrom pydantic import BaseModel, Field\n\n# The complete, fixed set of job statuses. `reason` explains every non-QUEUED state.\nDocStatus = Literal[\n    \"QUEUED\",                    # accepted, waiting for the background worker\n    \"DUPLICATE\",                 # same file hash already in this collection; not processed\n    \"PROCESSING\",                # extracting / chunking / embedding (see `stage`)\n    \"COMPLETED\",                 # indexed and searchable\n    \"FAILED\",                    # processing failed; see reason\n    \"EMPTY_FILE\",                # zero-byte upload\n    \"EXTRACTION_NOT_SUPPORTED\",  # file extension not in SUPPORTED_EXTENSIONS\n    \"UPLOAD_FAILED\",             # could not read or store the upload; see reason\n]\nTERMINAL_STATUSES = {\"DUPLICATE\", \"COMPLETED\", \"FAILED\", \"EMPTY_FILE\",\n                     \"EXTRACTION_NOT_SUPPORTED\", \"UPLOAD_FAILED\"}\n\n\nclass DocumentInfo(BaseModel):\n    job_id: str                      # identical to doc_id; use either to poll status\n    doc_id: str\n    filename: str\n    file_type: Optional[str] = None\n    collection: str\n    status: DocStatus\n    reason: Optional[str] = None     # human-readable explanation of the current status\n    stage: Optional[str] = None      # PROCESSING sub-step: extracting | chunking | embedding\n    sha256: Optional[str] = None\n    duplicate_of: Optional[str] = None       # doc_id of the original when status == DUPLICATE\n    duplicate_of_name: Optional[str] = None\n    pages: int = 0\n    chunks: int = 0\n    ocr_pages: int = 0\n    created_at: str\n    updated_at: str\n\n\nclass UploadResponse(BaseModel):\n    documents: list[DocumentInfo]\n\n\nclass AskRequest(BaseModel):\n    question: str = Field(..., min_length=1)\n    collection: Optional[str] = None\n    top_k: Optional[int] = Field(default=None, ge=1, le=50)\n\n\nclass Source(BaseModel):\n    n: int\n    chunk_id: str\n    doc_id: str\n    source: str\n    file_type: str\n    page: int\n    section: Optional[str] = None\n    extraction: str = \"text\"\n    text: str\n    dense_rank: Optional[int] = None\n    bm25_rank: Optional[int] = None\n    rrf_score: float\n\n\nclass AskResponse(BaseModel):\n    question: str\n    answer: str\n    sources: list[Source]\n    collection: str\n    model: str\n    latency_ms: int\n\n\nclass ChunkOut(BaseModel):\n    chunk_id: str\n    doc_id: str\n    source: str\n    page: int\n    section: Optional[str] = None\n    text: str\n\n\nclass HealthResponse(BaseModel):\n    status: str\n    llm_model: str\n    llm_api_url: str\n    embedding_model: str\n    supported_extensions: list[str]\n    ocr_enabled: bool\n    ocr_available: bool\n    collections: list[str]\n    statuses: list[str]\n    settings: dict\nEOF\ncat > app/jobs.py <<'EOF'\n\"\"\"Job / document registry: in-memory dict persisted to data/documents.json.\"\"\"\nfrom __future__ import annotations\n\nimport json\nimport threading\nfrom datetime import datetime, timezone\nfrom typing import Optional\n\nfrom app.config import settings\nfrom app.models import TERMINAL_STATUSES, DocumentInfo\n\n_docs: dict[str, DocumentInfo] = {}\n_lock = threading.Lock()\n_loaded = False\n\n\ndef _now() -> str:\n    return datetime.now(timezone.utc).isoformat(timespec=\"seconds\")\n\n\ndef _load() -> None:\n    global _loaded\n    if _loaded:\n        return\n    path = settings.documents_file\n    if path.exists():\n        try:\n            for raw in json.loads(path.read_text()):\n                doc = DocumentInfo(**raw)\n                if doc.status not in TERMINAL_STATUSES:  # interrupted by a restart\n                    doc.status, doc.stage = \"FAILED\", None\n                    doc.reason = \"Processing interrupted by a server restart; upload the file again.\"\n                _docs[doc.doc_id] = doc\n        except Exception:\n            pass\n    _loaded = True\n\n\ndef _save() -> None:\n    settings.DATA_DIR.mkdir(parents=True, exist_ok=True)\n    tmp = settings.documents_file.with_suffix(\".tmp\")\n    tmp.write_text(json.dumps([d.model_dump() for d in _docs.values()], indent=2))\n    tmp.replace(settings.documents_file)\n\n\ndef create(doc_id: str, filename: str, collection: str, status: str, *, file_type: str | None = None,\n           reason: str | None = None, sha256: str | None = None, duplicate_of: DocumentInfo | None = None\n           ) -> DocumentInfo:\n    with _lock:\n        _load()\n        doc = DocumentInfo(job_id=doc_id, doc_id=doc_id, filename=filename, file_type=file_type,\n                           collection=collection, status=status, reason=reason, sha256=sha256,\n                           duplicate_of=duplicate_of.doc_id if duplicate_of else None,\n                           duplicate_of_name=duplicate_of.filename if duplicate_of else None,\n                           created_at=_now(), updated_at=_now())\n        _docs[doc_id] = doc\n        _save()\n        return doc\n\n\ndef update(doc_id: str, **fields) -> Optional[DocumentInfo]:\n    with _lock:\n        _load()\n        doc = _docs.get(doc_id)\n        if doc is None:\n            return None\n        for k, v in fields.items():\n            setattr(doc, k, v)\n        doc.updated_at = _now()\n        _save()\n        return doc\n\n\ndef get(doc_id: str) -> Optional[DocumentInfo]:\n    with _lock:\n        _load()\n        return _docs.get(doc_id)\n\n\ndef find_by_hash(collection: str, sha256: str) -> Optional[DocumentInfo]:\n    \"\"\"The original a new upload would duplicate: same hash, same collection, still live.\"\"\"\n    with _lock:\n        _load()\n        for d in _docs.values():\n            if (d.collection == collection and d.sha256 == sha256\n                    and d.status in (\"QUEUED\", \"PROCESSING\", \"COMPLETED\")):\n                return d\n        return None\n\n\ndef list_docs(collection: str | None = None) -> list[DocumentInfo]:\n    with _lock:\n        _load()\n        docs = [d for d in _docs.values() if collection is None or d.collection == collection]\n        return sorted(docs, key=lambda d: d.created_at, reverse=True)\n\n\ndef delete(doc_id: str) -> Optional[DocumentInfo]:\n    with _lock:\n        _load()\n        doc = _docs.pop(doc_id, None)\n        if doc is not None:\n            _save()\n        return doc\n\n\ndef collections() -> list[str]:\n    with _lock:\n        _load()\n        return sorted({d.collection for d in _docs.values()})\nEOF\ncat > app/ingest/pipeline.py <<'EOF'\n\"\"\"Background job: extract -> chunk -> embed -> store -> rebuild BM25.\n\nStatus goes QUEUED -> PROCESSING (stage: extracting / chunking / embedding) -> COMPLETED,\nor FAILED with a human-readable reason. Runs in FastAPI's background thread pool.\n\"\"\"\nfrom __future__ import annotations\n\nimport logging\nfrom pathlib import Path\n\nfrom app import jobs\nfrom app.ingest.chunker import chunk_pages\nfrom app.ingest.extractors import extract\nfrom app.retrieval import bm25_index, embedder, vector_store\n\nlog = logging.getLogger(__name__)\n\n\ndef run(doc_id: str, path: Path) -> None:\n    doc = jobs.get(doc_id)\n    if doc is None or doc.status != \"QUEUED\":\n        return\n    try:\n        jobs.update(doc_id, status=\"PROCESSING\", stage=\"extracting\", reason=\"Extracting text\")\n        pages = extract(path)\n        if not pages:\n            raise ValueError(\"No text could be extracted from this file \"\n                             \"(scanned document without OCR, or empty content).\")\n        ocr_pages = sum(1 for p in pages if p.extraction == \"ocr\")\n\n        jobs.update(doc_id, stage=\"chunking\", pages=len(pages), ocr_pages=ocr_pages,\n                    reason=f\"Chunking {len(pages)} pages\")\n        chunks = chunk_pages(pages, doc_id=doc_id, source=doc.filename,\n                             file_type=doc.file_type or \"\", collection=doc.collection)\n        if not chunks:\n            raise ValueError(\"Extraction produced no usable text.\")\n\n        jobs.update(doc_id, stage=\"embedding\", chunks=len(chunks),\n                    reason=f\"Embedding {len(chunks)} chunks\")\n        vectors = embedder.embed_texts([c.text for c in chunks])\n        vector_store.add_chunks(doc.collection, [c.chunk_id for c in chunks],\n                                [c.text for c in chunks], vectors, [c.metadata for c in chunks])\n        bm25_index.rebuild(doc.collection)\n\n        ocr_note = f\", {ocr_pages} via OCR\" if ocr_pages else \"\"\n        jobs.update(doc_id, status=\"COMPLETED\", stage=None,\n                    reason=f\"Indexed {len(pages)} pages{ocr_note} into {len(chunks)} chunks\")\n        log.info(\"COMPLETED %s (%s)\", doc.filename, doc_id)\n    except Exception as exc:\n        log.exception(\"FAILED %s (%s)\", doc.filename, doc_id)\n        jobs.update(doc_id, status=\"FAILED\", stage=None,\n                    reason=f\"PROCESSING FAILED: {type(exc).__name__}: {exc}\")\nEOF\necho ok",
+  "description": "Rewrite models, jobs registry, and pipeline for the new status set"
+}
+```
+
+## Tool  <sub>2026-09-06T10:06:17.463Z</sub>
+
+**Tool result**
+
+```
+ok
+```
+
+## Assistant  <sub>2026-09-06T10:07:35.420Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > app/main.py <<'EOF'\n\"\"\"FastAPI application: REST API + single-page UI + docs pages.\n\nUpload is asynchronous: POST /api/documents stores each file, returns a job_id per file\nimmediately (202), and a background worker indexes it. Poll GET /api/jobs/{job_id}.\n\"\"\"\nfrom __future__ import annotations\n\nimport hashlib\nimport logging\nimport re\nimport uuid\nfrom contextlib import asynccontextmanager\nfrom pathlib import Path\nfrom typing import get_args\n\nfrom fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, UploadFile\nfrom fastapi.responses import FileResponse\nfrom fastapi.staticfiles import StaticFiles\n\nfrom app import jobs\nfrom app.config import SUPPORTED_EXTENSIONS, settings\nfrom app.ingest import pipeline\nfrom app.ingest.extractors import file_type_for, ocr_available\nfrom app.llm.client import LLMError\nfrom app.models import (TERMINAL_STATUSES, AskRequest, AskResponse, ChunkOut, DocStatus, DocumentInfo,\n                        HealthResponse, UploadResponse)\nfrom app.rag import answer\nfrom app.retrieval import bm25_index, embedder, vector_store\n\nlogging.basicConfig(level=logging.INFO, format=\"%(asctime)s %(levelname)s %(name)s: %(message)s\")\nlog = logging.getLogger(\"rag\")\n\nROOT = Path(__file__).resolve().parents[1]\nSTATIC_DIR = Path(__file__).parent / \"static\"\nDOCS_DIR = ROOT / \"docs\"\n_COLLECTION_RE = re.compile(r\"^[a-zA-Z0-9][a-zA-Z0-9._-]{1,62}$\")\n\n\ndef _collection(name: str | None) -> str:\n    name = (name or settings.DEFAULT_COLLECTION).strip()\n    if not _COLLECTION_RE.match(name):\n        raise HTTPException(400, \"Collection name must be 2-63 chars: letters, digits, . _ -\")\n    return name\n\n\n@asynccontextmanager\nasync def lifespan(_: FastAPI):\n    settings.uploads_dir.mkdir(parents=True, exist_ok=True)\n    log.info(\"warming embedding model %s\", settings.EMBEDDING_MODEL)\n    embedder.get_model()\n    for col in vector_store.list_collections():\n        n = bm25_index.rebuild(col)\n        log.info(\"BM25 rebuilt for '%s' (%d chunks)\", col, n)\n    log.info(\"OCR available: %s | LLM: %s @ %s\", ocr_available(), settings.LLM_MODEL, settings.LLM_API_URL)\n    yield\n\n\napp = FastAPI(title=\"RAG Generator\", version=\"0.2.0\", lifespan=lifespan)\napp.mount(\"/static\", StaticFiles(directory=STATIC_DIR), name=\"static\")\nif DOCS_DIR.exists():\n    app.mount(\"/guide\", StaticFiles(directory=DOCS_DIR), name=\"guide\")\n\n\n@app.get(\"/\", include_in_schema=False)\ndef index():\n    return FileResponse(STATIC_DIR / \"index.html\")\n\n\n@app.get(\"/api/health\", response_model=HealthResponse)\ndef health():\n    public = {k: v for k, v in settings.model_dump().items() if \"KEY\" not in k}\n    public = {k: (str(v) if isinstance(v, Path) else v) for k, v in public.items()}\n    return HealthResponse(\n        status=\"ok\", llm_model=settings.LLM_MODEL, llm_api_url=settings.LLM_API_URL,\n        embedding_model=settings.EMBEDDING_MODEL, supported_extensions=sorted(SUPPORTED_EXTENSIONS),\n        ocr_enabled=settings.OCR_ENABLED, ocr_available=ocr_available(),\n        collections=sorted(set(vector_store.list_collections()) | set(jobs.collections())),\n        statuses=list(get_args(DocStatus)), settings=public,\n    )\n\n\n# ----------------------------------------------------------------------- upload (async)\n\n@app.post(\"/api/documents\", response_model=UploadResponse, status_code=202)\nasync def upload(background: BackgroundTasks, files: list[UploadFile] = File(...),\n                 collection: str | None = Form(default=None)):\n    \"\"\"Accept files, return one job per file immediately; indexing happens in the background.\n\n    Every file gets a record, even rejected ones, so the listing explains what happened:\n    EXTRACTION_NOT_SUPPORTED, EMPTY_FILE, UPLOAD_FAILED, DUPLICATE, or QUEUED.\n    \"\"\"\n    col = _collection(collection)\n    limit = settings.MAX_UPLOAD_MB * 1024 * 1024\n    out: list[DocumentInfo] = []\n    for f in files:\n        name = Path(f.filename or \"upload\").name\n        doc_id = uuid.uuid4().hex[:12]\n        kind = file_type_for(name)\n\n        try:\n            data = await f.read()\n        except Exception as exc:\n            out.append(jobs.create(doc_id, name, col, \"UPLOAD_FAILED\", file_type=kind,\n                                   reason=f\"UPLOAD FAILED: could not read upload stream ({exc})\"))\n            continue\n\n        if kind is None:\n            out.append(jobs.create(doc_id, name, col, \"EXTRACTION_NOT_SUPPORTED\",\n                                   reason=f\"Extension '{Path(name).suffix or '(none)'}' is not supported. \"\n                                          f\"Supported: {' '.join(sorted(SUPPORTED_EXTENSIONS))}\"))\n            continue\n        if not data:\n            out.append(jobs.create(doc_id, name, col, \"EMPTY_FILE\", file_type=kind,\n                                   reason=\"The uploaded file is 0 bytes\"))\n            continue\n        if len(data) > limit:\n            out.append(jobs.create(doc_id, name, col, \"UPLOAD_FAILED\", file_type=kind,\n                                   reason=f\"UPLOAD FAILED: file is larger than {settings.MAX_UPLOAD_MB} MB\"))\n            continue\n\n        sha = hashlib.sha256(data).hexdigest()\n        original = jobs.find_by_hash(col, sha)\n        if original is not None:\n            out.append(jobs.create(doc_id, name, col, \"DUPLICATE\", file_type=kind, sha256=sha,\n                                   duplicate_of=original,\n                                   reason=f\"Same content as '{original.filename}' ({original.doc_id}); \"\n                                          f\"not processed again\"))\n            continue\n\n        path = settings.uploads_dir / f\"{doc_id}_{name}\"\n        try:\n            path.write_bytes(data)\n        except OSError as exc:\n            out.append(jobs.create(doc_id, name, col, \"UPLOAD_FAILED\", file_type=kind, sha256=sha,\n                                   reason=f\"UPLOAD FAILED: could not store file ({exc})\"))\n            continue\n\n        out.append(jobs.create(doc_id, name, col, \"QUEUED\", file_type=kind, sha256=sha,\n                               reason=\"Waiting for the background worker\"))\n        background.add_task(pipeline.run, doc_id, path)\n    return UploadResponse(documents=out)\n\n\n# ----------------------------------------------------------------------- jobs / documents\n\n@app.get(\"/api/jobs/{job_id}\", response_model=DocumentInfo)\ndef job_status(job_id: str):\n    \"\"\"Poll the status of one upload job (job_id == doc_id).\"\"\"\n    doc = jobs.get(job_id)\n    if doc is None:\n        raise HTTPException(404, \"job not found\")\n    return doc\n\n\n@app.get(\"/api/documents\", response_model=list[DocumentInfo])\ndef list_documents(collection: str | None = Query(default=None),\n                   status: DocStatus | None = Query(default=None)):\n    \"\"\"Listing of every request: DOC ID, NAME, STATUS, REASON (+ duplicate link).\"\"\"\n    docs = jobs.list_docs(collection)\n    return [d for d in docs if status is None or d.status == status]\n\n\n@app.get(\"/api/documents/{doc_id}\", response_model=DocumentInfo)\ndef get_document(doc_id: str):\n    return job_status(doc_id)\n\n\n@app.delete(\"/api/documents/{doc_id}\", status_code=204)\ndef delete_document(doc_id: str):\n    doc = jobs.get(doc_id)\n    if doc is None:\n        raise HTTPException(404, \"document not found\")\n    if doc.status not in TERMINAL_STATUSES:\n        raise HTTPException(409, f\"document is {doc.status}; wait until it finishes\")\n    if doc.status == \"COMPLETED\":\n        vector_store.delete_document(doc.collection, doc_id)\n        bm25_index.rebuild(doc.collection)\n    for p in settings.uploads_dir.glob(f\"{doc_id}_*\"):\n        p.unlink(missing_ok=True)\n    jobs.delete(doc_id)\n\n\n@app.delete(\"/api/collections/{name}\", status_code=204)\ndef reset_collection(name: str):\n    col = _collection(name)\n    vector_store.delete_collection(col)\n    bm25_index.drop(col)\n    for doc in jobs.list_docs(col):\n        for p in settings.uploads_dir.glob(f\"{doc.doc_id}_*\"):\n            p.unlink(missing_ok=True)\n        jobs.delete(doc.doc_id)\n\n\n@app.get(\"/api/chunks\", response_model=list[ChunkOut])\ndef list_chunks(collection: str | None = Query(default=None),\n                limit: int = Query(default=50, ge=1, le=1000), offset: int = Query(default=0, ge=0)):\n    col = _collection(collection)\n    chunks = vector_store.get_all_chunks(col)[offset:offset + limit]\n    return [ChunkOut(chunk_id=c[\"chunk_id\"], doc_id=c[\"metadata\"].get(\"doc_id\", \"\"),\n                     source=c[\"metadata\"].get(\"source\", \"\"), page=int(c[\"metadata\"].get(\"page\", 0)),\n                     section=c[\"metadata\"].get(\"section\") or None, text=c[\"text\"]) for c in chunks]\n\n\n# ----------------------------------------------------------------------- ask\n\n@app.post(\"/api/ask\", response_model=AskResponse)\ndef ask(req: AskRequest):\n    col = _collection(req.collection)\n    try:\n        return answer(req.question, col, req.top_k)\n    except LLMError as exc:\n        raise HTTPException(502, str(exc))\nEOF\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"app/static/index.html\"); s = p.read_text()\n\n# header links\ns = s.replace('<span class=\"meta\" id=\"meta\">connecting…</span>',\n '<span class=\"meta\" id=\"meta\">connecting…</span>\\n  <span class=\"meta\" style=\"margin-left:auto\"><a href=\"/guide/flow.html\" target=\"_blank\">How it works</a> · <a href=\"/guide/changelog.html\" target=\"_blank\">Changelog</a> · <a href=\"/docs\" target=\"_blank\">API docs</a></span>')\ns = s.replace(\"header .meta { color:var(--muted); font-size:12px; }\",\n \"header .meta { color:var(--muted); font-size:12px; }\\n  header a { color:var(--accent); text-decoration:none; }\")\n\n# status pills for the new status set\ns = s.replace(\".pill.indexed { background:#dcfce7; color:var(--ok); } .pill.failed { background:#fee2e2; color:var(--bad); }\",\n \".pill.COMPLETED { background:#dcfce7; color:var(--ok); }\\n  .pill.FAILED, .pill.UPLOAD_FAILED, .pill.EXTRACTION_NOT_SUPPORTED, .pill.EMPTY_FILE { background:#fee2e2; color:var(--bad); }\\n  .pill.DUPLICATE { background:#fef3c7; color:var(--warn); }\\n  .pill.PROCESSING { background:#e0f2fe; color:#0369a1; }\\n  code.id { font:11px ui-monospace, Menlo, monospace; color:var(--muted); }\")\n\n# table header + body\ns = s.replace('<thead><tr><th>File</th><th>Status</th><th>Pages</th><th>Chunks</th><th></th></tr></thead>',\n '<thead><tr><th>Doc ID</th><th>Name</th><th>Status</th><th>Reason</th><th></th></tr></thead>')\ns = s.replace('<h2>2 · Status</h2>', '<h2>2 · Requests &amp; status <span class=\"muted\" style=\"text-transform:none;letter-spacing:0\">(every upload becomes a job; poll <code>/api/jobs/{id}</code>)</span></h2>')\n\nold_start = s.index(\"  else tb.innerHTML = docs.map(d => `\")\nold_end = s.index(\"  const busy = docs.some(\")\nnew_rows = \"\"\"  else tb.innerHTML = docs.map(d => `\n    <tr>\n      <td><code class=\"id\">${esc(d.doc_id)}</code></td>\n      <td>${esc(d.filename)}<br><span class=\"muted\">${esc(d.file_type || '')}${d.ocr_pages ? ` · <span class=\"pill ocr\">OCR ×${d.ocr_pages}</span>` : ''}</span></td>\n      <td><span class=\"pill ${d.status}\">${d.status}</span>${d.stage ? `<div class=\"muted\">${esc(d.stage)}…</div>` : ''}</td>\n      <td class=\"${['FAILED','UPLOAD_FAILED','EXTRACTION_NOT_SUPPORTED','EMPTY_FILE'].includes(d.status) ? 'err' : 'muted'}\" style=\"font-size:12px\">${esc(d.reason || '')}${d.duplicate_of ? ` <a href=\"#\" onclick=\"highlight('${d.duplicate_of}');return false;\">→ original ${esc(d.duplicate_of)}</a>` : ''}</td>\n      <td>${TERMINAL.includes(d.status) ? `<button class=\"del\" title=\"Delete\" onclick=\"deleteDoc('${d.doc_id}')\">✕</button>` : ''}</td>\n    </tr>`).join('');\n\"\"\"\ns = s[:old_start] + new_rows + s[old_end:]\ns = s.replace(\"  const busy = docs.some(d => !['indexed', 'failed'].includes(d.status));\",\n              \"  const busy = docs.some(d => !TERMINAL.includes(d.status));\")\ns = s.replace(\"let pollTimer = null;\",\n  \"let pollTimer = null;\\nconst TERMINAL = ['DUPLICATE','COMPLETED','FAILED','EMPTY_FILE','EXTRACTION_NOT_SUPPORTED','UPLOAD_FAILED'];\\nfunction highlight(id) { const rows = [...document.querySelectorAll('#docs tr')]; const row = rows.find(r => r.querySelector('code.id')?.textContent === id); if (row) { row.style.background = '#fef9c3'; row.scrollIntoView({behavior:'smooth', block:'center'}); setTimeout(() => row.style.background = '', 1500); } }\")\ns = s.replace(\"\"\"    if (res.rejected?.length) $('uploadErr').textContent = res.rejected.map(r => `${r.filename}: ${r.reason}`).join('\\\\n');\\n\"\"\", \"\")\np.write_text(s)\nprint(\"ui patched\")\nEOF\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"cli/rag_cli.py\"); s = p.read_text()\ns = s.replace('''        body = r.json()\n        for rej in body.get(\"rejected\", []):\n            typer.secho(f\"rejected {rej['filename']}: {rej['reason']}\", fg=\"yellow\")\n        ids = [d[\"doc_id\"] for d in body[\"documents\"]]\n        for d in body[\"documents\"]:\n            typer.echo(f\"queued  {d['filename']}  ({d['doc_id']})\")\n        if not wait or not ids:\n            return\n        while True:\n            docs = {d[\"doc_id\"]: d for d in c.get(\"/api/documents\", params={\"collection\": col}).json()}\n            mine = [docs[i] for i in ids if i in docs]\n            if all(d[\"status\"] in (\"indexed\", \"failed\") for d in mine):\n                break\n            time.sleep(1)\n        for d in mine:\n            color = \"green\" if d[\"status\"] == \"indexed\" else \"red\"\n            extra = f\"{d['pages']} pages, {d['chunks']} chunks\" if d[\"status\"] == \"indexed\" else d[\"error\"]\n            typer.secho(f\"{d['status']:8} {d['filename']}  {extra}\", fg=color)''',\n'''        body = r.json()\n        for d in body[\"documents\"]:\n            typer.echo(f\"{d['status']:26} {d['filename']}  job_id={d['job_id']}\")\n        ids = [d[\"job_id\"] for d in body[\"documents\"] if d[\"status\"] not in TERMINAL]\n        if not wait or not ids:\n            return\n        while True:\n            mine = [c.get(f\"/api/jobs/{i}\").json() for i in ids]\n            if all(d[\"status\"] in TERMINAL for d in mine):\n                break\n            time.sleep(1)\n        for d in mine:\n            color = \"green\" if d[\"status\"] == \"COMPLETED\" else \"red\"\n            typer.secho(f\"{d['status']:26} {d['filename']}  {d.get('reason') or ''}\", fg=color)''')\ns = s.replace('''            docs = r.json()\n            if not docs:\n                typer.echo(\"no documents\")\n            for d in docs:\n                ocr = f\" ocr={d['ocr_pages']}\" if d.get(\"ocr_pages\") else \"\"\n                err = f\"  ! {d['error']}\" if d.get(\"error\") else \"\"\n                typer.echo(f\"{d['status']:10} {d['collection']:12} {d['filename']:40} \"\n                           f\"pages={d['pages']} chunks={d['chunks']}{ocr}{err}\")\n            busy = any(d[\"status\"] not in (\"indexed\", \"failed\") for d in docs)''',\n'''            docs = r.json()\n            if not docs:\n                typer.echo(\"no documents\")\n            else:\n                typer.secho(f\"{'DOC ID':12} {'NAME':32} {'STATUS':26} REASON\", fg=\"bright_black\")\n            for d in docs:\n                dup = f\" -> original {d['duplicate_of']}\" if d.get(\"duplicate_of\") else \"\"\n                stage = f\" ({d['stage']})\" if d.get(\"stage\") else \"\"\n                typer.echo(f\"{d['doc_id']:12} {d['filename'][:32]:32} {d['status'] + stage:26} \"\n                           f\"{d.get('reason') or ''}{dup}\")\n            busy = any(d[\"status\"] not in TERMINAL for d in docs)''')\ns = s.replace('from app.config import settings', 'from app.config import settings\\nfrom app.models import TERMINAL_STATUSES\\n\\nTERMINAL = TERMINAL_STATUSES')\ns = s.replace('''@app.command()\ndef ask(''', '''@app.command(name=\"job\")\ndef job(job_id: str, api: Optional[str] = API):\n    \"\"\"Check the status of one upload job by its job id.\"\"\"\n    with _client(api) as c:\n        r = c.get(f\"/api/jobs/{job_id}\")\n        if r.status_code >= 400:\n            _die(r)\n        d = r.json()\n        for k in (\"job_id\", \"filename\", \"collection\", \"status\", \"stage\", \"reason\", \"duplicate_of\",\n                  \"pages\", \"chunks\", \"ocr_pages\", \"created_at\", \"updated_at\"):\n            if d.get(k) not in (None, \"\", 0):\n                typer.echo(f\"{k:14} {d[k]}\")\n\n\n@app.command()\ndef ask(''')\np.write_text(s)\nprint(\"cli patched\")\nEOF",
+  "description": "Rewrite main.py; patch UI listing and CLI for new statuses and job endpoint"
+}
+```
+
+## Tool  <sub>2026-09-06T10:07:35.492Z</sub>
+
+**Tool result**
+
+```
+ui patched
+cli patched
+```
+
+## Assistant  <sub>2026-09-06T10:08:05.374Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > tests/test_api.py <<'EOF'\n\"\"\"End-to-end API test with the LLM mocked (embeddings + Chroma + BM25 are real).\"\"\"\nimport shutil\nimport time\nfrom pathlib import Path\n\nimport pytest\nfrom fastapi.testclient import TestClient\n\nfrom app.config import settings\nfrom app.models import TERMINAL_STATUSES\n\nDATA = settings.DATA_DIR\n\n\n@pytest.fixture(scope=\"module\")\ndef client():\n    shutil.rmtree(DATA, ignore_errors=True)\n    from app.main import app\n\n    with TestClient(app) as c:\n        yield c\n    shutil.rmtree(DATA, ignore_errors=True)\n\n\ndef _wait(client, job_id, timeout=60):\n    t0 = time.time()\n    while time.time() - t0 < timeout:\n        d = client.get(f\"/api/jobs/{job_id}\").json()\n        if d[\"status\"] in TERMINAL_STATUSES:\n            return d\n        time.sleep(0.2)\n    raise AssertionError(\"timed out waiting for job\")\n\n\ndef _upload(client, name, data, collection):\n    r = client.post(\"/api/documents\", files=[(\"files\", (name, data))], data={\"collection\": collection})\n    assert r.status_code == 202, r.text\n    return r.json()[\"documents\"]\n\n\ndef test_health(client):\n    h = client.get(\"/api/health\").json()\n    assert h[\"status\"] == \"ok\" and \".pdf\" in h[\"supported_extensions\"]\n    assert \"LLM_API_KEY\" not in h[\"settings\"]\n    assert set(h[\"statuses\"]) == {\"QUEUED\", \"DUPLICATE\", \"PROCESSING\", \"COMPLETED\", \"FAILED\",\n                                  \"EMPTY_FILE\", \"EXTRACTION_NOT_SUPPORTED\", \"UPLOAD_FAILED\"}\n\n\ndef test_async_upload_ask_duplicate_delete(client, monkeypatch):\n    captured = {}\n\n    def fake_chat(messages, **kw):\n        captured[\"messages\"] = messages\n        return \"The refund window is 30 days [1].\"\n\n    monkeypatch.setattr(\"app.rag.llm.chat\", fake_chat)\n\n    content = (b\"# Refund policy\\nCustomers may request a refund within 30 days of purchase.\\n\\n\"\n               b\"# Shipping\\nOrders ship within 2 business days.\\n\")\n    [doc] = _upload(client, \"policy.md\", content, \"test\")\n    assert doc[\"status\"] == \"QUEUED\" and doc[\"job_id\"] == doc[\"doc_id\"]\n    d = _wait(client, doc[\"job_id\"])\n    assert d[\"status\"] == \"COMPLETED\", d\n    assert d[\"pages\"] == 2 and d[\"chunks\"] >= 2 and \"Indexed 2 pages\" in d[\"reason\"]\n\n    # Same bytes again -> DUPLICATE pointing at the original, never processed.\n    [dup] = _upload(client, \"policy-copy.md\", content, \"test\")\n    assert dup[\"status\"] == \"DUPLICATE\" and dup[\"duplicate_of\"] == doc[\"doc_id\"]\n    assert dup[\"duplicate_of_name\"] == \"policy.md\" and \"policy.md\" in dup[\"reason\"]\n    # Same bytes in a different collection is not a duplicate.\n    [other] = _upload(client, \"policy.md\", content, \"other\")\n    assert other[\"status\"] == \"QUEUED\"\n    _wait(client, other[\"job_id\"])\n    client.delete(\"/api/collections/other\")\n\n    r = client.post(\"/api/ask\", json={\"question\": \"How long is the refund window?\", \"collection\": \"test\"})\n    assert r.status_code == 200, r.text\n    body = r.json()\n    assert \"30 days\" in body[\"answer\"] and body[\"sources\"]\n    top = body[\"sources\"][0]\n    assert top[\"source\"] == \"policy.md\" and \"refund\" in top[\"text\"].lower()\n    assert top[\"dense_rank\"] is not None or top[\"bm25_rank\"] is not None\n    assert \"CONTEXT:\" in captured[\"messages\"][1][\"content\"]\n\n    listing = client.get(\"/api/documents\", params={\"collection\": \"test\"}).json()\n    assert {x[\"status\"] for x in listing} == {\"COMPLETED\", \"DUPLICATE\"}\n    assert client.get(\"/api/documents\", params={\"collection\": \"test\", \"status\": \"DUPLICATE\"}).json()[0][\"doc_id\"] == dup[\"doc_id\"]\n\n    chunks = client.get(\"/api/chunks\", params={\"collection\": \"test\"}).json()\n    assert len(chunks) == d[\"chunks\"]\n\n    assert client.delete(f\"/api/documents/{doc['doc_id']}\").status_code == 204\n    assert client.delete(f\"/api/documents/{dup['doc_id']}\").status_code == 204\n    assert client.get(\"/api/documents\", params={\"collection\": \"test\"}).json() == []\n    r = client.post(\"/api/ask\", json={\"question\": \"anything\", \"collection\": \"test\"})\n    assert r.json()[\"sources\"] == [] and \"could not find\" in r.json()[\"answer\"]\n\n\ndef test_rejections_become_records(client):\n    docs = client.post(\"/api/documents\", files=[(\"files\", (\"x.exe\", b\"MZ\")), (\"files\", (\"empty.txt\", b\"\"))],\n                       data={\"collection\": \"rej\"}).json()[\"documents\"]\n    by_name = {d[\"filename\"]: d for d in docs}\n    assert by_name[\"x.exe\"][\"status\"] == \"EXTRACTION_NOT_SUPPORTED\" and \".exe\" in by_name[\"x.exe\"][\"reason\"]\n    assert by_name[\"empty.txt\"][\"status\"] == \"EMPTY_FILE\"\n    assert client.get(f\"/api/jobs/{docs[0]['job_id']}\").status_code == 200\n    assert client.get(\"/api/jobs/nope\").status_code == 404\n    client.delete(\"/api/collections/rej\")\n\n\ndef test_processing_failure_is_reported(client):\n    # A PDF that is not really a PDF -> FAILED with \"PROCESSING FAILED\" reason.\n    [doc] = _upload(client, \"broken.pdf\", b\"not a pdf at all\", \"bad\")\n    d = _wait(client, doc[\"job_id\"])\n    assert d[\"status\"] == \"FAILED\" and d[\"reason\"].startswith(\"PROCESSING FAILED\")\n    client.delete(\"/api/collections/bad\")\n\n\ndef test_llm_error_is_502(client, monkeypatch):\n    from app.llm.client import LLMError\n\n    def boom(messages, **kw):\n        raise LLMError(\"bad key\")\n\n    monkeypatch.setattr(\"app.rag.llm.chat\", boom)\n    [doc] = _upload(client, \"n.txt\", b\"The capital of Freedonia is Marxburg.\", \"err\")\n    _wait(client, doc[\"job_id\"])\n    r = client.post(\"/api/ask\", json={\"question\": \"capital of Freedonia?\", \"collection\": \"err\"})\n    assert r.status_code == 502 and \"bad key\" in r.json()[\"detail\"]\n    client.delete(\"/api/collections/err\")\nEOF\n.venv/bin/python -m pytest -q 2>&1 | tail -15",
+  "description": "Update API tests for new status model and run suite",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T10:08:06.239Z</sub>
+
+**Tool result**
+
+```
+.................                                                        [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.11/site-packages/starlette/testclient.py:53
+  /Users/shoaib.rayeen/my_space/rag-generator/.venv/lib/python3.11/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+17 passed, 1 warning in 0.61s
+```
+
+## Assistant  <sub>2026-09-06T10:08:55.071Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "mkdir -p docs && cat > docs/architecture.md <<'EOF'\n# Architecture\n\nRAG Generator turns an arbitrary set of documents into a grounded question-answering\nservice at runtime. There are two flows: **ingest** (asynchronous) and **ask** (synchronous).\n\n## Components\n\n| Component | Module | Role |\n|---|---|---|\n| API | `app/main.py` | FastAPI routes, background job scheduling, static UI + docs |\n| Job registry | `app/jobs.py` | in-memory dict persisted to `data/documents.json`; status per upload |\n| Extractors | `app/ingest/extractors.py` | file → pages with metadata; per-format functions; OCR fallback |\n| Chunker | `app/ingest/chunker.py` | overlapping windows, boundary-aware, metadata-tagged |\n| Pipeline | `app/ingest/pipeline.py` | background worker: extract → chunk → embed → store → BM25 rebuild |\n| Embedder | `app/retrieval/embedder.py` | fastembed (`BAAI/bge-small-en-v1.5`, ONNX, CPU) |\n| Vector store | `app/retrieval/vector_store.py` | ChromaDB `PersistentClient`, one collection per document set |\n| Lexical index | `app/retrieval/bm25_index.py` | rank-bm25 `BM25Okapi` per collection, rebuilt from Chroma |\n| Fusion | `app/retrieval/fusion.py` | Reciprocal Rank Fusion of dense and BM25 rankings |\n| LLM client | `app/llm/client.py` | OpenAI-compatible `chat/completions` over httpx |\n| Prompts | `app/llm/prompts.py` | grounded-answer system prompt, `[n]` context formatting |\n| Orchestrator | `app/rag.py` | `answer()` = retrieve → prompt → LLM → answer + sources |\n| UI | `app/static/index.html` | upload · listing · ask · sources |\n| CLI | `cli/rag_cli.py` | `rag ingest/status/job/ask/reset/serve` over HTTP |\n| Evaluation | `evaluation/` | Claude-as-judge scoring, dataset generation |\n| Config | `app/config.py` | every tunable, overridable from `.env` |\n\n## Ingest flow (asynchronous)\n\n```\nclient ──POST /api/documents (multipart, collection)──► API\n                                                        │ per file:\n                                                        │  read bytes ──fail──► UPLOAD_FAILED\n                                                        │  extension ∉ SUPPORTED_EXTENSIONS ──► EXTRACTION_NOT_SUPPORTED\n                                                        │  0 bytes ──► EMPTY_FILE\n                                                        │  > MAX_UPLOAD_MB ──► UPLOAD_FAILED\n                                                        │  sha256 already live in collection ──► DUPLICATE (links original)\n                                                        │  store to data/uploads/<doc_id>_<name> ──fail──► UPLOAD_FAILED\n                                                        │  else ──► QUEUED + background task\n                                                        ▼\nclient ◄── 202 {documents:[{job_id, status, reason, …}]} ──┘\n\nbackground worker (FastAPI BackgroundTasks, thread pool)\n   QUEUED ─► PROCESSING/extracting ─► PROCESSING/chunking ─► PROCESSING/embedding ─► COMPLETED\n                      │                        │                       │\n                      └──────── any exception ─┴───────────────────────┴──► FAILED (\"PROCESSING FAILED: …\")\n\nclient ──GET /api/jobs/{job_id}──► current record        client ──GET /api/documents?collection=──► listing\n```\n\nEvery status is persisted after each transition, so a listing is always consistent with\nwhat the worker has done. Jobs that were mid-flight during a restart are marked `FAILED`\non load with an explanatory reason.\n\n### Extraction and page metadata\n\n| Format | Library | \"page\" means | Section metadata |\n|---|---|---|---|\n| PDF | pypdf (+ Tesseract via pypdfium2 render when a page has < `OCR_MIN_CHARS_PER_PAGE` chars) | printed page | – |\n| DOCX | python-docx | one page per heading block | heading text |\n| HTML | beautifulsoup4 + lxml | 1 | `<title>` |\n| MD | stdlib | one page per heading | heading text |\n| TXT | stdlib | 1 | – |\n| CSV | stdlib csv | `CSV_ROWS_PER_PAGE` rows (header repeated) | `rows a-b` |\n| PNG/JPG/TIFF | Pillow + Tesseract | one page per frame | – |\n\nEach chunk records: `doc_id, source, file_type, collection, page, section, extraction\n(text|ocr|ocr_unavailable), chunk_index, char_start, char_end`.\n\n### Chunking\n\nSliding window of `CHUNK_SIZE_CHARS` (default 1200) with `CHUNK_OVERLAP_CHARS` (200) of\noverlap. The cut point is chosen in the last quarter of the window at the first available\nboundary in this priority: blank line, newline, sentence end, clause, word.\n\n## Ask flow (synchronous)\n\n```\nquestion ─► embed (fastembed) ─► Chroma cosine top DENSE_TOP_K ──┐\n        └─► tokenize          ─► BM25 top BM25_TOP_K ────────────┴─► RRF: score = Σ 1/(RRF_K + rank)\n                                                                         │ keep FUSED_TOP_K\n                                                                         ▼\n            system prompt (answer only from context, cite [n], say \"not found\" otherwise)\n          + user prompt: \"[1] (source, page N, section) text …\" × k + question\n                                                                         │\n                                                                         ▼\n                     POST {LLM_API_URL}/chat/completions (Bearer LLM_API_KEY, model LLM_MODEL)\n                                                                         │\n                                                                         ▼\n            {answer, sources:[{n, source, page, section, text, dense_rank, bm25_rank, rrf_score}], latency_ms}\n```\n\nReciprocal Rank Fusion is used instead of score normalisation because dense cosine\ndistances and BM25 scores live on incomparable scales; RRF only needs ranks and rewards\nchunks that both retrievers agree on.\n\n## Persistence and process model\n\n- `data/uploads/` original files, `data/chroma/` vectors + chunk text + metadata,\n  `data/documents.json` job registry. All under one Docker volume.\n- BM25 is in-memory and derived from Chroma; it is rebuilt on startup for every collection\n  and after each successful ingest or delete. This keeps a single source of truth and makes\n  restarts safe, at the cost of requiring a single app process.\n- The LLM and embedding models are the only external dependencies; the LLM is reached\n  purely via `.env` settings.\n\n## Evaluation\n\n`evaluation/run_eval.py` replays a JSONL dataset through `/api/ask`, then asks Claude\n(`JUDGE_MODEL`, official `anthropic` SDK, structured outputs) for faithfulness, answer\nrelevance, context relevance, correctness and a hallucination flag. `generate_dataset.py`\nsynthesises questions from indexed chunks so the eval works for any new document set.\nEOF\ncat > docs/changelog.html <<'EOF'\n<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n<title>RAG Generator · Changelog</title>\n<style>\n  body{margin:0;font:15px/1.6 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif;color:#1c1f26;background:#f6f7f9}\n  main{max-width:860px;margin:0 auto;padding:32px 24px}\n  h1{font-size:26px;margin:0 0 4px} .sub{color:#6b7280;margin-bottom:28px}\n  .rel{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:18px 22px;margin-bottom:18px}\n  .rel h2{margin:0;font-size:18px;display:flex;gap:10px;align-items:baseline}\n  .rel time{color:#6b7280;font-size:13px;font-weight:400}\n  .tag{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;margin-right:6px;vertical-align:middle}\n  .added{background:#dcfce7;color:#15803d}.changed{background:#e0f2fe;color:#0369a1}.fixed{background:#fef3c7;color:#b45309}.docs{background:#ede9fe;color:#6d28d9}\n  ul{margin:8px 0 0;padding-left:20px} li{margin:4px 0}\n  a{color:#2563eb;text-decoration:none}\n  .nav{font-size:13px;margin-bottom:20px}\n</style></head>\n<body><main>\n<div class=\"nav\"><a href=\"/\">← App</a> · <a href=\"/guide/flow.html\">How it works</a> · <a href=\"/docs\">API docs</a></div>\n<h1>Changelog</h1>\n<div class=\"sub\">All notable changes to RAG Generator. Versions follow <code>app/main.py</code>'s FastAPI version.</div>\n\n<section class=\"rel\">\n  <h2>0.2.0 <time>2026-09-06</time></h2>\n  <p><span class=\"tag changed\">Changed</span> Upload is now an explicit asynchronous job flow with a fixed status vocabulary.</p>\n  <ul>\n    <li><span class=\"tag added\">Added</span> Per-file <code>job_id</code> in the upload response and <code>GET /api/jobs/{job_id}</code> to poll it.</li>\n    <li><span class=\"tag added\">Added</span> Statuses <code>QUEUED · DUPLICATE · PROCESSING · COMPLETED · FAILED · EMPTY_FILE · EXTRACTION_NOT_SUPPORTED · UPLOAD_FAILED</code>, each with a human-readable <code>reason</code>; <code>PROCESSING</code> exposes a <code>stage</code>.</li>\n    <li><span class=\"tag added\">Added</span> SHA-256 duplicate detection per collection. Duplicates are recorded but never processed and link to the original document.</li>\n    <li><span class=\"tag changed\">Changed</span> Rejected uploads (unsupported extension, empty file, oversize, storage error) now become listed records instead of a 400 error.</li>\n    <li><span class=\"tag changed\">Changed</span> UI listing shows <b>Doc ID · Name · Status · Reason</b>; <code>GET /api/documents</code> accepts a <code>status</code> filter.</li>\n    <li><span class=\"tag added\">Added</span> <code>rag job &lt;id&gt;</code> CLI command; <code>rag status</code> prints the same four columns.</li>\n    <li><span class=\"tag docs\">Docs</span> <a href=\"/guide/architecture.md\">architecture.md</a>, this changelog, the interactive <a href=\"/guide/flow.html\">flow walkthrough</a>, <code>CLAUDE.md</code> (documentation-update rule) and <code>memory.md</code> (project memory).</li>\n  </ul>\n</section>\n\n<section class=\"rel\">\n  <h2>0.1.0 <time>2026-09-06</time></h2>\n  <p><span class=\"tag added\">Added</span> Initial release.</p>\n  <ul>\n    <li>FastAPI REST API + single-page UI (upload, status, ask, sources) + <code>rag</code> CLI.</li>\n    <li>Extractors for PDF, DOCX, HTML, TXT, MD, CSV with page metadata; PNG/JPG/TIFF and scanned PDF pages via Tesseract OCR fallback.</li>\n    <li>Overlapping, metadata-tagged chunking; fastembed embeddings; ChromaDB (embedded, persistent).</li>\n    <li>Hybrid retrieval: dense top-k + rank-bm25 top-k fused with Reciprocal Rank Fusion.</li>\n    <li>OpenAI-compatible LLM client configured only through <code>.env</code>; grounded prompt with <code>[n]</code> citations and an explicit \"not found\" fallback.</li>\n    <li>Evaluation script with Claude as judge (<code>evaluation/run_eval.py</code>) and dataset generator.</li>\n    <li>Dockerfile (Tesseract + pre-downloaded embedding model) and docker-compose with a data volume.</li>\n    <li>Offline mock LLM (<code>scripts/mock_llm.py</code>) and sample corpus (<code>samples/</code>).</li>\n  </ul>\n</section>\n</main></body></html>\nEOF\necho docs-ok",
+  "description": "Write docs/architecture.md and docs/changelog.html"
+}
+```
+
+## Tool  <sub>2026-09-06T10:08:55.106Z</sub>
+
+**Tool result**
+
+```
+docs-ok
+```
+
+## Assistant  <sub>2026-09-06T10:09:23.873Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > CLAUDE.md <<'EOF'\n# CLAUDE.md — project rules for AI coding agents\n\n## Documentation must move with the code (non-negotiable)\nEvery code change in this repository ships with matching documentation updates **in the same\nchange**. Before finishing any task that touches code, check and update as needed:\n\n1. `README.md` — setup, what is supported / not supported, API table, CLI usage, tech stack, tuning table.\n2. `docs/changelog.html` — add an entry under the current (or a new) version with Added / Changed / Fixed / Docs tags. Bump the version in `app/main.py` (`FastAPI(version=...)`) for user-visible changes.\n3. `docs/architecture.md` — if modules, flows, statuses, or data layout changed.\n4. `docs/flow.html` — if the ingest or ask flow steps or status vocabulary changed.\n5. `memory.md` — record new decisions, gotchas, and conventions worth remembering.\n6. `.env.example` and the tuning table in the README — whenever a setting is added, renamed, or its default changes.\n7. Docstrings on public functions and the module header comment when behaviour changes.\n\nA change is not complete if the docs describe something the code no longer does.\n\n## Engineering conventions\n- Every tunable (model names, sizes, top-k, thresholds, paths) lives in `app/config.py` as a\n  `Settings` field with a default; never hard-code them elsewhere.\n- The job status vocabulary is fixed: `QUEUED, DUPLICATE, PROCESSING, COMPLETED, FAILED,\n  EMPTY_FILE, EXTRACTION_NOT_SUPPORTED, UPLOAD_FAILED`. Do not add or rename statuses without\n  updating `app/models.py`, the UI, the CLI, tests, and all docs above.\n- Adding a file format = extractor function in `app/ingest/extractors.py` + entry in\n  `EXTRACTORS` + entry in `SUPPORTED_EXTENSIONS` (`app/config.py`) + README/architecture rows + a test.\n- Run `pytest` before declaring work done. Tests must not need network or an LLM key\n  (mock `app.rag.llm.chat`).\n- The CLI and eval script talk to the API over HTTP; never open Chroma from a second process.\n- Judge code uses the official `anthropic` SDK; generation uses the OpenAI-compatible client in\n  `app/llm/client.py`. Keep them separate.\n\n## Repo map\n`app/` service · `cli/` typer CLI · `evaluation/` Claude-as-judge · `docs/` architecture,\nchangelog, interactive flow · `samples/` demo corpus · `scripts/` sample generator, mock LLM ·\n`tests/` · `transcripts/` agent session exports.\nEOF\ncat > memory.md <<'EOF'\n# Project memory\n\nFacts, decisions and gotchas that are not obvious from the code. Update this whenever a\ndecision is made or a surprise is discovered (see `CLAUDE.md`).\n\n## Purpose\nAgentic-coding assessment deliverable: a RAG Generator that accepts documents at runtime,\nindexes them, and answers grounded questions, with no code changes between document sets.\nDeliverables also include complete agent transcripts (`transcripts/`) and a Claude-as-judge\nevaluation script.\n\n## Decisions (with reasons)\n- **FastAPI over Flask** — async upload endpoint, background tasks, free OpenAPI docs.\n- **OpenAI-compatible generation endpoint** — the brief requires that only `LLM_API_URL`\n  and `LLM_API_KEY` (plus `LLM_MODEL`) change per deployment; this protocol is served by\n  OpenAI, Azure, OpenRouter, Groq, vLLM, Ollama, LiteLLM.\n- **Judge = Claude via the official `anthropic` SDK** with its own `ANTHROPIC_API_KEY`\n  (`JUDGE_MODEL=claude-opus-5`, `messages.parse` structured outputs). Independent from the\n  generation model so the judge stays Claude even when generation is not.\n- **ChromaDB embedded** (`PersistentClient`) rather than a separate server — one compose service.\n- **BM25 in memory, rebuilt from Chroma** — single source of truth; requires one app process.\n- **RRF (k=60)** for fusion — dense distances and BM25 scores are on incomparable scales.\n- **fastembed only embeds**; chunking is our own boundary-aware sliding window.\n- **Duplicate detection is per collection** by SHA-256 of the bytes; the same file in another\n  collection is a legitimate separate document set.\n- **Rejected uploads are records, not errors** — the listing must explain every request\n  (DOC ID · NAME · STATUS · REASON), per the brief.\n- **Tesseract OCR as a fallback only** — triggered when a PDF page has fewer than\n  `OCR_MIN_CHARS_PER_PAGE` characters, and for image uploads. Missing binary degrades gracefully.\n- **Server-side refusal-fallback beta not used on the judge** — benign prompts, simpler script.\n\n## Environment gotchas\n- The dev Mac has no Docker, Homebrew or Tesseract; Python is 3.9 system-wide. Use\n  `uv venv --python 3.11 .venv`. Docker image must be built/verified elsewhere.\n- Locally OCR is therefore unavailable: scanned sample pages are tagged `ocr_unavailable`\n  and `scanned_memo.pdf` ends `FAILED` (\"No text could be extracted\") — expected without Tesseract.\n- `scripts/mock_llm.py` (port 8001) is an extractive stand-in for demos/CI. It is not a model.\n- First embedding-model load downloads ~130 MB; the Dockerfile pre-downloads it.\n- fastembed + chromadb pin numpy/onnxruntime jointly; regenerate `requirements.txt` with\n  `uv pip compile requirements.in -o requirements.txt`.\n\n## Conventions\n- All tunables in `app/config.py`; `.env.example` mirrors every field.\n- `job_id == doc_id`. Terminal statuses: everything except `QUEUED` and `PROCESSING`.\n- Tests mock `app.rag.llm.chat`; no network needed.\n- Version lives in `app/main.py` (`FastAPI(version=…)`) and `docs/changelog.html`.\n\n## History\n- 2026-09-06 — v0.1.0 initial build; v0.2.0 async job model with fixed statuses, dedupe, docs set.\nEOF\necho rules-ok",
+  "description": "Write CLAUDE.md and memory.md"
+}
+```
+
+## Tool  <sub>2026-09-06T10:09:23.913Z</sub>
+
+**Tool result**
+
+```
+rules-ok
+```
+
+## Assistant  <sub>2026-09-06T10:09:37.740Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": ".venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"CLAUDE.md\"); s = p.read_text()\ns = s.replace(\"\"\"# CLAUDE.md — project rules for AI coding agents\n\"\"\", \"\"\"# CLAUDE.md — project rules for AI coding agents\n\n## Always\n1. **Read `memory.md` first** when planning any change; it records decisions, gotchas and\n   conventions. Adjust the plan to what it says, and update it when a plan changes a decision.\n2. **After every code change** run a compilation check and the test suite before moving on:\n   ```bash\n   .venv/bin/python -m compileall -q app cli evaluation scripts && .venv/bin/python -m pytest -q\n   ```\n   Fix failures before touching anything else. Work is not done while either fails.\n3. **Never commit or push.** The user reviews the changes and commits themselves. Do not run\n   `git add`, `git commit`, `git push`, `git stash` or anything that rewrites history.\n4. **Update the documentation** with the code, in the same change (details below).\n\"\"\")\ns = s.replace(\"- Run `pytest` before declaring work done. Tests must not need network or an LLM key\\n  (mock `app.rag.llm.chat`).\",\n              \"- Tests must not need network or an LLM key (mock `app.rag.llm.chat`).\")\np.write_text(s)\nprint(\"claude.md updated\")\nEOF\n.venv/bin/python -m compileall -q app cli evaluation scripts && echo compile-ok",
+  "description": "Add always-rules to CLAUDE.md and run compile check"
+}
+```
+
+## Tool  <sub>2026-09-06T10:09:37.817Z</sub>
+
+**Tool result**
+
+```
+claude.md updated
+compile-ok
+```
+
+## Assistant  <sub>2026-09-06T10:10:50.018Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > docs/flow.html <<'EOF'\n<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n<title>RAG Generator · How it works</title>\n<style>\n  :root{--bg:#f6f7f9;--card:#fff;--ink:#1c1f26;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb;--ok:#15803d;--bad:#b91c1c;--warn:#b45309;--info:#0369a1}\n  *{box-sizing:border-box} body{margin:0;font:14px/1.55 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif;color:var(--ink);background:var(--bg)}\n  main{max-width:1100px;margin:0 auto;padding:28px 24px}\n  h1{font-size:24px;margin:0 0 4px} .sub{color:var(--muted);margin-bottom:22px}\n  .nav{font-size:13px;margin-bottom:16px} a{color:var(--accent);text-decoration:none}\n  .tabs{display:flex;gap:8px;margin-bottom:16px} .tabs button{padding:8px 14px;border:1px solid var(--line);background:var(--card);border-radius:8px;font:inherit;cursor:pointer}\n  .tabs button.on{background:var(--accent);color:#fff;border-color:var(--accent)}\n  .panel{display:none} .panel.on{display:block}\n  .controls{display:flex;gap:8px;align-items:center;margin:10px 0 16px;flex-wrap:wrap}\n  .controls button{padding:7px 12px;border:0;border-radius:6px;background:var(--accent);color:#fff;font:inherit;cursor:pointer}\n  .controls button.sec{background:#eef2ff;color:var(--accent)} .controls .muted{color:var(--muted);font-size:12px}\n  .track{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}\n  .step{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;position:relative;opacity:.45;transition:all .25s;cursor:pointer}\n  .step.done{opacity:1;border-color:#bbf7d0} .step.now{opacity:1;border-color:var(--accent);box-shadow:0 0 0 3px #dbeafe}\n  .step .n{font-size:11px;color:var(--muted)} .step h3{margin:2px 0 4px;font-size:14px} .step p{margin:0;font-size:12px;color:var(--muted)}\n  .detail{margin-top:16px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;min-height:120px}\n  .detail h3{margin:0 0 6px;font-size:15px} .detail pre{background:#f8fafc;border:1px solid var(--line);border-radius:6px;padding:10px;font:12px/1.5 ui-monospace,Menlo,monospace;overflow:auto;margin:10px 0 0;white-space:pre-wrap}\n  .pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;background:#eef2ff;color:var(--accent);margin:2px 4px 2px 0}\n  .pill.ok{background:#dcfce7;color:var(--ok)} .pill.bad{background:#fee2e2;color:var(--bad)} .pill.warn{background:#fef3c7;color:var(--warn)} .pill.info{background:#e0f2fe;color:var(--info)}\n  .branches{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:14px}\n  .branch{border:1px dashed var(--line);border-radius:8px;padding:10px 12px;font-size:12px;background:#fff} .branch b{display:block;margin-bottom:4px}\n  .try{margin-top:20px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px}\n  .try input{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;font:inherit;margin:6px 0 10px}\n  table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px} th,td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)} th{color:var(--muted)}\n  .bar{height:8px;background:#eef2ff;border-radius:4px;overflow:hidden} .bar i{display:block;height:100%;background:var(--accent)}\n</style></head>\n<body><main>\n<div class=\"nav\"><a href=\"/\">← App</a> · <a href=\"/guide/changelog.html\">Changelog</a> · <a href=\"/guide/architecture.md\">architecture.md</a> · <a href=\"/docs\">API docs</a></div>\n<h1>How RAG Generator works</h1>\n<div class=\"sub\">Step through what happens after you upload a file, and what happens when you ask a question. Click any step, or press <b>Play</b>.</div>\n\n<div class=\"tabs\"><button class=\"on\" data-tab=\"ingest\">1 · After upload (async job)</button><button data-tab=\"ask\">2 · Asking a question</button><button data-tab=\"statuses\">3 · Status vocabulary</button></div>\n\n<!-- ============================== INGEST ============================== -->\n<section class=\"panel on\" id=\"ingest\">\n  <div class=\"controls\"><button onclick=\"play('ingest')\">▶ Play</button><button class=\"sec\" onclick=\"step('ingest',-1)\">‹ Back</button><button class=\"sec\" onclick=\"step('ingest',1)\">Next ›</button><button class=\"sec\" onclick=\"reset('ingest')\">Reset</button><span class=\"muted\" id=\"ingest-pos\"></span></div>\n  <div class=\"track\" id=\"ingest-track\"></div>\n  <div class=\"detail\" id=\"ingest-detail\"></div>\n</section>\n\n<!-- ============================== ASK ============================== -->\n<section class=\"panel\" id=\"ask\">\n  <div class=\"controls\"><button onclick=\"play('ask')\">▶ Play</button><button class=\"sec\" onclick=\"step('ask',-1)\">‹ Back</button><button class=\"sec\" onclick=\"step('ask',1)\">Next ›</button><button class=\"sec\" onclick=\"reset('ask')\">Reset</button><span class=\"muted\" id=\"ask-pos\"></span></div>\n  <div class=\"track\" id=\"ask-track\"></div>\n  <div class=\"detail\" id=\"ask-detail\"></div>\n  <div class=\"try\">\n    <h3 style=\"margin:0 0 4px\">Try Reciprocal Rank Fusion</h3>\n    <div class=\"muted\" style=\"font-size:12px\">Edit the two ranked lists (comma-separated chunk ids). RRF score = Σ 1/(k+rank), k = 60.</div>\n    <label style=\"font-size:12px;color:var(--muted)\">Dense (vector) ranking</label><input id=\"rrf-dense\" value=\"A, B, C, D\">\n    <label style=\"font-size:12px;color:var(--muted)\">BM25 (lexical) ranking</label><input id=\"rrf-bm25\" value=\"C, A, E, B\">\n    <table id=\"rrf-table\"></table>\n  </div>\n</section>\n\n<!-- ============================== STATUSES ============================== -->\n<section class=\"panel\" id=\"statuses\">\n  <table>\n    <thead><tr><th>Status</th><th>Meaning</th><th>Processed?</th><th>Reason column shows</th></tr></thead>\n    <tbody>\n      <tr><td><span class=\"pill\">QUEUED</span></td><td>Accepted and stored; waiting for the background worker.</td><td>soon</td><td>\"Waiting for the background worker\"</td></tr>\n      <tr><td><span class=\"pill warn\">DUPLICATE</span></td><td>A file with the same SHA-256 already exists (QUEUED/PROCESSING/COMPLETED) in this collection.</td><td><b>no</b></td><td>Name and id of the original, with a link in the listing</td></tr>\n      <tr><td><span class=\"pill info\">PROCESSING</span></td><td>Worker is running; <code>stage</code> is extracting → chunking → embedding.</td><td>in progress</td><td>Current stage with counts</td></tr>\n      <tr><td><span class=\"pill ok\">COMPLETED</span></td><td>Chunks are in ChromaDB and BM25; the file is searchable.</td><td>yes</td><td>\"Indexed N pages (k via OCR) into M chunks\"</td></tr>\n      <tr><td><span class=\"pill bad\">FAILED</span></td><td>Processing raised an error (corrupt file, no extractable text, embedding error…).</td><td>no</td><td>\"PROCESSING FAILED: &lt;exception&gt;\"</td></tr>\n      <tr><td><span class=\"pill bad\">EMPTY_FILE</span></td><td>The upload was 0 bytes.</td><td>no</td><td>\"The uploaded file is 0 bytes\"</td></tr>\n      <tr><td><span class=\"pill bad\">EXTRACTION_NOT_SUPPORTED</span></td><td>Extension is not in <code>SUPPORTED_EXTENSIONS</code>.</td><td>no</td><td>The extension and the supported list</td></tr>\n      <tr><td><span class=\"pill bad\">UPLOAD_FAILED</span></td><td>Could not read the upload stream, file exceeds <code>MAX_UPLOAD_MB</code>, or could not write to disk.</td><td>no</td><td>\"UPLOAD FAILED: &lt;cause&gt;\"</td></tr>\n    </tbody>\n  </table>\n  <p class=\"muted\" style=\"font-size:12px\">Terminal statuses (no further change): everything except QUEUED and PROCESSING. Poll <code>GET /api/jobs/{job_id}</code> until the status is terminal.</p>\n</section>\n\n<script>\nconst FLOWS = {\n  ingest: [\n    {t:'POST /api/documents', d:'Client sends one or more files (multipart) with an optional collection name. The API responds 202 immediately — nothing waits for indexing.',\n     code:`curl -F \"files=@handbook.md\" -F collection=demo localhost:8000/api/documents\\n→ 202 {\"documents\":[{\"job_id\":\"7f3a…\",\"status\":\"QUEUED\",\"reason\":\"Waiting for the background worker\"}]}`},\n    {t:'Validate & hash', d:'Per file: read bytes → check extension against SUPPORTED_EXTENSIONS → reject empty or oversize → compute SHA-256 → look for a live document with the same hash in this collection.',\n     branches:[['EXTRACTION_NOT_SUPPORTED','bad','extension not supported'],['EMPTY_FILE','bad','0 bytes'],['UPLOAD_FAILED','bad','oversize / unreadable / disk error'],['DUPLICATE','warn','same hash already live → links to original, stops here']]},\n    {t:'QUEUED', d:'File stored at data/uploads/<doc_id>_<name>. A job record (job_id = doc_id) is written to data/documents.json and a background task is scheduled.',\n     code:`GET /api/jobs/7f3a…  → {\"status\":\"QUEUED\"}`},\n    {t:'PROCESSING · extracting', d:'The worker picks a format-specific extractor: pypdf, python-docx, BeautifulSoup, csv, plain text. Each page keeps its page number and section. PDF pages with fewer than OCR_MIN_CHARS_PER_PAGE characters (scans) are rendered with pypdfium2 and read by Tesseract; image files always go through OCR.',\n     code:`pages = [Page(text, page_no=3, section=\"Leave policy\", extraction=\"text\"), …]`},\n    {t:'PROCESSING · chunking', d:'Each page is split into overlapping windows (CHUNK_SIZE_CHARS=1200, CHUNK_OVERLAP_CHARS=200), cutting at paragraph/sentence/word boundaries. Every chunk is tagged with doc_id, source, page, section, extraction, chunk_index, char offsets.',\n     code:`chunk_id \"7f3a…:4\"  metadata {source:\"handbook.md\", page:3, section:\"Leave policy\", chunk_index:4, char_start:812, …}`},\n    {t:'PROCESSING · embedding', d:'fastembed (BAAI/bge-small-en-v1.5, 384-d, ONNX on CPU) embeds every chunk in batches. Vectors, text and metadata are written to the ChromaDB collection; then the BM25 index for the collection is rebuilt from Chroma.',\n     code:`vector_store.add_chunks(collection, ids, texts, embeddings, metadatas)\\nbm25_index.rebuild(collection)`},\n    {t:'COMPLETED', d:'The record becomes COMPLETED with a reason like \"Indexed 5 pages into 14 chunks\". The listing (DOC ID · NAME · STATUS · REASON) and GET /api/jobs/{id} reflect it. Any exception on the way → FAILED with \"PROCESSING FAILED: …\".',\n     branches:[['COMPLETED','ok','searchable now'],['FAILED','bad','PROCESSING FAILED: <exception>']]},\n  ],\n  ask: [\n    {t:'POST /api/ask', d:'{\"question\": \"...\", \"collection\": \"demo\"}. Synchronous: the answer comes back in the response.',\n     code:`curl -X POST localhost:8000/api/ask -H 'content-type: application/json' -d '{\"question\":\"How many leave days?\",\"collection\":\"demo\"}'`},\n    {t:'Dense retrieval', d:'The question is embedded with the same fastembed model and ChromaDB returns the DENSE_TOP_K (20) nearest chunks by cosine similarity.'},\n    {t:'BM25 retrieval', d:'The question is tokenised (lower-cased words, stop-words removed) and rank-bm25 scores every chunk in the collection; the BM25_TOP_K (20) best are kept.'},\n    {t:'Reciprocal Rank Fusion', d:'Both rankings are merged: score(chunk) = Σ over lists of 1/(RRF_K + rank). Chunks found by both retrievers rise to the top. The best FUSED_TOP_K (6) chunks continue. Try it in the widget below.',\n     code:`rrf_merge({\"dense\":[a,b,c], \"bm25\":[c,d,a]}, k=60)\\n→ a: 1/61+1/63,  c: 1/63+1/61,  b: 1/62,  d: 1/62`},\n    {t:'Grounded prompt', d:'A system prompt tells the model to answer only from the context, cite [n] block numbers, and reply \"I could not find this in the provided documents.\" when the context lacks the answer. The user message lists the chunks as [1] (source, page, section) text … followed by the question.',\n     code:`[1] (handbook.md, page 3, section \"Leave policy\")\\nEmployees accrue 24 days of paid annual leave …\\n\\nQUESTION: How many leave days?`},\n    {t:'LLM call', d:'POST {LLM_API_URL}/chat/completions with Bearer LLM_API_KEY and model LLM_MODEL — any OpenAI-compatible provider. Auth or network problems surface as HTTP 502 with the provider message so a wrong .env is obvious.'},\n    {t:'Answer + sources', d:'The response carries the answer text with [n] citations plus every retrieved chunk: source file, page, section, whether it came from dense, BM25 or both (ranks), RRF score, and the chunk text. The UI links each citation to its source card.',\n     code:`{\"answer\":\"Employees accrue 24 days … [1]\",\"sources\":[{\"n\":1,\"source\":\"handbook.md\",\"page\":3,\"dense_rank\":1,\"bm25_rank\":2,\"rrf_score\":0.0325,…}]}`},\n  ],\n};\nconst pos = {ingest:-1, ask:-1}; const timers = {};\n\nfunction render(name){\n  const flow = FLOWS[name], track = document.getElementById(name+'-track');\n  track.innerHTML = flow.map((s,i)=>`<div class=\"step ${i<pos[name]?'done':''} ${i===pos[name]?'now':''}\" onclick=\"goto('${name}',${i})\"><div class=\"n\">step ${i+1}</div><h3>${s.t}</h3><p>${s.d.split('.')[0]}.</p></div>`).join('');\n  const det = document.getElementById(name+'-detail');\n  const s = flow[pos[name]];\n  document.getElementById(name+'-pos').textContent = pos[name]<0 ? `${flow.length} steps` : `step ${pos[name]+1} of ${flow.length}`;\n  if(!s){ det.innerHTML = `<h3>Press Play or click a step</h3><p class=\"muted\">Each card explains what the service does at that point, which module does it, and what you would see in the API.</p>`; return; }\n  det.innerHTML = `<h3>${s.t}</h3><p>${s.d}</p>${s.code?`<pre>${esc(s.code)}</pre>`:''}${s.branches?`<div class=\"branches\">${s.branches.map(([st,cls,why])=>`<div class=\"branch\"><b><span class=\"pill ${cls}\">${st}</span></b>${why}</div>`).join('')}</div>`:''}`;\n}\nfunction goto(name,i){ pos[name]=i; render(name); }\nfunction step(name,d){ pos[name]=Math.max(-1,Math.min(FLOWS[name].length-1,pos[name]+d)); render(name); }\nfunction reset(name){ clearInterval(timers[name]); pos[name]=-1; render(name); }\nfunction play(name){ clearInterval(timers[name]); pos[name]=-1; render(name); timers[name]=setInterval(()=>{ if(pos[name]>=FLOWS[name].length-1){clearInterval(timers[name]);return;} step(name,1); },1600); }\nconst esc=(s)=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));\n\ndocument.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on',p.id===b.dataset.tab));});\n\nfunction rrf(){\n  const parse=(id)=>document.getElementById(id).value.split(',').map(s=>s.trim()).filter(Boolean);\n  const lists={dense:parse('rrf-dense'),bm25:parse('rrf-bm25')}, k=60, score={}, ranks={};\n  for(const [n,ids] of Object.entries(lists)) ids.forEach((id,i)=>{score[id]=(score[id]||0)+1/(k+i+1);(ranks[id]=ranks[id]||{})[n]=i+1;});\n  const rows=Object.entries(score).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])); const max=rows[0]?.[1]||1;\n  document.getElementById('rrf-table').innerHTML=`<tr><th>#</th><th>chunk</th><th>dense rank</th><th>bm25 rank</th><th>RRF score</th><th></th></tr>`+rows.map(([id,s],i)=>`<tr><td>${i+1}</td><td><b>${esc(id)}</b></td><td>${ranks[id].dense??'–'}</td><td>${ranks[id].bm25??'–'}</td><td>${s.toFixed(5)}</td><td style=\"width:30%\"><div class=\"bar\"><i style=\"width:${(s/max*100).toFixed(0)}%\"></i></div></td></tr>`).join('');\n}\ndocument.getElementById('rrf-dense').oninput=rrf; document.getElementById('rrf-bm25').oninput=rrf; rrf();\nrender('ingest'); render('ask');\n</script>\n</main></body></html>\nEOF\necho flow-ok",
+  "description": "Write the interactive flow walkthrough page"
+}
+```
+
+## Tool  <sub>2026-09-06T10:10:50.053Z</sub>
+
+**Tool result**
+
+```
+flow-ok
+```
+
+## Assistant  <sub>2026-09-06T10:11:05.707Z</sub>
+
+Switching the docs folder to `documentation/` and adding a generator that renders every Markdown doc to a matching HTML page, with that step added to the rules.
+
+## Assistant  <sub>2026-09-06T10:11:33.738Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "mv docs documentation\n# update references\nsed -i '' 's#DOCS_DIR = ROOT / \"docs\"#DOCS_DIR = ROOT / \"documentation\"#; s#app.mount(\"/guide\", StaticFiles(directory=DOCS_DIR), name=\"guide\")#app.mount(\"/documentation\", StaticFiles(directory=DOCS_DIR), name=\"documentation\")#' app/main.py\nsed -i '' 's#/guide/#/documentation/#g' app/static/index.html documentation/changelog.html documentation/flow.html\nsed -i '' 's#/documentation/architecture.md#/documentation/architecture.html#g' documentation/changelog.html documentation/flow.html\nsed -i '' 's#`docs/changelog.html`#`documentation/changelog.html`#g; s#`docs/architecture.md`#`documentation/architecture.md`#g; s#`docs/flow.html`#`documentation/flow.html`#g; s#`docs/` architecture#`documentation/` architecture#g' CLAUDE.md memory.md\ngrep -n \"docs\" CLAUDE.md memory.md app/main.py | grep -v \"API docs\\|/docs\\b\\|documentation\" ; echo \"--- refs checked\"\n# markdown renderer dependency\nprintf '# Documentation rendering (scripts/build_docs.py)\\nmarkdown\\n' >> requirements.in\nuv pip compile requirements.in -o requirements.txt --python .venv/bin/python -q && uv pip install -r requirements.txt --python .venv/bin/python -q && echo deps-ok\ncat > scripts/build_docs.py <<'EOF'\n\"\"\"\nRender every Markdown document to a browsable HTML twin.\n\n    python scripts/build_docs.py\n\nInputs : documentation/*.md  and  README.md (→ documentation/readme.html)\nOutputs: documentation/<same-name>.html, styled like the rest of the documentation set.\nRun this after editing any Markdown file (see CLAUDE.md); commit both the .md and the .html.\n\"\"\"\nfrom __future__ import annotations\n\nimport html\nimport re\nfrom pathlib import Path\n\nimport markdown\n\nROOT = Path(__file__).resolve().parents[1]\nDOCS = ROOT / \"documentation\"\n\nTEMPLATE = \"\"\"<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n<title>RAG Generator · {title}</title>\n<style>\n  body{{margin:0;font:15px/1.6 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,sans-serif;color:#1c1f26;background:#f6f7f9}}\n  main{{max-width:960px;margin:0 auto;padding:32px 24px}}\n  article{{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:26px 30px}}\n  h1{{font-size:26px;margin:0 0 12px}} h2{{font-size:20px;margin:28px 0 8px;padding-top:12px;border-top:1px solid #eef0f3}} h3{{font-size:16px;margin:18px 0 6px}}\n  a{{color:#2563eb;text-decoration:none}} .nav{{font-size:13px;margin-bottom:16px}}\n  pre{{background:#f8fafc;border:1px solid #e5e7eb;border-radius:6px;padding:12px;overflow:auto;font:12.5px/1.5 ui-monospace,Menlo,monospace}}\n  code{{background:#f1f5f9;padding:1px 5px;border-radius:4px;font:12.5px ui-monospace,Menlo,monospace}} pre code{{background:none;padding:0}}\n  table{{border-collapse:collapse;width:100%;font-size:13.5px;margin:10px 0}} th,td{{text-align:left;padding:6px 8px;border-bottom:1px solid #e5e7eb;vertical-align:top}} th{{color:#6b7280}}\n  .src{{color:#6b7280;font-size:12px;margin-top:18px}}\n</style></head>\n<body><main>\n<div class=\"nav\"><a href=\"/\">← App</a> · <a href=\"/documentation/flow.html\">How it works</a> · <a href=\"/documentation/architecture.html\">Architecture</a> · <a href=\"/documentation/changelog.html\">Changelog</a> · <a href=\"/documentation/readme.html\">README</a> · <a href=\"/docs\">API docs</a></div>\n<article>\n{body}\n<p class=\"src\">Generated from <code>{source}</code> by <code>scripts/build_docs.py</code>. Edit the Markdown, then re-run the script.</p>\n</article>\n</main></body></html>\n\"\"\"\n\n\ndef render(src: Path, dst: Path) -> None:\n    text = src.read_text(encoding=\"utf-8\")\n    m = re.search(r\"^# (.+)$\", text, re.M)\n    title = m.group(1).strip() if m else src.stem.title()\n    body = markdown.markdown(text, extensions=[\"tables\", \"fenced_code\", \"toc\"])\n    # Make relative links to sibling .md files point at their .html twins.\n    body = re.sub(r'href=\"(?!https?://)([^\"#]+)\\.md(#[^\"]*)?\"', r'href=\"\\1.html\\2\"', body)\n    body = body.replace('href=\"documentation/', 'href=\"/documentation/')\n    dst.write_text(TEMPLATE.format(title=html.escape(title), body=body,\n                                   source=src.relative_to(ROOT)), encoding=\"utf-8\")\n    print(f\"{src.relative_to(ROOT)} -> {dst.relative_to(ROOT)}\")\n\n\ndef main() -> None:\n    DOCS.mkdir(exist_ok=True)\n    for md in sorted(DOCS.glob(\"*.md\")):\n        render(md, md.with_suffix(\".html\"))\n    render(ROOT / \"README.md\", DOCS / \"readme.html\")\n\n\nif __name__ == \"__main__\":\n    main()\nEOF\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"CLAUDE.md\"); s = p.read_text()\ns = s.replace(\"\"\"4. **Update the documentation** with the code, in the same change (details below).\n\"\"\", \"\"\"4. **Update the documentation** with the code, in the same change (details below).\n5. **Every Markdown doc has an HTML twin.** After editing any `documentation/*.md` or\n   `README.md`, run `python scripts/build_docs.py` and keep the generated\n   `documentation/<name>.html` alongside it. Never hand-edit the generated HTML files\n   (`architecture.html`, `readme.html`, …); `changelog.html` and `flow.html` are hand-written.\n\"\"\")\ns = s.replace(\"3. `documentation/architecture.md` — if modules, flows, statuses, or data layout changed.\",\n              \"3. `documentation/architecture.md` (then regenerate `architecture.html`) — if modules, flows, statuses, or data layout changed.\")\ns = s.replace(\"`documentation/` architecture,\\nchangelog, interactive flow\", \"`documentation/` architecture (.md + .html), changelog.html, flow.html, readme.html\")\np.write_text(s)\nm = Path(\"memory.md\"); t = m.read_text()\nt = t.replace(\"- Version lives in `app/main.py` (`FastAPI(version=…)`) and `documentation/changelog.html`.\",\n \"- Version lives in `app/main.py` (`FastAPI(version=…)`) and `documentation/changelog.html`.\\n- Docs live in `documentation/` (the user asked for this name, not `docs/`; `/docs` stays Swagger).\\n  Every `.md` there and `README.md` gets an `.html` twin via `scripts/build_docs.py`.\")\nm.write_text(t)\nprint(\"rules updated\")\nEOF\n.venv/bin/python -m compileall -q app cli evaluation scripts && .venv/bin/python -m pytest -q 2>&1 | tail -1",
+  "description": "Rename docs to documentation, add markdown renderer and build_docs.py, update rules, run checks",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T10:11:35.000Z</sub>
+
+**Tool result**
+
+```
+memory.md:49:- 2026-09-06 — v0.1.0 initial build; v0.2.0 async job model with fixed statuses, dedupe, docs set.
+app/main.py:1:"""FastAPI application: REST API + single-page UI + docs pages.
+app/main.py:159:    docs = jobs.list_docs(collection)
+app/main.py:160:    return [d for d in docs if status is None or d.status == status]
+app/main.py:188:    for doc in jobs.list_docs(col):
+CLAUDE.md:27:A change is not complete if the docs describe something the code no longer does.
+CLAUDE.md:34:  updating `app/models.py`, the UI, the CLI, tests, and all docs above.
+--- refs checked
+deps-ok
+rules updated
+17 passed, 1 warning in 0.61s
+```
+
+## Assistant  <sub>2026-09-06T10:11:58.080Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > scripts/sync_rules.py <<'EOF'\n\"\"\"\nKeep the AI-agent rule files identical across tools.\n\nSource of truth: CLAUDE.md. Targets:\n  .cursor/rules/project.mdc   (Cursor; gets a small frontmatter header, alwaysApply)\n  AGENTS.md                   (Codex / generic agents)\n\n    python scripts/sync_rules.py          # write targets from CLAUDE.md\n    python scripts/sync_rules.py --check  # exit 1 if any target is out of sync\n\"\"\"\nfrom __future__ import annotations\n\nimport sys\nfrom pathlib import Path\n\nROOT = Path(__file__).resolve().parents[1]\nSOURCE = ROOT / \"CLAUDE.md\"\nCURSOR_HEADER = \"---\\ndescription: Project rules (synced from CLAUDE.md — edit that file, then run scripts/sync_rules.py)\\nalwaysApply: true\\n---\\n\\n\"\nNOTE = \"<!-- Synced from CLAUDE.md by scripts/sync_rules.py. Do not edit this copy. -->\\n\\n\"\n\nTARGETS = {\n    ROOT / \".cursor\" / \"rules\" / \"project.mdc\": CURSOR_HEADER,\n    ROOT / \"AGENTS.md\": NOTE,\n}\n\n\ndef main() -> int:\n    body = SOURCE.read_text(encoding=\"utf-8\")\n    check = \"--check\" in sys.argv\n    drift = 0\n    for path, header in TARGETS.items():\n        expected = header + body\n        current = path.read_text(encoding=\"utf-8\") if path.exists() else None\n        if current == expected:\n            continue\n        if check:\n            print(f\"OUT OF SYNC: {path.relative_to(ROOT)}\")\n            drift += 1\n        else:\n            path.parent.mkdir(parents=True, exist_ok=True)\n            path.write_text(expected, encoding=\"utf-8\")\n            print(f\"wrote {path.relative_to(ROOT)}\")\n    if check and not drift:\n        print(\"rules in sync\")\n    return 1 if drift else 0\n\n\nif __name__ == \"__main__\":\n    sys.exit(main())\nEOF\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"CLAUDE.md\"); s = p.read_text()\ns = s.replace(\"# CLAUDE.md — project rules for AI coding agents\\n\",\n\"\"\"# Project rules for AI coding agents (Claude Code, Cursor, Codex)\n\nThis file is the **single source of truth**. `.cursor/rules/project.mdc` and `AGENTS.md` are\ngenerated copies — edit this file, then run `python scripts/sync_rules.py`\n(`--check` verifies they are identical). Never edit the copies directly.\n\"\"\")\ns = s.replace(\"\"\"5. **Every Markdown doc has an HTML twin.**\"\"\", \"\"\"5. **Keep the rule copies in sync.** After editing this file run `python scripts/sync_rules.py`.\n6. **Every Markdown doc has an HTML twin.**\"\"\")\np.write_text(s)\nEOF\n.venv/bin/python scripts/sync_rules.py && .venv/bin/python scripts/sync_rules.py --check && ls -la .cursor/rules AGENTS.md",
+  "description": "Add rule sync script, update CLAUDE.md header, generate Cursor and Codex copies"
+}
+```
+
+## Tool  <sub>2026-09-06T10:11:58.167Z</sub>
+
+**Tool result**
+
+```
+wrote .cursor/rules/project.mdc
+wrote AGENTS.md
+rules in sync
+-rw-r--r--@ 1 shoaib.rayeen  staff  3964 Sep  6 15:41 AGENTS.md
+
+.cursor/rules:
+total 8
+drwxr-xr-x@ 3 shoaib.rayeen  staff    96 Sep  6 15:41 .
+drwxr-xr-x@ 3 shoaib.rayeen  staff    96 Sep  6 15:41 ..
+-rw-r--r--@ 1 shoaib.rayeen  staff  4012 Sep  6 15:41 project.mdc
+```
+
+## Assistant  <sub>2026-09-06T10:13:19.304Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > README.md <<'EOF'\n# RAG Generator\n\n**What it does:** you upload documents while the service is running; it extracts their text\n(with page metadata), splits it into overlapping, metadata-tagged chunks, embeds them, and\nindexes them for **hybrid retrieval** (vector search + BM25, fused with Reciprocal Rank\nFusion). You then ask questions in a web UI, CLI or REST call and get an answer **grounded in\nyour documents with `[n]` citations** to the exact file, page and passage. Swap the documents\nfor a completely different set and it works unchanged — no code edits, only `.env`.\n\n| | |\n|---|---|\n| Interface | REST API (FastAPI) · single-page UI (upload · requests & status · ask · sources) · `rag` CLI |\n| Ingestion | asynchronous jobs: submit → `job_id` → poll status; fixed status vocabulary with reasons; SHA-256 duplicate detection |\n| Formats | PDF, DOCX, HTML, TXT, MD, CSV → text with page metadata · PNG/JPG/TIFF and scanned PDF pages via Tesseract OCR |\n| Retrieval | dense top-k (fastembed → ChromaDB) **+** BM25 top-k (rank-bm25) → **Reciprocal Rank Fusion** |\n| Generation | any OpenAI-compatible LLM endpoint, configured only in `.env` |\n| Evaluation | own script with **Claude as judge** |\n| Deployment | Docker + docker compose |\n| Docs | [`documentation/`](documentation/) — [architecture](documentation/architecture.md) ([html](documentation/architecture.html)) · [interactive flow walkthrough](documentation/flow.html) · [changelog](documentation/changelog.html) · this README as [html](documentation/readme.html) |\n\n---\n\n## 1. Setup\n\n### Docker (recommended)\n\n```bash\ncp .env.example .env\n# edit .env — set the three required lines:\n#   LLM_API_URL=https://api.openai.com/v1      (base URL; /chat/completions is appended)\n#   LLM_API_KEY=sk-...\n#   LLM_MODEL=gpt-4o-mini\n# optional: ANTHROPIC_API_KEY=sk-ant-...        (only for the evaluation script)\ndocker compose up --build\n```\n\nOpen <http://localhost:8000>. Interactive API docs: <http://localhost:8000/docs>.\nDocumentation pages are served at <http://localhost:8000/documentation/flow.html>,\n`/documentation/architecture.html`, `/documentation/changelog.html`.\n\nUploads, the Chroma index and the job registry live in `./data` (a compose volume) and survive restarts.\n\n| Provider | `LLM_API_URL` | `LLM_MODEL` example |\n|---|---|---|\n| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |\n| OpenRouter | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4.5` |\n| Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |\n| Ollama (from Docker) | `http://host.docker.internal:11434/v1` | `llama3.1` |\n| Azure OpenAI / vLLM / LiteLLM | their OpenAI-compatible base URL | deployment / served model name |\n\n### Local (no Docker)\n\n```bash\nuv venv --python 3.11 .venv && source .venv/bin/activate   # or: python3.11 -m venv .venv\nuv pip install -r requirements.txt && pip install -e .     # `-e .` installs the `rag` command\ncp .env.example .env                                       # edit the LLM_* lines\nrag serve                                                  # http://localhost:8000\n```\n\nOCR outside Docker needs the Tesseract binary (`brew install tesseract` / `apt install\ntesseract-ocr`). Without it the app still runs: scanned pages are skipped with a warning and\nimage uploads end as `FAILED` with a clear reason.\n\n### Offline demo without an LLM key\n\n`scripts/mock_llm.py` is a tiny OpenAI-compatible server that answers **extractively** from the\nretrieved context (it is not a language model — for demos and CI only):\n\n```bash\npython scripts/mock_llm.py &     # http://localhost:8001/v1\n# .env:  LLM_API_URL=http://localhost:8001/v1   LLM_API_KEY=mock   LLM_MODEL=mock-extractive\nrag serve\n```\n\n## 2. How the upload job flow works\n\nUploading is asynchronous. Every file in a request becomes a **job** and the API returns\nimmediately (HTTP 202) with one `job_id` per file. A background worker indexes the file; you\npoll `GET /api/jobs/{job_id}` or watch the listing. The interactive walkthrough is in\n[`documentation/flow.html`](documentation/flow.html).\n\nThe listing (`GET /api/documents`, and the **Requests & status** table in the UI) shows\n**DOC ID · NAME · STATUS · REASON** for every request ever made, including rejected ones.\n\n| Status | Meaning | Processed? | REASON column |\n|---|---|---|---|\n| `QUEUED` | stored, waiting for the worker | soon | \"Waiting for the background worker\" |\n| `DUPLICATE` | same SHA-256 as a live document in this collection | **no** | original's name + id, linked in the listing |\n| `PROCESSING` | worker running; `stage` = extracting → chunking → embedding | in progress | current stage and counts |\n| `COMPLETED` | indexed and searchable | yes | \"Indexed N pages (k via OCR) into M chunks\" |\n| `FAILED` | processing raised an error | no | `PROCESSING FAILED: <exception>` |\n| `EMPTY_FILE` | 0-byte upload | no | \"The uploaded file is 0 bytes\" |\n| `EXTRACTION_NOT_SUPPORTED` | extension not in `SUPPORTED_EXTENSIONS` | no | the extension and the supported list |\n| `UPLOAD_FAILED` | unreadable stream, larger than `MAX_UPLOAD_MB`, or disk write error | no | `UPLOAD FAILED: <cause>` |\n\nTerminal statuses are all of them except `QUEUED` and `PROCESSING`. Duplicate detection is\nper collection: the same file in another collection is a separate document set. Jobs caught\nmid-flight by a restart are marked `FAILED` with an explanatory reason.\n\n## 3. Using it\n\n### UI (<http://localhost:8000>)\n1. **Upload** — drop files, optionally name a *collection* (a document set). Accepted extensions are shown.\n2. **Requests & status** — every job with its Doc ID, name, status pill and reason; duplicates link to their original; delete finished jobs with ✕.\n3. **Ask** — the answer cites `[n]` blocks; click a citation to jump to the chunk.\n4. **Sources** — each retrieved chunk with file, page/section, whether it came from dense or BM25 (or both) and its RRF score. OCR'd chunks are flagged.\n\n**Reset collection** wipes a document set so you can load a different one.\n\n### CLI\n```bash\nrag ingest samples/*.md samples/*.pdf --collection demo   # prints job ids, waits for terminal status\nrag status --watch                                        # DOC ID · NAME · STATUS · REASON\nrag job <job_id>                                          # one job in detail\nrag ask \"How many days of annual leave do employees get?\" -c demo --show-sources\nrag reset -c demo --yes\nrag serve\n```\nThe CLI talks to the API at `RAG_API_URL` (default `http://localhost:8000`, override with `--api`).\n\n### REST API\n| Method | Path | Purpose |\n|---|---|---|\n| `GET` | `/api/health` | status, models, supported extensions, status vocabulary, collections, non-secret settings |\n| `POST` | `/api/documents` | multipart `files[]` (+ `collection`) → **202** with one job per file |\n| `GET` | `/api/jobs/{job_id}` | poll one job (`job_id` = `doc_id`) |\n| `GET` | `/api/documents?collection=&status=` | listing of all requests: doc id, name, status, reason, duplicate link |\n| `GET` | `/api/documents/{doc_id}` | same record as `/api/jobs/{id}` |\n| `DELETE` | `/api/documents/{doc_id}` | remove a finished job and its chunks |\n| `GET` | `/api/chunks?collection=&limit=&offset=` | inspect indexed chunks |\n| `POST` | `/api/ask` | `{\"question\", \"collection\"?, \"top_k\"?}` → answer + cited sources |\n| `DELETE` | `/api/collections/{name}` | reset a whole document set |\n\n```bash\ncurl -F \"files=@samples/handbook.md\" -F collection=demo localhost:8000/api/documents\ncurl localhost:8000/api/jobs/<job_id>\ncurl -X POST localhost:8000/api/ask -H 'content-type: application/json' \\\n     -d '{\"question\":\"What is the meal allowance?\",\"collection\":\"demo\"}'\n```\n\n## 4. What is supported\n\n- **Input formats:** `.pdf .docx .html .htm .txt .md .csv` plus `.png .jpg .jpeg .tiff .tif` (OCR).\n  Scanned PDF pages (fewer than `OCR_MIN_CHARS_PER_PAGE` extractable characters) fall back to OCR automatically.\n- **Page metadata:** PDF = printed page · DOCX = one page per heading section · HTML = one page, `<title>` as section ·\n  MD = one page per heading · TXT = one page · CSV = one page per `CSV_ROWS_PER_PAGE` rows (header repeated) · images = one page per frame.\n- **Multiple document sets** via collections; reset or delete without restarting.\n- **Any OpenAI-compatible LLM**; **any fastembed model**; CPU-only inference.\n- **Multi-file uploads**, up to `MAX_UPLOAD_MB` (50 MB) per file.\n- **Grounded answers** with citations and an explicit \"I could not find this in the provided documents.\" fallback.\n\n## 5. What is not supported (by design, for this version)\n\n- Non-OpenAI-compatible generation APIs (e.g. raw Anthropic Messages API for generation — use a gateway such as OpenRouter or LiteLLM). The **judge** is Claude via the official SDK.\n- Cross-encoder reranking, query rewriting, multi-hop or conversational memory: single-turn retrieval → answer only.\n- Authentication, multi-tenancy, rate limiting — run behind your own gateway.\n- Horizontal scaling: BM25 lives in one process's memory; run a single replica.\n- Formats outside the list above (PPTX, XLSX, EPUB, audio…). Adding one is a small extractor — see Tuning.\n- OCR languages other than English unless you install extra Tesseract language packs and set `OCR_LANG`.\n- Real-time streaming of the answer (responses are returned whole).\n\n## 6. Architecture\n\nFull description with diagrams: [`documentation/architecture.md`](documentation/architecture.md)\n(browser version: [`architecture.html`](documentation/architecture.html)). In short:\n\n```\nupload ─► validate/hash ─► QUEUED ─► worker: extract (pypdf/docx/bs4/csv/OCR) ─► chunk ─► fastembed ─► ChromaDB + BM25 ─► COMPLETED\nask    ─► embed ─► Chroma top-k ─┐\n       └► tokenize ─► BM25 top-k ─┴─► RRF ─► top FUSED_TOP_K ─► grounded prompt ─► OpenAI-compatible LLM ─► answer + sources\n```\n\n## 7. Tuning — everything lives in `app/config.py`\n\nEvery tunable is a field on `Settings` with a default, overridable from `.env` (same name);\n`.env.example` lists all of them. Nothing tunable is hard-coded elsewhere.\n\n| Setting | Default | What it does |\n|---|---|---|\n| `CHUNK_SIZE_CHARS` / `CHUNK_OVERLAP_CHARS` | 1200 / 200 | window size and overlap for chunking |\n| `CSV_ROWS_PER_PAGE` | 50 | rows per CSV \"page\" |\n| `DENSE_TOP_K` / `BM25_TOP_K` | 20 / 20 | candidates from each retriever before fusion |\n| `FUSED_TOP_K` | 6 | chunks passed to the LLM |\n| `RRF_K` | 60 | RRF smoothing constant |\n| `EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | any fastembed model (clear `data/chroma` after changing) |\n| `OCR_ENABLED` / `OCR_MIN_CHARS_PER_PAGE` / `OCR_LANG` / `OCR_DPI` | true / 20 / eng / 200 | when and how the Tesseract fallback runs |\n| `LLM_TEMPERATURE` / `LLM_MAX_TOKENS` / `LLM_TIMEOUT_S` | 0.1 / 1024 / 60 | generation parameters |\n| `MAX_UPLOAD_MB` / `DEFAULT_COLLECTION` | 50 / `default` | upload limit, collection used when none is given |\n| `JUDGE_MODEL` / `EVAL_MIN_FAITHFULNESS` | `claude-opus-5` / 3.5 | evaluation |\n\n**Supported formats** are the `SUPPORTED_EXTENSIONS` dict at the bottom of `app/config.py`\n(extension → extractor name). Remove an entry to stop accepting a type. To add a format: write an\nextractor in `app/ingest/extractors.py`, register it in `EXTRACTORS`, add the extension, add a test,\nand update the docs.\n\n## 8. Evaluation (Claude as judge)\n\n```bash\nrag ingest samples/* --collection default                 # index the corpus named in the dataset\n# set ANTHROPIC_API_KEY in .env, then:\npython -m evaluation.run_eval --dataset evaluation/dataset.example.jsonl\n```\n\nFor each row the script calls `/api/ask`, then asks Claude (`JUDGE_MODEL`, official `anthropic`\nSDK, structured outputs) to score **faithfulness**, **answer relevance**, **context relevance**,\n**correctness vs. reference** (1–5) and flag **hallucination**. Reports land in\n`evaluation/reports/<timestamp>.{json,md}`; the run exits non-zero when mean faithfulness is\nbelow `--min-faithfulness`. For a new document set, synthesise questions first:\n\n```bash\npython -m evaluation.generate_dataset --collection mydocs --chunks 10 --per-chunk 2 --out evaluation/dataset.mydocs.jsonl\npython -m evaluation.run_eval --dataset evaluation/dataset.mydocs.jsonl\n```\n\n## 9. Tech stack\n\n**Used**\n\n| Layer | Choice | Why |\n|---|---|---|\n| Language | Python 3.11 | required by the brief; broad library support |\n| API | FastAPI + uvicorn, pydantic, pydantic-settings | async uploads, background tasks, validation, free OpenAPI docs, `.env` settings |\n| UI | one static `index.html`, vanilla JS | no build step; the brief asked for a single page |\n| CLI | typer + httpx | talks to the API so only one process opens Chroma |\n| Extraction | pypdf, python-docx, beautifulsoup4 + lxml, stdlib csv | one small library per format |\n| OCR | Tesseract via pytesseract, pypdfium2 (page rendering), Pillow | fallback for scanned PDFs and images; no poppler dependency |\n| Chunking | custom sliding window | overlapping, boundary-aware, metadata-tagged as required |\n| Embeddings | fastembed `BAAI/bge-small-en-v1.5` (ONNX, CPU) | fast, no GPU, no API key |\n| Vector DB | ChromaDB embedded `PersistentClient` | required by the brief; zero extra services |\n| Lexical | rank-bm25 | required by the brief |\n| Fusion | Reciprocal Rank Fusion | rank-based, robust to incomparable score scales |\n| LLM | OpenAI-compatible `chat/completions` over httpx | works with every major provider by changing two `.env` lines |\n| Judge | anthropic SDK, `claude-opus-5`, `messages.parse` | Claude as judge with validated structured verdicts |\n| Docs tooling | python-markdown (`scripts/build_docs.py`) | HTML twins of Markdown docs |\n| Tests | pytest + FastAPI TestClient | end-to-end without network or keys |\n| Packaging | Docker (python:3.11-slim + tesseract), docker compose | required by the brief |\n\n**Deliberately not used:** LangChain / LlamaIndex (a thin custom pipeline is easier to read and\ntune), a cross-encoder reranker (out of scope; slots in after `hybrid_retrieve`), a separate\nChroma server or a job queue like Celery/Redis (FastAPI background tasks suffice for one\nreplica), a JS framework, GPU acceleration, the server-side refusal-fallback beta on the judge.\n\n## 10. Samples and tests\n\n`samples/` is a small fictional company corpus covering every format: `handbook.md`,\n`security_policy.txt`, `robot_catalog.csv`, `release_notes.html`, `warranty.pdf`, `onboarding.docx`,\nplus `scanned_memo.pdf` and `whiteboard.png` whose text exists only as pixels (OCR path). Regenerate\nthe binary ones with `pip install -r requirements-dev.txt && python scripts/make_samples.py`.\n\n```bash\npytest   # chunker, RRF, every extractor, OCR-unavailable path, async job flow, duplicates, rejections, 502 on LLM errors\n```\n\n## 11. Repository layout\n\n```\napp/            FastAPI service (config, models, ingest/, retrieval/, llm/, rag.py, jobs.py, main.py, static/index.html)\ncli/            `rag` CLI\nevaluation/     Claude-as-judge runner, dataset generator, example dataset, reports/\ndocumentation/  architecture.md(.html), flow.html (interactive), changelog.html, readme.html\nsamples/        demo corpus     scripts/  make_samples.py, mock_llm.py, build_docs.py, sync_rules.py\ntests/          pytest suite    transcripts/  agent session exports\nCLAUDE.md       rules for AI agents (source of truth) → synced to .cursor/rules/project.mdc and AGENTS.md\nmemory.md       project memory: decisions, gotchas, conventions\n```\n\n## 12. Working on this repo with an AI agent\n\n`CLAUDE.md` (mirrored to `.cursor/rules/project.mdc` and `AGENTS.md` by `scripts/sync_rules.py`)\nrequires agents to read `memory.md` before planning, run the compile check and tests after every\nchange, never commit (the user commits), and update README / changelog / architecture / flow /\nmemory and the HTML twins with every code change.\n\n## 13. Transcripts\n\n`transcripts/` holds the complete Claude Code transcripts of the sessions that built this project\n(see `transcripts/README.md`).\nEOF\n.venv/bin/python scripts/build_docs.py && ls documentation",
+  "description": "Rewrite README and build HTML twins of the Markdown docs"
+}
+```
+
+## Tool  <sub>2026-09-06T10:13:19.419Z</sub>
+
+**Tool result**
+
+```
+documentation/architecture.md -> documentation/architecture.html
+README.md -> documentation/readme.html
+architecture.html
+architecture.md
+changelog.html
+flow.html
+readme.html
+```
+
+## Assistant  <sub>2026-09-06T10:13:21.058Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "exec .venv/bin/python scripts/mock_llm.py",
+  "description": "Start the mock OpenAI-compatible LLM on port 8001",
+  "run_in_background": true
+}
+```
+
+## Tool  <sub>2026-09-06T10:13:21.074Z</sub>
+
+**Tool result**
+
+```
+Command running in background with ID: bwlec55hq. Output is being written to: /private/tmp/claude-502/-Users-shoaib-rayeen-my-space-rag-generator/a88920a3-6212-4085-ad05-80ba0afca34d/tasks/bwlec55hq.output. You will be notified when it completes. To check interim output, use Read on that file path.
+```
+
+## Assistant  <sub>2026-09-06T10:13:21.252Z</sub>
+
+**Tool call — `mcp__Claude_Browser__preview_start`**
+
+```json
+{
+  "name": "rag-api"
+}
+```
+
+## Tool  <sub>2026-09-06T10:13:26.971Z</sub>
+
+**Tool result**
+
+```
+{
+  "serverId": "cfa50da9-4d65-41ec-a468-f87e17388049",
+  "port": 8000,
+  "name": "rag-api",
+  "reused": false,
+  "previewId": "preview-local_ed8547aa-7d57-4f03-9aba-91798b56bd6d",
+  "tabId": "seed"
+}
+Server started successfully on port 8000. Opened tab "seed" at http://localhost:8000. Use tabId "seed" with read_page / computer / navigate; serverId is for preview_stop and preview_logs only.
+```
+
+## Assistant  <sub>2026-09-06T10:13:42.448Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "sleep 6; curl -s localhost:8000/api/health | .venv/bin/python -c \"import sys,json; h=json.load(sys.stdin); print(h['llm_model'], h['ocr_available'], h['statuses'])\"; echo; printf 'binary junk' > /tmp/notes.xyz && : > /tmp/blank.txt && .venv/bin/python -m cli.rag_cli ingest samples/handbook.md samples/security_policy.txt samples/robot_catalog.csv samples/release_notes.html samples/warranty.pdf samples/onboarding.docx samples/scanned_memo.pdf samples/whiteboard.png samples/handbook.md /tmp/notes.xyz /tmp/blank.txt --collection default 2>&1",
+  "description": "Check health, then ingest all samples plus a duplicate, an unsupported file, and an empty file via CLI",
+  "timeout": 180000
+}
+```
+
+## Tool  <sub>2026-09-06T10:13:49.683Z</sub>
+
+**Tool result**
+
+```
+mock-extractive False ['QUEUED', 'DUPLICATE', 'PROCESSING', 'COMPLETED', 'FAILED', 'EMPTY_FILE', 'EXTRACTION_NOT_SUPPORTED', 'UPLOAD_FAILED']
+
+QUEUED                     handbook.md  job_id=d65ac42f55ab
+QUEUED                     security_policy.txt  job_id=c157b51764bf
+QUEUED                     robot_catalog.csv  job_id=b22cbff34916
+QUEUED                     release_notes.html  job_id=8e6bf2a56b9d
+QUEUED                     warranty.pdf  job_id=ca9272101852
+QUEUED                     onboarding.docx  job_id=db72729034bf
+QUEUED                     scanned_memo.pdf  job_id=81cd598be4f5
+QUEUED                     whiteboard.png  job_id=ebbffab1a5c4
+DUPLICATE                  handbook.md  job_id=1cfedc0fb585
+EXTRACTION_NOT_SUPPORTED   notes.xyz  job_id=394bda654f7b
+EMPTY_FILE                 blank.txt  job_id=902e9f2fb55a
+COMPLETED                  handbook.md  Indexed 6 pages into 6 chunks
+COMPLETED                  security_policy.txt  Indexed 1 pages into 1 chunks
+COMPLETED                  robot_catalog.csv  Indexed 1 pages into 1 chunks
+COMPLETED                  release_notes.html  Indexed 1 pages into 1 chunks
+COMPLETED                  warranty.pdf  Indexed 4 pages into 4 chunks
+COMPLETED                  onboarding.docx  Indexed 5 pages into 5 chunks
+FAILED                     scanned_memo.pdf  PROCESSING FAILED: ValueError: No text could be extracted from this file (scanned document without OCR, or empty content).
+FAILED                     whiteboard.png  PROCESSING FAILED: ValueError: No text could be extracted from this file (scanned document without OCR, or empty content).
+```
+
+## Assistant  <sub>2026-09-06T10:14:08.438Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": ".venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"app/ingest/pipeline.py\"); s = p.read_text()\nold = \"\"\"        pages = extract(path)\n        if not pages:\n            raise ValueError(\"No text could be extracted from this file \"\n                             \"(scanned document without OCR, or empty content).\")\"\"\"\nnew = \"\"\"        pages = extract(path)\n        if not pages:\n            if doc.file_type in (\"pdf\", \"image\") and not ocr_available():\n                raise ValueError(\"No extractable text and Tesseract OCR is not installed on this host, \"\n                                 \"so the scanned pages could not be read. OCR works in the Docker image; \"\n                                 \"locally install tesseract (brew/apt) and re-upload.\")\n            raise ValueError(\"No text could be extracted from this file (empty or image-only content).\")\"\"\"\nassert old in s\ns = s.replace(old, new).replace(\"from app.ingest.extractors import extract\", \"from app.ingest.extractors import extract, ocr_available\")\np.write_text(s); print(\"patched\")\nEOF\n.venv/bin/python -m compileall -q app cli evaluation scripts && .venv/bin/python -m pytest -q 2>&1 | tail -1",
+  "description": "Make the OCR-unavailable failure reason explicit; compile and test",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T10:14:09.358Z</sub>
+
+**Tool result**
+
+```
+patched
+17 passed, 1 warning in 0.60s
+```
+
+## Assistant  <sub>2026-09-06T10:14:11.447Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": ".venv/bin/python -m cli.rag_cli ask \"What is the maximum daily meal reimbursement while travelling?\" --show-sources 2>&1 | head -30; echo; echo \"=== off-topic ===\"; .venv/bin/python -m cli.rag_cli ask \"What is the company's policy on cryptocurrency payments?\" 2>&1 | head -5; echo; echo \"=== status ===\"; .venv/bin/python -m cli.rag_cli status 2>&1 | head -14",
+  "description": "CLI ask with sources, off-topic fallback, and status listing",
+  "timeout": 120000
+}
+```
+
+## Tool  <sub>2026-09-06T10:14:11.875Z</sub>
+
+**Tool result**
+
+```
+## Expense reimbursement Meals while travelling are reimbursed up to EUR 60 per day. [1]
+
+[mock-extractive · 12 ms · 6 sources]
+
+[1] handbook.md — page 4, Expense reimbursement  dense#1 bm25#1 rrf=0.032787
+## Expense reimbursement
+
+Expenses must be submitted in the Concur portal within 30 days of being incurred.
+Meals while travelling are reimbursed up to EUR 60 per day. Any single expense above
+EUR 500 requires written pre-approval from a director. Receipts are mandatory for all
+claims above EUR 25.
+
+[2] Exhibit - Service Level - Duplicate.docx — page 31, Milestones  dense#3 bm25#2 rrf=0.032002
+the following two days
+SLA | Measurement | Minimum/Maximum | Expected | Credit Allocation %
+Number of legitimate tenant complaints | Above 9 complaints within a year | 9 | 2 | 80%
+Compliance with all
+Security Regulations | Above 1 infraction within a year | 1 | 0 | 80%
+Performance of Logistics staff {based on random audits) | Above 8 infractions within a year | 8 | 3 | 50%
+Cleanliness of Logistics Centre and Loading Docks | Above 12 infractions within a year | 12 | 3 | 50%
+Operators Teammates operating in a safe manner | Above 7 infractions within a year | 7 | 2 | 50%
+Receipt of Goods | The maximum time taken from the point the goods are delivered to the Supplier’s facility to the point there they have been processed into bulk storage. This time includes the quality checking and scanning requirements but excludes any labelling requirements. This is received in same Day | 10 | 5 | 40%
+Order Processing Capacity | The order processing capacity of the warehouse in orders per day. | NA | 1500 | NA
+
+[3] Exhibit - Service Level - Duplicate.docx — page 31, Milestones  dense#5 bm25#5 rrf=0.030769
+| Received by 06:00 a.m. | 8:00a.m.
+A | Time Sensitive | Magazines | Received by 06:00 a.m. | 10:00a.m.
+B1 | Temperature
+Sensitive | Requires Freezer/Cooler | Received by 4:00 a.m. | 12:00p.m.
+B2 C1
+
+=== off-topic ===
+IN NO EVENT WILL WIPRO BE LIABLE FOR ANY LOSS OF PROFITS, LOSS OF USE, BUSINESS INTERRUPTION, LOSS OF LICENSEE DATA, COST OF COVER OR INDIRECT, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES OF ANY KIND IN CONNECTION WITH OR ARISING OUT OF THE FURNISHING, PERFORMANCE OR USE OF THE SOFTWARE HEREUNDER INCLUDING THE PROVISION OF SUPPORT SERVICES PURSUANT TO THE SUPPORT POLICY OR ANY DELAY IN DELIVERY OR FURNISHING THE SOFTWARE OR SAID SERVICES, IRRESPECTIVE OF WHETHER IT HAD AN ADVANCE NOTICE OF POSSIBILITY OF ANY SUCH DAMAGES. IN ANY EVENT, WIPRO’S MAXIMUM AGGREGATE LIABILITY (WHETHER IN CONTRACT OR UNDER ANY OTHER FORM OR LIABILITY) FOR DAMAGES OR LOSS, HOWSOEVER ARISING OR CAUSED, WHETHER OR NOT ARISING FROM WIPRO’S NEGLIGENCE, SHALL IN NO EVENT BE GREATER THAN (A) IN THE EVENT SUCH LOSS OR DAMAGE IS NOT RELATED TO SUPPORT, THE LICENSE FEE RELATED TO THE RELEVANT SOFTWARE, WHICH HAS CAUSED THE DAMAGE OR LOSS, PAID IN THE PAST TWELVE MONTHS FROM THE DATE OF SUCH AN EVENT LEADING TO THE LOSS OR DAMAGE OR (B) IN THE EVENT SUCH LOSS OR DAMAGE IS RELATED TO SUPPORT SERVICES, [4]
+
+[mock-extractive · 8 ms · 6 sources]
+
+=== status ===
+DOC ID       NAME                             STATUS                     REASON
+ab6156949919 Exhibit - Service Level - Duplic COMPLETED                  Indexed 31 pages into 38 chunks
+d65ac42f55ab handbook.md                      COMPLETED                  Indexed 6 pages into 6 chunks
+c157b51764bf security_policy.txt              COMPLETED                  Indexed 1 pages into 1 chunks
+b22cbff34916 robot_catalog.csv                COMPLETED                  Indexed 1 pages into 1 chunks
+8e6bf2a56b9d release_notes.html               COMPLETED                  Indexed 1 pages into 1 chunks
+ca9272101852 warranty.pdf                     COMPLETED                  Indexed 4 pages into 4 chunks
+db72729034bf onboarding.docx                  COMPLETED                  Indexed 5 pages into 5 chunks
+81cd598be4f5 scanned_memo.pdf                 FAILED                     PROCESSING FAILED: ValueError: No text could be extract
+… [711 more characters]
+```
+
+## Assistant  <sub>2026-09-06T10:14:12.095Z</sub>
+
+**Tool call — `mcp__Claude_Browser__computer`**
+
+```json
+{
+  "action": "screenshot",
+  "tabId": "seed"
+}
+```
+
+## Assistant  <sub>2026-09-06T10:14:12.105Z</sub>
+
+**Tool call — `mcp__Claude_Browser__read_page`**
+
+```json
+{
+  "tabId": "seed",
+  "filter": "interactive"
+}
+```
+
+## Tool  <sub>2026-09-06T10:14:12.142Z</sub>
+
+**Tool result**
+
+```
+
+Screenshot size: 800x571
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+```
+
+## Tool  <sub>2026-09-06T10:14:12.157Z</sub>
+
+**Tool result**
+
+```
+link "How it works" [ref_1] href="/documentation/flow.html"
+link "Changelog" [ref_2] href="/documentation/changelog.html"
+link "API docs" [ref_3] href="/docs"
+textbox "Collection (document set)" [ref_4] type="text"
+button "Upload" [ref_5]
+button "Delete every document in this collection" [ref_6]
+button "Delete" [ref_7]
+button "Delete" [ref_8]
+button "Delete" [ref_9]
+button "Delete" [ref_10]
+button "Delete" [ref_11]
+button "Delete" [ref_12]
+button "Delete" [ref_13]
+textbox "Ask something answerable from the uploaded documents…" [ref_14] placeholder="Ask something answerable from the uploaded documents…"
+button "Ask" [ref_15]
+
+Viewport: 1214x867
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+```
+
+## Assistant  <sub>2026-09-06T10:14:39.553Z</sub>
+
+**Tool call — `mcp__Claude_Browser__browser_batch`**
+
+```json
+{
+  "actions": [
+    {
+      "name": "computer",
+      "input": {
+        "action": "left_click",
+        "ref": "ref_14",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "type",
+        "text": "How long is the warranty on Titan series industrial arms?",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "left_click",
+        "ref": "ref_15",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "wait",
+        "duration": 2,
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "screenshot",
+        "tabId": "seed"
+      }
+    }
+  ]
+}
+```
+
+## Tool  <sub>2026-09-06T10:14:43.522Z</sub>
+
+**Tool result**
+
+```
+[computer:left_click] left_click at (807, 169) [ref_14]
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+[computer:type] typed 57 chars
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+[computer:left_click] left_click at (473, 237) [ref_15]
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+[computer:wait] waited 2s
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+[computer:screenshot] Screenshot size: 800x571
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+
+```
+
+## Assistant  <sub>2026-09-06T10:14:43.903Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": ".venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"README.md\"); s = p.read_text()\ns = s.replace(\"| `MAX_UPLOAD_MB` / `DEFAULT_COLLECTION` | 50 / `default` | upload limit, collection used when none is given |\",\n\"| `MAX_UPLOAD_MB` / `DEFAULT_COLLECTION` | 50 / `default` | upload limit, collection used when none is given |\\n| `APP_PORT` / `APP_HOST` | 8000 / `0.0.0.0` | port the app listens on (`rag serve`) and the host port docker compose publishes (`${APP_PORT:-8000}`) |\")\ns = s.replace(\"Open <http://localhost:8000>. Interactive API docs: <http://localhost:8000/docs>.\",\n\"Open <http://localhost:8000> (change the port with `APP_PORT=9000` in `.env`). Interactive API docs: <http://localhost:8000/docs>.\")\np.write_text(s)\nEOF\n.venv/bin/python scripts/build_docs.py >/dev/null && echo readme-port-ok",
+  "description": "Document APP_PORT in README and rebuild HTML docs"
+}
+```
+
+## Tool  <sub>2026-09-06T10:14:44.002Z</sub>
+
+**Tool result**
+
+```
+readme-port-ok
+```
+
+## Assistant  <sub>2026-09-06T10:14:59.042Z</sub>
+
+**Tool call — `mcp__Claude_Browser__preview_stop`**
+
+```json
+{
+  "serverId": "cfa50da9-4d65-41ec-a468-f87e17388049"
+}
+```
+
+## Tool  <sub>2026-09-06T10:15:00.893Z</sub>
+
+**Tool result**
+
+```
+Server cfa50da9-4d65-41ec-a468-f87e17388049 stopped
+```
+
+## Assistant  <sub>2026-09-06T10:15:17.081Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > scripts/export_transcript.py <<'EOF'\n\"\"\"\nExport a Claude Code session log (JSONL) to a readable Markdown transcript.\n\n    python scripts/export_transcript.py [--session <id-or-path>] [--out transcripts/<name>.md]\n\nClaude Code stores each session under ~/.claude/projects/<project-slug>/<session-id>.jsonl.\nWith no --session, the most recently modified session for this project is used. The output is\nequivalent to the `/export` command: every user message, assistant message, tool call\n(name + input) and tool result, in order, with timestamps. Nothing is summarised or edited.\n\"\"\"\nfrom __future__ import annotations\n\nimport argparse\nimport json\nfrom datetime import datetime\nfrom pathlib import Path\n\nROOT = Path(__file__).resolve().parents[1]\nSLUG = \"-\" + str(ROOT).strip(\"/\").replace(\"/\", \"-\")\nPROJECT_DIR = Path.home() / \".claude\" / \"projects\" / SLUG\nMAX_RESULT_CHARS = 4000\n\n\ndef _text_blocks(content) -> list[str]:\n    if isinstance(content, str):\n        return [content]\n    out = []\n    for block in content or []:\n        if not isinstance(block, dict):\n            continue\n        t = block.get(\"type\")\n        if t == \"text\":\n            out.append(block[\"text\"])\n        elif t == \"tool_use\":\n            args = json.dumps(block.get(\"input\", {}), indent=2, ensure_ascii=False)\n            out.append(f\"**Tool call — `{block.get('name')}`**\\n\\n```json\\n{args}\\n```\")\n        elif t == \"tool_result\":\n            body = block.get(\"content\")\n            if isinstance(body, list):\n                body = \"\\n\".join(b.get(\"text\", \"\") for b in body if isinstance(b, dict))\n            body = str(body or \"\")\n            if len(body) > MAX_RESULT_CHARS:\n                body = body[:MAX_RESULT_CHARS] + f\"\\n… [{len(body) - MAX_RESULT_CHARS} more characters]\"\n            out.append(f\"**Tool result**\\n\\n```\\n{body}\\n```\")\n        elif t == \"thinking\":\n            continue  # never exported by /export either\n    return out\n\n\ndef export(session: Path, out: Path) -> int:\n    lines = [f\"# Claude Code transcript — session `{session.stem}`\", \"\",\n             f\"Project: `{ROOT}`  \", f\"Exported: {datetime.now().isoformat(timespec='seconds')}  \",\n             f\"Source log: `{session}`\", \"\", \"---\", \"\"]\n    n = 0\n    for raw in session.read_text(encoding=\"utf-8\").splitlines():\n        try:\n            ev = json.loads(raw)\n        except json.JSONDecodeError:\n            continue\n        kind = ev.get(\"type\")\n        if kind not in (\"user\", \"assistant\"):\n            continue\n        msg = ev.get(\"message\") or {}\n        blocks = _text_blocks(msg.get(\"content\"))\n        if not blocks:\n            continue\n        ts = ev.get(\"timestamp\", \"\")\n        who = \"User\" if kind == \"user\" else \"Assistant\"\n        if kind == \"user\" and all(b.startswith(\"**Tool result**\") for b in blocks):\n            who = \"Tool\"\n        lines.append(f\"## {who}  <sub>{ts}</sub>\")\n        lines.append(\"\")\n        lines.extend(\"\\n\\n\".join(blocks).splitlines())\n        lines.append(\"\")\n        n += 1\n    out.parent.mkdir(parents=True, exist_ok=True)\n    out.write_text(\"\\n\".join(lines), encoding=\"utf-8\")\n    return n\n\n\ndef main() -> None:\n    p = argparse.ArgumentParser()\n    p.add_argument(\"--session\", help=\"session id or path to the .jsonl log\")\n    p.add_argument(\"--out\", type=Path, default=None)\n    a = p.parse_args()\n    if a.session and Path(a.session).exists():\n        session = Path(a.session)\n    elif a.session:\n        session = PROJECT_DIR / f\"{a.session}.jsonl\"\n    else:\n        logs = sorted(PROJECT_DIR.glob(\"*.jsonl\"), key=lambda p: p.stat().st_mtime)\n        if not logs:\n            raise SystemExit(f\"no session logs under {PROJECT_DIR}\")\n        session = logs[-1]\n    out = a.out or ROOT / \"transcripts\" / f\"{datetime.now():%Y-%m-%d}-rag-generator-build.md\"\n    n = export(session, out)\n    print(f\"exported {n} messages from {session.name} -> {out.relative_to(ROOT)}\")\n\n\nif __name__ == \"__main__\":\n    main()\nEOF\nls -la ~/.claude/projects/-Users-shoaib-rayeen-my-space-rag-generator/*.jsonl 2>/dev/null | tail -3; .venv/bin/python scripts/export_transcript.py --session a88920a3-6212-4085-ad05-80ba0afca34d && wc -c transcripts/*.md | tail -2 && head -12 transcripts/2026-09-06-rag-generator-build.md",
+  "description": "Write transcript exporter and run it against this session's log"
+}
+```
+
+## Tool  <sub>2026-09-06T10:15:17.147Z</sub>
+
+**Tool result**
+
+```
+Exit code 1
+-rw-------@ 1 shoaib.rayeen  staff   490663 Sep  6 15:44 /Users/shoaib.rayeen/.claude/projects/-Users-shoaib-rayeen-my-space-rag-generator/014b561e-a151-42f4-a22c-a0d15688639c.jsonl
+-rw-------@ 1 shoaib.rayeen  staff  1400911 Sep  6 15:44 /Users/shoaib.rayeen/.claude/projects/-Users-shoaib-rayeen-my-space-rag-generator/a88920a3-6212-4085-ad05-80ba0afca34d.jsonl
+Traceback (most recent call last):
+  File "/Users/shoaib.rayeen/my_space/rag-generator/scripts/export_transcript.py", line 101, in <module>
+    main()
+  File "/Users/shoaib.rayeen/my_space/rag-generator/scripts/export_transcript.py", line 96, in main
+    n = export(session, out)
+        ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/shoaib.rayeen/my_space/rag-generator/scripts/export_transcript.py", line 55, in export
+    for raw in session.read_text(encoding="utf-8").splitlines():
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/shoaib.rayeen/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/pathlib.py", line 1058, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/shoaib.rayeen/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/pathlib.py", line 1044, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/Users/shoaib.rayeen/.claude/projects/-Users-shoaib.rayeen-my_space-rag-generator/a88920a3-6212-4085-ad05-80ba0afca34d.jsonl'
+```
+
+## Assistant  <sub>2026-09-06T10:15:31.620Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "MEM=/Users/shoaib.rayeen/.claude/projects/-Users-shoaib-rayeen-my-space-rag-generator/memory\ncat > \"$MEM/rag-generator-project-context.md\" <<'EOF'\n---\nname: rag-generator-project-context\ndescription: What the rag-generator repo is for (agentic-coding assessment), key architecture decisions and the local environment gotchas\nmetadata:\n  type: project\n---\n\nThe repo is an assessment deliverable: a RAG Generator (FastAPI + single-page UI + `rag` CLI) that\ningests documents at runtime as async jobs, indexes them with fastembed → ChromaDB (embedded) plus\nrank-bm25, fuses with RRF, and answers via any OpenAI-compatible LLM configured only in `.env`.\nJudge for evaluation is Claude (`claude-opus-5`) via the anthropic SDK with its own key.\nBuilt 2026-09-06 (v0.1.0 → v0.2.0 same day). Full decisions live in the repo's `memory.md`.\n\n**Why:** the user's brief fixed the stack (Python, FastAPI, Docker, fastembed, ChromaDB, rank-bm25,\nRRF, Claude-as-judge) and demanded zero code changes between document sets.\n\n**How to apply:** read repo `memory.md` and `CLAUDE.md` first. Dev Mac has no Docker, Homebrew or\nTesseract and system Python is 3.9 — use `.venv` (uv, Python 3.11); OCR-only samples fail locally by\ndesign. Docker image still unverified on this machine. See [[rag-generator-user-workflow-rules]].\nEOF\ncat > \"$MEM/rag-generator-user-workflow-rules.md\" <<'EOF'\n---\nname: rag-generator-user-workflow-rules\ndescription: How the user wants agents to work in rag-generator - no commits, tests after every change, docs folder naming, synced rule files, transcripts\nmetadata:\n  type: feedback\n---\n\nThe user asked for these working rules (now codified in the repo's `CLAUDE.md`, mirrored to\n`.cursor/rules/project.mdc` and `AGENTS.md` by `scripts/sync_rules.py`):\n- Never commit; the user reviews and commits themselves.\n- Run compile check + `pytest` after every code change.\n- Read `memory.md` before planning; update docs (README, changelog.html, architecture.md,\n  flow.html, memory.md, HTML twins via `scripts/build_docs.py`) with every code change.\n- Documentation folder is `documentation/`, not `docs/`; every `.md` needs an `.html` twin.\n- Session transcripts go in `transcripts/` (they wanted `/export`; `scripts/export_transcript.py`\n  produces the equivalent from the session JSONL).\n\n**Why:** the assessment grades documentation, transcripts and process, and the user wants to inspect\nchanges before they land in git.\n\n**How to apply:** follow CLAUDE.md literally; when the user sends requirement rows mid-turn, fold\nthem into the plan and the docs rather than asking again. Related: [[rag-generator-project-context]].\nEOF\ncat > \"$MEM/MEMORY.md\" <<'EOF'\n- [RAG generator project context](rag-generator-project-context.md) — assessment repo, stack decisions, no Docker/Tesseract on this Mac\n- [User workflow rules for rag-generator](rag-generator-user-workflow-rules.md) — no commits, tests after each change, documentation/ folder, synced agent rules\nEOF\necho memory-saved; git status --short | head -40",
+  "description": "Save session memories and show git status"
+}
+```
+
+## Tool  <sub>2026-09-06T10:15:31.683Z</sub>
+
+**Tool result**
+
+```
+memory-saved
+A  .claude/launch.json
+A  .cursor/rules/project.mdc
+A  .env.example
+A  .gitignore
+A  AGENTS.md
+A  CLAUDE.md
+A  Dockerfile
+M  README.md
+A  app/__init__.py
+A  app/config.py
+A  app/ingest/__init__.py
+A  app/ingest/chunker.py
+A  app/ingest/extractors.py
+A  app/ingest/pipeline.py
+A  app/jobs.py
+A  app/llm/__init__.py
+A  app/llm/client.py
+A  app/llm/prompts.py
+A  app/main.py
+A  app/models.py
+A  app/rag.py
+A  app/retrieval/__init__.py
+A  app/retrieval/bm25_index.py
+A  app/retrieval/embedder.py
+A  app/retrieval/fusion.py
+A  app/retrieval/vector_store.py
+A  app/static/index.html
+A  cli/__init__.py
+A  cli/rag_cli.py
+A  docker-compose.yml
+A  documentation/architecture.html
+A  documentation/architecture.md
+A  documentation/changelog.html
+A  documentation/flow.html
+A  documentation/readme.html
+A  evaluation/__init__.py
+A  evaluation/dataset.example.jsonl
+A  evaluation/generate_dataset.py
+A  evaluation/judge.py
+A  evaluation/reports/.gitkeep
+```

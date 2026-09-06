@@ -10,7 +10,7 @@ from pathlib import Path
 
 from app import jobs
 from app.ingest.chunker import chunk_pages
-from app.ingest.extractors import extract, ocr_available
+from app.ingest.extractors import ExtractionError, extract
 from app.retrieval import bm25_index, embedder, vector_store
 
 log = logging.getLogger(__name__)
@@ -22,13 +22,7 @@ def run(doc_id: str, path: Path) -> None:
         return
     try:
         jobs.update(doc_id, status="PROCESSING", stage="extracting", reason="Extracting text")
-        pages = extract(path)
-        if not pages:
-            if doc.file_type in ("pdf", "image") and not ocr_available():
-                raise ValueError("No extractable text and Tesseract OCR is not installed on this host, "
-                                 "so the scanned pages could not be read. OCR works in the Docker image; "
-                                 "locally install tesseract (brew/apt) and re-upload.")
-            raise ValueError("No text could be extracted from this file (empty or image-only content).")
+        pages = extract(path)  # raises ExtractionError with a user-facing reason
         ocr_pages = sum(1 for p in pages if p.extraction == "ocr")
 
         jobs.update(doc_id, stage="chunking", pages=len(pages), ocr_pages=ocr_pages,
@@ -49,6 +43,9 @@ def run(doc_id: str, path: Path) -> None:
         jobs.update(doc_id, status="COMPLETED", stage=None,
                     reason=f"Indexed {len(pages)} pages{ocr_note} into {len(chunks)} chunks")
         log.info("COMPLETED %s (%s)", doc.filename, doc_id)
+    except ExtractionError as exc:
+        log.warning("FAILED %s (%s): %s", doc.filename, doc_id, exc)
+        jobs.update(doc_id, status="FAILED", stage=None, reason=f"PROCESSING FAILED: {exc}")
     except Exception as exc:
         log.exception("FAILED %s (%s)", doc.filename, doc_id)
         jobs.update(doc_id, status="FAILED", stage=None,

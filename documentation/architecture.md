@@ -9,7 +9,7 @@ service at runtime. There are two flows: **ingest** (asynchronous) and **ask** (
 |---|---|---|
 | API | `app/main.py` | FastAPI routes, background job scheduling, static UI + docs |
 | Job registry | `app/jobs.py` | in-memory dict persisted to `data/documents.json`; status per upload |
-| Extractors | `app/ingest/extractors.py` | file → pages with metadata; per-format functions; OCR fallback |
+| Extractors | `app/ingest/extractors.py` | file → pages with metadata; primary extractor per format + fallback tier (Tesseract OCR) |
 | Chunker | `app/ingest/chunker.py` | overlapping windows, boundary-aware, metadata-tagged |
 | Pipeline | `app/ingest/pipeline.py` | background worker: extract → chunk → embed → store → BM25 rebuild |
 | Embedder | `app/retrieval/embedder.py` | fastembed (`BAAI/bge-small-en-v1.5`, ONNX, CPU) |
@@ -51,20 +51,27 @@ Every status is persisted after each transition, so a listing is always consiste
 what the worker has done. Jobs that were mid-flight during a restart are marked `FAILED`
 on load with an explanatory reason.
 
-### Extraction and page metadata
+### Extraction: primary tier, then fallback tier
 
-| Format | Library | "page" means | Section metadata |
-|---|---|---|---|
-| PDF | pypdf (+ Tesseract via pypdfium2 render when a page has < `OCR_MIN_CHARS_PER_PAGE` chars) | printed page | – |
-| DOCX | python-docx | one page per heading block | heading text |
-| HTML | beautifulsoup4 + lxml | 1 | `<title>` |
-| MD | stdlib | one page per heading | heading text |
-| TXT | stdlib | 1 | – |
-| CSV | stdlib csv | `CSV_ROWS_PER_PAGE` rows (header repeated) | `rows a-b` |
-| PNG/JPG/TIFF | Pillow + Tesseract | one page per frame | – |
+`extract()` runs the format's **primary** extractor. If it raises or returns no pages, the
+format's **fallback** runs. If that also yields nothing, an `ExtractionError` with a precise,
+user-facing reason becomes the job's `FAILED` reason.
+
+| Format | Primary | Fallback (only when primary fails / finds no text) | "page" means | Section metadata |
+|---|---|---|---|---|
+| PDF | PyMuPDF `get_text` per page; a page with < `OCR_MIN_CHARS_PER_PAGE` chars is OCR'd in place | render every page with PyMuPDF → Tesseract | printed page | – |
+| DOCX | python-docx paragraphs + tables | OCR of embedded images (`word/media/*`) → Tesseract | one page per heading block | heading text |
+| HTML | beautifulsoup4 + lxml | stdlib `html.parser` tag stripping | 1 | `<title>` |
+| MD | stdlib (multi-encoding decode) | – | one page per heading | heading text |
+| TXT | stdlib (multi-encoding decode) | – | 1 | – |
+| CSV | stdlib csv | – | `CSV_ROWS_PER_PAGE` rows (header repeated) | `rows a-b` |
+| PNG/JPG/TIFF | Tesseract (there is no text layer) | – | one page per frame | – |
+
+Tesseract is therefore never the first choice for a document that has a text layer; it is
+the safety net for scanned, image-only or otherwise unreadable content.
 
 Each chunk records: `doc_id, source, file_type, collection, page, section, extraction
-(text|ocr|ocr_unavailable), chunk_index, char_start, char_end`.
+(text|ocr), chunk_index, char_start, char_end`.
 
 ### Chunking
 

@@ -59,15 +59,72 @@ def test_unsupported(tmp_path: Path):
         extract(p)
 
 
-def test_pdf_without_tesseract_keeps_going(tmp_path: Path, monkeypatch):
-    """A text-less PDF page must not fail ingestion when tesseract is absent."""
-    from pypdf import PdfWriter
+def _blank_pdf(path: Path) -> Path:
+    import fitz
 
-    w = PdfWriter()
-    w.add_blank_page(width=200, height=200)
-    p = tmp_path / "blank.pdf"
-    with open(p, "wb") as fh:
-        w.write(fh)
+    doc = fitz.open()
+    doc.new_page(width=200, height=200)
+    doc.save(str(path))
+    doc.close()
+    return path
+
+
+def _text_pdf(path: Path, text: str) -> Path:
+    import fitz
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), text)
+    doc.save(str(path))
+    doc.close()
+    return path
+
+
+def test_pdf_primary_pymupdf(tmp_path: Path):
+    pages = extract(_text_pdf(tmp_path / "t.pdf", "Hello PyMuPDF world"))
+    assert len(pages) == 1 and "PyMuPDF" in pages[0].text and pages[0].extraction == "text"
+
+
+def test_scanned_pdf_without_tesseract_gives_clear_reason(tmp_path: Path, monkeypatch):
+    """Image-only PDF + no tesseract -> ExtractionError naming Tesseract, not a crash."""
     monkeypatch.setattr(extractors, "ocr_available", lambda: False)
+    with pytest.raises(extractors.ExtractionError, match="Tesseract"):
+        extract(_blank_pdf(tmp_path / "blank.pdf"))
+
+
+def test_scanned_pdf_uses_ocr_fallback(tmp_path: Path, monkeypatch):
+    """When OCR is available, the fallback OCRs every page and tags extraction=ocr."""
+    monkeypatch.setattr(extractors, "ocr_available", lambda: True)
+    monkeypatch.setattr(extractors, "_ocr_image", lambda img: "OCR TEXT FROM PIXELS")
+    pages = extract(_blank_pdf(tmp_path / "scan.pdf"))
+    assert [(p.text, p.extraction) for p in pages] == [("OCR TEXT FROM PIXELS", "ocr")]
+
+
+def test_corrupt_pdf_reports_reason(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(extractors, "ocr_available", lambda: True)
+    p = tmp_path / "bad.pdf"
+    p.write_bytes(b"not a pdf")
+    with pytest.raises(extractors.ExtractionError, match="Could not read this pdf"):
+        extract(p)
+
+
+def test_html_fallback_when_bs4_fails(tmp_path: Path, monkeypatch):
+    p = tmp_path / "x.html"
+    p.write_text("<p>Plain <b>fallback</b> text</p><script>x()</script>")
+
+    def boom(path):
+        raise RuntimeError("lxml exploded")
+
+    monkeypatch.setitem(extractors.EXTRACTORS, "html", boom)
     pages = extract(p)
-    assert pages == []  # blank page, no text, no crash
+    assert "fallback" in pages[0].text and "x()" not in pages[0].text
+
+
+def test_image_without_tesseract(tmp_path: Path, monkeypatch):
+    from PIL import Image
+
+    monkeypatch.setattr(extractors, "ocr_available", lambda: False)
+    p = tmp_path / "i.png"
+    Image.new("RGB", (50, 50), "white").save(p)
+    with pytest.raises(extractors.ExtractionError, match="Tesseract"):
+        extract(p)

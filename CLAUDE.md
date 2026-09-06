@@ -41,8 +41,11 @@ A change is not complete if the docs describe something the code no longer does.
 - The job status vocabulary is fixed: `QUEUED, DUPLICATE, PROCESSING, COMPLETED, FAILED,
   EMPTY_FILE, EXTRACTION_NOT_SUPPORTED, UPLOAD_FAILED`. Do not add or rename statuses without
   updating `app/models.py`, the UI, the CLI, tests, and all docs above.
-- Adding a file format = extractor function in `app/ingest/extractors.py` + entry in
-  `EXTRACTORS` + entry in `SUPPORTED_EXTENSIONS` (`app/config.py`) + README/architecture rows + a test.
+- Extraction is two-tier: primary extractors (PyMuPDF, python-docx, beautifulsoup4, stdlib) first;
+  Tesseract OCR and other fallbacks run **only** when the primary raises or yields no text. Keep it that way.
+- Adding a file format = primary extractor (+ optional fallback) in `app/ingest/extractors.py` +
+  entries in `EXTRACTORS` / `FALLBACKS` + entry in `SUPPORTED_EXTENSIONS` (`app/config.py`) +
+  README/architecture rows + a test.
 - Tests must not need network or an LLM key (mock `app.rag.llm.chat`).
 - The CLI and eval script talk to the API over HTTP; never open Chroma from a second process.
 - Judge code uses the official `anthropic` SDK; generation uses the OpenAI-compatible client in

@@ -42,13 +42,21 @@ def add_chunks(collection: str, ids: list[str], texts: list[str],
                 embeddings=embeddings[i:i + step], metadatas=metadatas[i:i + step])
 
 
-def query_dense(collection: str, query_embedding: list[float], top_k: int) -> list[dict]:
+def query_dense(collection: str, query_embedding: list[float], top_k: int,
+                doc_ids: list[str] | None = None) -> list[dict]:
     col = get_collection(collection)
     total = col.count()
-    if total == 0:
+    if total == 0 or doc_ids == []:
         return []
+    kwargs = {}
+    if doc_ids:
+        kwargs["where"] = {"doc_id": {"$in": list(doc_ids)}}
+        total = min(total, col.count() if len(doc_ids) > 50 else
+                    len(col.get(where=kwargs["where"], include=[])["ids"]))
+        if total == 0:
+            return []
     res = col.query(query_embeddings=[query_embedding], n_results=min(top_k, total),
-                    include=["documents", "metadatas", "distances"])
+                    include=["documents", "metadatas", "distances"], **kwargs)
     out = []
     for cid, doc, meta, dist in zip(res["ids"][0], res["documents"][0],
                                     res["metadatas"][0], res["distances"][0]):

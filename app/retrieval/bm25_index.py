@@ -26,14 +26,17 @@ class _Index:
         corpus = [tokenize(c["text"]) or ["_"] for c in chunks]
         self.bm25 = BM25Okapi(corpus) if corpus else None
 
-    def search(self, query: str, top_k: int) -> list[dict]:
+    def search(self, query: str, top_k: int, doc_ids: set[str] | None = None) -> list[dict]:
         if not self.bm25:
             return []
         tokens = tokenize(query)
         if not tokens:
             return []
         scores = self.bm25.get_scores(tokens)
-        ranked = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+        candidates = range(len(scores))
+        if doc_ids is not None:
+            candidates = [i for i in candidates if self.chunks[i]["metadata"].get("doc_id") in doc_ids]
+        ranked = sorted(candidates, key=lambda i: scores[i], reverse=True)
         out = []
         for i in ranked[:top_k]:
             if scores[i] <= 0:
@@ -59,9 +62,9 @@ def drop(collection: str) -> None:
         _indexes.pop(collection, None)
 
 
-def search(collection: str, query: str, top_k: int) -> list[dict]:
+def search(collection: str, query: str, top_k: int, doc_ids: set[str] | None = None) -> list[dict]:
     idx = _indexes.get(collection)
     if idx is None:
         rebuild(collection)
         idx = _indexes.get(collection)
-    return idx.search(query, top_k) if idx else []
+    return idx.search(query, top_k, doc_ids) if idx else []

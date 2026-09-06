@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SLUG = "-" + str(ROOT).strip("/").replace("/", "-")
+SLUG = "-" + re.sub(r"[^A-Za-z0-9-]", "-", str(ROOT).strip("/"))  # Claude Code project slug
 PROJECT_DIR = Path.home() / ".claude" / "projects" / SLUG
 MAX_RESULT_CHARS = 4000
 

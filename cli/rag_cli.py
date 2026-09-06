@@ -51,29 +51,33 @@ def ingest(files: list[Path] = typer.Argument(..., exists=True, readable=True),
         r = c.post("/api/documents", files=payload, data={"collection": col})
         if r.status_code >= 400:
             _die(r)
-        body = r.json()
-        for d in body["documents"]:
-            typer.echo(f"{d['status']:26} {d['filename']}  job_id={d['job_id']}")
-        ids = [d["job_id"] for d in body["documents"] if d["status"] not in TERMINAL]
-        if not wait or not ids:
+        job = r.json()
+        typer.secho(f"job {job['job_id']}  {job['status']}  ({job['files']} files, collection {job['collection']})", fg="cyan")
+        for d in job["documents"]:
+            typer.echo(f"  {d['status']:26} {d['filename']}  doc_id={d['doc_id']}")
+        if not wait or job["status"] in ("COMPLETED", "FAILED"):
             return
         while True:
-            mine = [c.get(f"/api/jobs/{i}").json() for i in ids]
-            if all(d["status"] in TERMINAL for d in mine):
+            job = c.get(f"/api/jobs/{job['job_id']}").json()
+            if job["status"] in ("COMPLETED", "FAILED"):
                 break
             time.sleep(1)
-        for d in mine:
-            color = "green" if d["status"] == "COMPLETED" else "red"
-            typer.secho(f"{d['status']:26} {d['filename']}  {d.get('reason') or ''}", fg=color)
+        typer.secho(f"job {job['job_id']}  {job['status']}  {job['reason']}",
+                    fg="green" if job["status"] == "COMPLETED" else "red")
+        for d in job["documents"]:
+            color = "green" if d["status"] == "COMPLETED" else ("yellow" if d["status"] == "DUPLICATE" else "red")
+            typer.secho(f"  {d['status']:26} {d['filename']}  {d.get('reason') or ''}", fg=color)
 
 
 @app.command()
 def status(collection: Optional[str] = COL, api: Optional[str] = API,
+           job: Optional[str] = typer.Option(None, "--job", "-j", help="Only documents of this job"),
            watch: bool = typer.Option(False, help="Refresh every second until nothing is processing")):
-    """List documents and their indexing status."""
+    """List documents (DOC ID · NAME · STATUS · REASON), optionally filtered by job."""
     with _client(api) as c:
         while True:
-            r = c.get("/api/documents", params={"collection": collection} if collection else None)
+            params = {k: v for k, v in {"collection": collection, "job_id": job}.items() if v}
+            r = c.get("/api/documents", params=params or None)
             if r.status_code >= 400:
                 _die(r)
             docs = r.json()
@@ -93,34 +97,65 @@ def status(collection: Optional[str] = COL, api: Optional[str] = API,
             typer.echo("---")
 
 
+@app.command()
+def jobs(collection: Optional[str] = COL, api: Optional[str] = API):
+    """List upload jobs (JOB ID · FILES · STATUS · REASON)."""
+    with _client(api) as c:
+        r = c.get("/api/jobs", params={"collection": collection} if collection else None)
+        if r.status_code >= 400:
+            _die(r)
+        rows = r.json()
+        if not rows:
+            typer.echo("no jobs")
+            return
+        typer.secho(f"{'JOB ID':12} {'FILES':5} {'STATUS':10} {'COLLECTION':12} REASON", fg="bright_black")
+        for j in rows:
+            typer.echo(f"{j['job_id']:12} {j['files']:<5} {j['status']:10} {j['collection']:12} {j['reason']}")
+
+
 @app.command(name="job")
 def job(job_id: str, api: Optional[str] = API):
-    """Check the status of one upload job by its job id."""
+    """Show one upload job and the documents it contains."""
     with _client(api) as c:
         r = c.get(f"/api/jobs/{job_id}")
         if r.status_code >= 400:
             _die(r)
-        d = r.json()
-        for k in ("job_id", "filename", "collection", "status", "stage", "reason", "duplicate_of",
-                  "pages", "chunks", "ocr_pages", "created_at", "updated_at"):
-            if d.get(k) not in (None, "", 0):
-                typer.echo(f"{k:14} {d[k]}")
+        j = r.json()
+        typer.echo(f"job {j['job_id']}  {j['status']}  {j['reason']}  (collection {j['collection']})")
+        for d in j["documents"]:
+            dup = f" -> original {d['duplicate_of']}" if d.get("duplicate_of") else ""
+            typer.echo(f"  {d['doc_id']:12} {d['filename'][:32]:32} {d['status']:26} {d.get('reason') or ''}{dup}")
 
 
 @app.command()
 def ask(question: str, collection: Optional[str] = COL, api: Optional[str] = API,
+        doc: list[str] = typer.Option([], "--doc", "-d", help="Restrict to this document id (repeatable)"),
+        job: list[str] = typer.Option([], "--job", "-j", help="Restrict to the documents of this job (repeatable)"),
         top_k: Optional[int] = typer.Option(None, help="Chunks passed to the LLM"),
-        show_sources: bool = typer.Option(False, "--show-sources", "-s")):
-    """Ask a question; prints the grounded answer (and optionally the cited chunks)."""
+        show_sources: bool = typer.Option(False, "--show-sources", "-s", help="Print every retrieved chunk")):
+    """Ask a question over the collection, or only over selected documents / jobs.
+
+    Prints the answer text, then the citations it uses (file, page, section)."""
     with _client(api) as c:
-        r = c.post("/api/ask", json={"question": question, "collection": collection, "top_k": top_k})
+        payload = {"question": question, "collection": collection, "top_k": top_k,
+                   "doc_ids": doc or None, "job_ids": job or None}
+        r = c.post("/api/ask", json=payload)
         if r.status_code >= 400:
             _die(r)
         res = r.json()
         typer.echo(res["answer"])
-        typer.secho(f"\n[{res['model']} · {res['latency_ms']} ms · {len(res['sources'])} sources]",
-                    fg="bright_black")
+        scope = res["scope"]
+        scope_txt = (f"{len(scope['doc_ids'])} selected document(s)" if scope["restricted"]
+                     else f"whole collection '{scope['collection']}'")
+        typer.secho(f"\n[{res['model']} · {res['latency_ms']} ms · scope: {scope_txt} · "
+                    f"{len(res['citations'])} citation(s) from {len(res['sources'])} retrieved chunks]", fg="bright_black")
+        if res["unresolved_citations"]:
+            typer.secho(f"note: removed citation markers with no source: {res['unresolved_citations']}", fg="yellow")
+        for s in res["citations"]:
+            loc = f"page {s['page']}" + (f", {s['section']}" if s.get("section") else "")
+            typer.secho(f"  [{s['n']}] {s['source']} — {loc}  (doc {s['doc_id']})", fg="cyan")
         if show_sources:
+            typer.secho("\nAll retrieved chunks:", fg="bright_black")
             for s in res["sources"]:
                 loc = f"page {s['page']}" + (f", {s['section']}" if s.get("section") else "")
                 tag = " (OCR)" if s.get("extraction") == "ocr" else ""

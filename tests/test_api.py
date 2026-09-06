@@ -108,10 +108,10 @@ def test_rejections_become_records(client):
 
 
 def test_processing_failure_is_reported(client):
-    # A PDF that is not really a PDF -> FAILED with "PROCESSING FAILED" reason.
+    # A PDF that is not really a PDF -> FAILED with a "PROCESSING FAILED: ..." reason.
     [doc] = _upload(client, "broken.pdf", b"not a pdf at all", "bad")
     d = _wait(client, doc["job_id"])
-    assert d["status"] == "FAILED" and d["reason"].startswith("PROCESSING FAILED")
+    assert d["status"] == "FAILED" and d["reason"].startswith("PROCESSING FAILED: Could not read this pdf")
     client.delete("/api/collections/bad")
 
 

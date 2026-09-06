@@ -20,6 +20,19 @@
 <div class="sub">All notable changes to RAG Generator. Versions follow <code>app/main.py</code>'s FastAPI version.</div>
 
 <section class="rel">
+  <h2>0.3.0 <time>2026-09-06</time></h2>
+  <p><span class="tag changed">Changed</span> Extraction is now explicitly two-tier: primary extractors first, Tesseract OCR strictly as the fallback.</p>
+  <ul>
+    <li><span class="tag changed">Changed</span> <b>PyMuPDF</b> replaces pypdf as the primary PDF extractor and also renders pages for OCR (pypdfium2 removed).</li>
+    <li><span class="tag added">Added</span> Fallback tier in <code>app/ingest/extractors.py</code> (<code>FALLBACKS</code> registry): OCR of all PDF pages, OCR of images embedded in DOCX, stdlib tag-stripping for HTML. Runs only when the primary extractor raises or yields no text.</li>
+    <li><span class="tag added">Added</span> <code>ExtractionError</code> with user-facing reasons; a scanned file on a host without Tesseract now fails with "Tesseract OCR is not installed…" instead of a generic message, and a corrupt PDF reports "Could not read this pdf".</li>
+    <li><span class="tag added">Added</span> Multi-encoding decoding for TXT/MD/CSV (utf-8, utf-16, cp1252, latin-1).</li>
+    <li><span class="tag added">Added</span> <code>scripts/export_transcript.py</code> (Markdown transcript from the Claude Code session log), <code>scripts/sync_rules.py</code> (CLAUDE.md → Cursor / Codex rule copies), <code>scripts/build_docs.py</code> (HTML twins for Markdown docs).</li>
+    <li><span class="tag docs">Docs</span> Documentation moved to <code>documentation/</code>; README, architecture and flow updated for the two-tier extraction; <code>APP_PORT</code> documented.</li>
+  </ul>
+</section>
+
+<section class="rel">
   <h2>0.2.0 <time>2026-09-06</time></h2>
   <p><span class="tag changed">Changed</span> Upload is now an explicit asynchronous job flow with a fixed status vocabulary.</p>
   <ul>

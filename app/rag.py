@@ -1,23 +1,50 @@
-"""answer() = hybrid retrieve -> grounded prompt -> LLM -> answer + cited sources."""
+"""answer() = hybrid retrieve (optionally scoped to documents) -> grounded prompt -> LLM
+-> answer text + validated citations + all retrieved sources."""
 from __future__ import annotations
 
+import re
 import time
 
 from app.config import settings
 from app.llm import client as llm
 from app.llm.prompts import NOT_FOUND_MARKER, build_messages
-from app.models import AskResponse, Source
+from app.models import AskResponse, AskScope, Source
 from app.retrieval.fusion import hybrid_retrieve
 
+_CITE = re.compile(r"\[(\d+)\]")
 
-def answer(question: str, collection: str | None = None, top_k: int | None = None) -> AskResponse:
+
+def extract_citations(text: str, sources: list[Source]) -> tuple[str, list[Source], list[int]]:
+    """Return (cleaned text, cited sources in order of first use, unresolved marker numbers).
+
+    Markers that do not match any retrieved source are removed from the text so the client
+    never shows a citation it cannot open."""
+    by_n = {s.n: s for s in sources}
+    cited: list[Source] = []
+    unresolved: list[int] = []
+    for m in _CITE.finditer(text):
+        n = int(m.group(1))
+        if n in by_n:
+            if by_n[n] not in cited:
+                cited.append(by_n[n])
+        elif n not in unresolved:
+            unresolved.append(n)
+    if unresolved:
+        text = _CITE.sub(lambda m: "" if int(m.group(1)) in unresolved else m.group(0), text)
+        text = re.sub(r"[ \t]{2,}", " ", text).replace(" .", ".").strip()
+    return text, cited, unresolved
+
+
+def answer(question: str, collection: str | None = None, top_k: int | None = None,
+           doc_ids: list[str] | None = None, job_ids: list[str] | None = None) -> AskResponse:
     collection = collection or settings.DEFAULT_COLLECTION
     t0 = time.perf_counter()
-    hits = hybrid_retrieve(question, collection, top_k)
+    hits = hybrid_retrieve(question, collection, top_k, doc_ids=doc_ids)
     if hits:
         text = llm.chat(build_messages(question, hits))
     else:
-        text = f"{NOT_FOUND_MARKER} No documents are indexed in collection '{collection}'."
+        where = "the selected documents" if doc_ids is not None else f"collection '{collection}'"
+        text = f"{NOT_FOUND_MARKER} No indexed content was found in {where}."
     sources = [
         Source(
             n=i,
@@ -35,5 +62,9 @@ def answer(question: str, collection: str | None = None, top_k: int | None = Non
         )
         for i, h in enumerate(hits, start=1)
     ]
-    return AskResponse(question=question, answer=text.strip(), sources=sources, collection=collection,
+    text, citations, unresolved = extract_citations(text.strip(), sources)
+    scope = AskScope(collection=collection, doc_ids=list(doc_ids or []), job_ids=list(job_ids or []),
+                     restricted=doc_ids is not None)
+    return AskResponse(question=question, answer=text, citations=citations, sources=sources,
+                       unresolved_citations=unresolved, scope=scope, collection=collection,
                        model=settings.LLM_MODEL, latency_ms=int((time.perf_counter() - t0) * 1000))

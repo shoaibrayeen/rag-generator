@@ -25,15 +25,18 @@ evaluation script.
   collection is a legitimate separate document set.
 - **Rejected uploads are records, not errors** — the listing must explain every request
   (DOC ID · NAME · STATUS · REASON), per the brief.
-- **Tesseract OCR as a fallback only** — triggered when a PDF page has fewer than
-  `OCR_MIN_CHARS_PER_PAGE` characters, and for image uploads. Missing binary degrades gracefully.
+- **Two-tier extraction; Tesseract is strictly the fallback** (user requirement 2026-09-06): primary =
+  PyMuPDF / python-docx / beautifulsoup4 / stdlib; fallback runs only when the primary raises or yields
+  no text (OCR of PDF pages, OCR of DOCX-embedded images, stdlib HTML stripping). Single scanned pages
+  inside a digital PDF are OCR'd in place. `ExtractionError` carries the user-facing FAILED reason.
+- **PyMuPDF replaced pypdf + pypdfium2** — one library for text and page rendering.
 - **Server-side refusal-fallback beta not used on the judge** — benign prompts, simpler script.
 
 ## Environment gotchas
 - The dev Mac has no Docker, Homebrew or Tesseract; Python is 3.9 system-wide. Use
   `uv venv --python 3.11 .venv`. Docker image must be built/verified elsewhere.
-- Locally OCR is therefore unavailable: scanned sample pages are tagged `ocr_unavailable`
-  and `scanned_memo.pdf` ends `FAILED` ("No text could be extracted") — expected without Tesseract.
+- Locally OCR is therefore unavailable: `scanned_memo.pdf` and `whiteboard.png` end `FAILED` with
+  "…Tesseract OCR is not installed on this host…" — expected; they succeed inside Docker.
 - `scripts/mock_llm.py` (port 8001) is an extractive stand-in for demos/CI. It is not a model.
 - First embedding-model load downloads ~130 MB; the Dockerfile pre-downloads it.
 - fastembed + chromadb pin numpy/onnxruntime jointly; regenerate `requirements.txt` with
@@ -48,4 +51,5 @@ evaluation script.
   Every `.md` there and `README.md` gets an `.html` twin via `scripts/build_docs.py`.
 
 ## History
-- 2026-09-06 — v0.1.0 initial build; v0.2.0 async job model with fixed statuses, dedupe, docs set.
+- 2026-09-06 — v0.1.0 initial build; v0.2.0 async job model with fixed statuses, dedupe, docs set;
+  v0.3.0 PyMuPDF primary + Tesseract-as-fallback tiering, transcript/rules/docs scripts.

@@ -9,13 +9,12 @@ typer
 fastembed
 chromadb
 rank-bm25
-# Document extraction
-pypdf
+# Document extraction (primary extractors)
+pymupdf
 python-docx
 beautifulsoup4
 lxml
-# OCR fallback (Tesseract binary required at runtime; see README)
-pypdfium2
+# OCR fallback (Tesseract binary required at runtime; see README). PyMuPDF renders the pages.
 pytesseract
 pillow
 # Evaluation judge

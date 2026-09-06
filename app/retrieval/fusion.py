@@ -20,10 +20,14 @@ def rrf_merge(ranked_lists: dict[str, list[str]], k: int) -> list[tuple[str, flo
     return [(cid, score, ranks[cid]) for cid, score in ordered]
 
 
-def hybrid_retrieve(question: str, collection: str, top_k: int | None = None) -> list[dict]:
+def hybrid_retrieve(question: str, collection: str, top_k: int | None = None,
+                    doc_ids: list[str] | None = None) -> list[dict]:
+    """doc_ids=None searches the whole collection; a list restricts both retrievers to those documents."""
     top_k = top_k or settings.FUSED_TOP_K
-    dense = vector_store.query_dense(collection, embedder.embed_query(question), settings.DENSE_TOP_K)
-    lexical = bm25_index.search(collection, question, settings.BM25_TOP_K)
+    dense = vector_store.query_dense(collection, embedder.embed_query(question), settings.DENSE_TOP_K,
+                                     doc_ids=doc_ids)
+    lexical = bm25_index.search(collection, question, settings.BM25_TOP_K,
+                                doc_ids=set(doc_ids) if doc_ids is not None else None)
 
     by_id: dict[str, dict] = {}
     for hit in dense + lexical:

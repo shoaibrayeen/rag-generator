@@ -40,7 +40,7 @@ for a completely different set and it works unchanged — no code edits, only <c
 </tr>
 <tr>
 <td>Formats</td>
-<td>PDF, DOCX, HTML, TXT, MD, CSV → text with page metadata · PNG/JPG/TIFF and scanned PDF pages via Tesseract OCR</td>
+<td>PDF (PyMuPDF), DOCX (python-docx), HTML (beautifulsoup4), TXT/MD/CSV (stdlib) → text with page metadata · <strong>Tesseract OCR as fallback</strong> when a primary extractor fails or finds no text · PNG/JPG/TIFF via OCR</td>
 </tr>
 <tr>
 <td>Retrieval</td>
@@ -283,8 +283,14 @@ curl -X POST localhost:8000/api/ask -H 'content-type: application/json' \
 </code></pre>
 <h2 id="4-what-is-supported">4. What is supported</h2>
 <ul>
-<li><strong>Input formats:</strong> <code>.pdf .docx .html .htm .txt .md .csv</code> plus <code>.png .jpg .jpeg .tiff .tif</code> (OCR).
-  Scanned PDF pages (fewer than <code>OCR_MIN_CHARS_PER_PAGE</code> extractable characters) fall back to OCR automatically.</li>
+<li><strong>Input formats:</strong> <code>.pdf .docx .html .htm .txt .md .csv</code> plus <code>.png .jpg .jpeg .tiff .tif</code> (OCR).</li>
+<li><strong>Two-tier extraction.</strong> Primary extractors run first: PyMuPDF (PDF), python-docx (DOCX),
+  beautifulsoup4 + lxml (HTML), stdlib (TXT/MD/CSV). <strong>Tesseract is the fallback</strong>, used only when a
+  primary extractor raises or yields no text: scanned/image-only PDFs are rendered page by page
+  (PyMuPDF) and OCR'd; a DOCX with no body text has its embedded images OCR'd; HTML that lxml cannot
+  parse falls back to stdlib tag-stripping; individual scanned pages inside a digital PDF (fewer than
+  <code>OCR_MIN_CHARS_PER_PAGE</code> characters) are OCR'd in place. Image files go straight to OCR.
+  If neither tier yields text the job ends <code>FAILED</code> with the precise reason (e.g. Tesseract not installed).</li>
 <li><strong>Page metadata:</strong> PDF = printed page · DOCX = one page per heading section · HTML = one page, <code>&lt;title&gt;</code> as section ·
   MD = one page per heading · TXT = one page · CSV = one page per <code>CSV_ROWS_PER_PAGE</code> rows (header repeated) · images = one page per frame.</li>
 <li><strong>Multiple document sets</strong> via collections; reset or delete without restarting.</li>
@@ -299,13 +305,14 @@ curl -X POST localhost:8000/api/ask -H 'content-type: application/json' \
 <li>Authentication, multi-tenancy, rate limiting — run behind your own gateway.</li>
 <li>Horizontal scaling: BM25 lives in one process's memory; run a single replica.</li>
 <li>Formats outside the list above (PPTX, XLSX, EPUB, audio…). Adding one is a small extractor — see Tuning.</li>
+<li>OCR of images embedded in HTML pages (only DOCX-embedded images and PDF pages are OCR'd).</li>
 <li>OCR languages other than English unless you install extra Tesseract language packs and set <code>OCR_LANG</code>.</li>
 <li>Real-time streaming of the answer (responses are returned whole).</li>
 </ul>
 <h2 id="6-architecture">6. Architecture</h2>
 <p>Full description with diagrams: <a href="/documentation/architecture.html"><code>documentation/architecture.md</code></a>
 (browser version: <a href="/documentation/architecture.html"><code>architecture.html</code></a>). In short:</p>
-<pre><code>upload ─► validate/hash ─► QUEUED ─► worker: extract (pypdf/docx/bs4/csv/OCR) ─► chunk ─► fastembed ─► ChromaDB + BM25 ─► COMPLETED
+<pre><code>upload ─► validate/hash ─► QUEUED ─► worker: extract (PyMuPDF/docx/bs4/stdlib → OCR fallback) ─► chunk ─► fastembed ─► ChromaDB + BM25 ─► COMPLETED
 ask    ─► embed ─► Chroma top-k ─┐
        └► tokenize ─► BM25 top-k ─┴─► RRF ─► top FUSED_TOP_K ─► grounded prompt ─► OpenAI-compatible LLM ─► answer + sources
 </code></pre>
@@ -379,9 +386,9 @@ ask    ─► embed ─► Chroma top-k ─┐
 </tbody>
 </table>
 <p><strong>Supported formats</strong> are the <code>SUPPORTED_EXTENSIONS</code> dict at the bottom of <code>app/config.py</code>
-(extension → extractor name). Remove an entry to stop accepting a type. To add a format: write an
-extractor in <code>app/ingest/extractors.py</code>, register it in <code>EXTRACTORS</code>, add the extension, add a test,
-and update the docs.</p>
+(extension → extractor name). Remove an entry to stop accepting a type. To add a format: write a primary
+extractor (and optionally a fallback) in <code>app/ingest/extractors.py</code>, register them in <code>EXTRACTORS</code> /
+<code>FALLBACKS</code>, add the extension, add a test, and update the docs.</p>
 <h2 id="8-evaluation-claude-as-judge">8. Evaluation (Claude as judge)</h2>
 <pre><code class="language-bash">rag ingest samples/* --collection default                 # index the corpus named in the dataset
 # set ANTHROPIC_API_KEY in .env, then:
@@ -427,14 +434,14 @@ python -m evaluation.run_eval --dataset evaluation/dataset.mydocs.jsonl
 <td>talks to the API so only one process opens Chroma</td>
 </tr>
 <tr>
-<td>Extraction</td>
-<td>pypdf, python-docx, beautifulsoup4 + lxml, stdlib csv</td>
-<td>one small library per format</td>
+<td>Extraction (primary)</td>
+<td>PyMuPDF, python-docx, beautifulsoup4 + lxml, stdlib csv/html.parser</td>
+<td>one small library per format; PyMuPDF also renders pages for OCR</td>
 </tr>
 <tr>
-<td>OCR</td>
-<td>Tesseract via pytesseract, pypdfium2 (page rendering), Pillow</td>
-<td>fallback for scanned PDFs and images; no poppler dependency</td>
+<td>OCR (fallback)</td>
+<td>Tesseract via pytesseract + Pillow</td>
+<td>runs only when the primary extractor fails or finds no text, and for images</td>
 </tr>
 <tr>
 <td>Chunking</td>

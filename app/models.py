@@ -20,8 +20,11 @@ TERMINAL_STATUSES = {"DUPLICATE", "COMPLETED", "FAILED", "EMPTY_FILE",
                      "EXTRACTION_NOT_SUPPORTED", "UPLOAD_FAILED"}
 
 
+JobStatus = Literal["QUEUED", "PROCESSING", "COMPLETED", "FAILED"]
+
+
 class DocumentInfo(BaseModel):
-    job_id: str                      # identical to doc_id; use either to poll status
+    job_id: str                      # the upload request this document belongs to
     doc_id: str
     filename: str
     file_type: Optional[str] = None
@@ -39,14 +42,39 @@ class DocumentInfo(BaseModel):
     updated_at: str
 
 
-class UploadResponse(BaseModel):
+class JobInfo(BaseModel):
+    """One upload request. Status is derived from its documents every time it is read."""
+    job_id: str
+    collection: str
+    status: JobStatus
+    reason: str
+    files: int
+    counts: dict[str, int]           # documents per status, e.g. {"COMPLETED": 2, "DUPLICATE": 1}
+    doc_ids: list[str]
+    created_at: str
+    updated_at: str
+
+
+class JobDetail(JobInfo):
     documents: list[DocumentInfo]
+
+
+UploadResponse = JobDetail
 
 
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=1)
     collection: Optional[str] = None
+    doc_ids: Optional[list[str]] = Field(default=None, description="restrict to these documents")
+    job_ids: Optional[list[str]] = Field(default=None, description="restrict to the documents of these jobs")
     top_k: Optional[int] = Field(default=None, ge=1, le=50)
+
+
+class AskScope(BaseModel):
+    collection: str
+    doc_ids: list[str]               # documents actually searched ([] = whole collection)
+    job_ids: list[str]
+    restricted: bool
 
 
 class Source(BaseModel):
@@ -66,8 +94,11 @@ class Source(BaseModel):
 
 class AskResponse(BaseModel):
     question: str
-    answer: str
-    sources: list[Source]
+    answer: str                      # answer text with [n] citation markers
+    citations: list[Source]          # the sources actually cited in the answer, in order of first use
+    sources: list[Source]            # everything retrieved (superset of citations)
+    unresolved_citations: list[int] = Field(default_factory=list)  # [n] markers the LLM produced that match no source (removed from text)
+    scope: AskScope
     collection: str
     model: str
     latency_ms: int
