@@ -137,9 +137,9 @@ async function load() {
     const cls = doc.status === 'DUPLICATE' ? 'warn' : (BAD.includes(doc.status) ? 'bad' : 'info');
     let extra = '';
     if (doc.status === 'DUPLICATE' && doc.duplicate_of) extra = `<br><b>Original document:</b> <a href="/documents/${doc.duplicate_of}">${location.origin}/documents/${esc(doc.duplicate_of)}</a> (${esc(doc.duplicate_of_name || '')}) — ask your questions there.`;
-    if (doc.status === 'FAILED') extra = `<br><button class="small" id="retry">Retry processing</button>`;
+    if (!['DUPLICATE', 'COMPLETED'].includes(doc.status)) extra += `<br><button class="small" id="retry">Retry processing</button> <span class="muted" id="retryMsg">${doc.status === 'FAILED' || doc.status === 'EXTRACTION_NOT_SUPPORTED' ? 'Re-checks the stored file with the current extractors.' : (doc.status === 'QUEUED' || doc.status === 'PROCESSING') ? 'Only if the worker has stalled.' : 'Nothing was stored for this file; you will be asked to upload it again.'}</span>`;
     $('banner').innerHTML = `<div class="banner ${cls}"><b>Show page not applicable — status ${doc.status}.</b> ${esc(NOT_APPLICABLE[doc.status] || '')}<br><span class="muted">Reason: ${esc(doc.reason || '–')}</span>${extra}</div>`;
-    if (doc.status === 'FAILED') $('retry').onclick = async () => { try { await api(`/api/documents/${docId}/retry`, {method: 'POST'}); load(); } catch (e) { alert(e.message); } };
+    const rb = $('retry'); if (rb) rb.onclick = async () => { try { const d = await api(`/api/documents/${docId}/retry`, {method: 'POST'}); if (d.status !== 'QUEUED') $('retryMsg').textContent = d.reason; load(); } catch (e) { $('retryMsg').textContent = `Retry not possible: ${e.message}`; } };
     $('viewer').innerHTML = '';
     disableChat(`Chat is available only for COMPLETED documents (this one is ${doc.status}).`);
     if (!TERMINAL.includes(doc.status)) timer = setTimeout(load, 2000);

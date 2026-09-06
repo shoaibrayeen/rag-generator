@@ -31,10 +31,10 @@ client ──POST /api/documents (multipart, collection)──► API creates ON
                                                         │ per file (each becomes a document of that job):
                                                         │  read bytes ──fail──► UPLOAD_FAILED
                                                         │  sha256 computed at upload time, kept on the record
-                                                        │  extension ∉ SUPPORTED_EXTENSIONS ──► EXTRACTION_NOT_SUPPORTED
                                                         │  0 bytes ──► EMPTY_FILE
                                                         │  > MAX_UPLOAD_MB ──► UPLOAD_FAILED
                                                         │  upload step: store to data/uploads/<doc_id>_<name> ──fail──► UPLOAD_FAILED
+                                                        │  extension ∉ SUPPORTED_EXTENSIONS and content not sniffable ──► EXTRACTION_NOT_SUPPORTED (file kept for retry)
                                                         │  duplicate check: sha256 already live in collection ──► DUPLICATE (links original)
                                                         │  else ──► QUEUED + background task
                                                         ▼
@@ -74,7 +74,7 @@ user-facing reason becomes the job's `FAILED` reason.
 | Format | Primary | Fallback (only when primary fails / finds no text) | "page" means | Section metadata |
 |---|---|---|---|---|
 | PDF | PyMuPDF `get_text` per page; a page with < `OCR_MIN_CHARS_PER_PAGE` chars is OCR'd in place | render every page with PyMuPDF → Tesseract | printed page | – |
-| DOCX | python-docx paragraphs + tables | OCR of embedded images (`word/media/*`) → Tesseract | one page per heading block | heading text |
+| DOCX | python-docx element tree walked in document order: paragraphs, content controls (`w:sdt`), hyperlinks, tables (`cell \| cell`) | OCR of embedded images (`word/media/*`) → Tesseract | one page per heading block | heading text |
 | RTF | striprtf | stdlib control-word stripping | one page per `\page` | first line when heading-like |
 | HTML | beautifulsoup4 + lxml | stdlib `html.parser` tag stripping | 1 | `<title>` |
 | MD | stdlib (multi-encoding decode) | – | one page per heading | heading text |
@@ -86,7 +86,10 @@ Tesseract is therefore never the first choice for a document that has a text lay
 the safety net for scanned, image-only or otherwise unreadable content. Failure reasons name the
 primary reader's error (paths stripped, capped length) and what the fallback said.
 
-`POST /api/documents/{doc_id}/retry` re-queues a FAILED document from its stored file.
+`POST /api/documents/{doc_id}/retry` re-processes any document that is not COMPLETED or DUPLICATE: FAILED and
+EXTRACTION_NOT_SUPPORTED re-check the stored file (extension, then content sniffing) and re-queue; QUEUED/PROCESSING
+only when stale for `RETRY_STALE_SECONDS`; EMPTY_FILE/UPLOAD_FAILED have no stored file (410). The pipeline deletes
+the document's previous chunks before storing new ones, so a retry replaces rather than duplicates.
 `GET /api/documents/{doc_id}/file` serves the stored original (inline where browsers can render it) for the show page.
 
 ### Show page: viewer + chat + citation jump

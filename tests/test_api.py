@@ -242,9 +242,9 @@ def test_rtf_in_docx_clothing_is_indexed_and_retry_works(client, monkeypatch):
     assert doc["status"] == "COMPLETED", doc
     assert "content is RTF" in doc["reason"] and doc["pages"] == 1
 
-    # retry: only FAILED documents; simulate a failure then retry from the stored file
+    # retry: not for COMPLETED documents
     r = client.post(f"/api/documents/{doc['doc_id']}/retry")
-    assert r.status_code == 409
+    assert r.status_code == 409 and "COMPLETED" in r.json()["detail"]
     job2 = _upload(client, [("old.docx", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 600)], "rtf")
     failed = _wait_job(client, job2["job_id"])["documents"][0]
     assert failed["status"] == "FAILED" and "legacy binary Word" in failed["reason"]
@@ -270,7 +270,7 @@ def test_dedicated_pages_and_file_endpoint(client):
     r = client.get(f"/api/documents/{ok['doc_id']}/file", params={"download": "true"})
     assert "attachment" in r.headers["content-disposition"]
     rejected = next(d for d in job["documents"] if d["filename"] == "x.exe")
-    assert client.get(f"/api/documents/{rejected['doc_id']}/file").status_code == 410  # never stored
+    assert client.get(f"/api/documents/{rejected['doc_id']}/file").status_code == 200  # unsupported files are stored too
     assert client.get("/api/documents/nope/file").status_code == 404
     client.delete("/api/collections/pages")
 
@@ -307,3 +307,53 @@ def test_pages_endpoint_stored_and_reconstructed(client):
     client.delete(f"/api/documents/{doc['doc_id']}")
     assert not (settings.pages_dir / f"{doc['doc_id']}.json").exists()
     client.delete("/api/collections/pagesx")
+
+
+def test_retry_semantics_per_status(client):
+    job = _upload(client, [("junk.xyz", b"not recognisable"), ("empty.txt", b""), ("policy.md", POLICY),
+                           ("copy.md", POLICY)], "retry")
+    done = _wait_job(client, job["job_id"])
+    by = {d["filename"]: d for d in done["documents"]}
+    # unsupported: the file is stored, retry re-checks it and it stays unsupported with a "Retried" reason
+    r = client.post(f"/api/documents/{by['junk.xyz']['doc_id']}/retry")
+    assert r.status_code == 202 and r.json()["status"] == "EXTRACTION_NOT_SUPPORTED" and r.json()["reason"].startswith("Retried")
+    # empty: nothing stored -> 410
+    assert client.post(f"/api/documents/{by['empty.txt']['doc_id']}/retry").status_code == 410
+    # completed / duplicate -> 409
+    assert client.post(f"/api/documents/{by['policy.md']['doc_id']}/retry").status_code == 409
+    r = client.post(f"/api/documents/{by['copy.md']['doc_id']}/retry")
+    assert r.status_code == 409 and "DUPLICATE" in r.json()["detail"]
+    client.delete("/api/collections/retry")
+
+
+def test_unknown_extension_with_recognisable_content_is_processed(client):
+    import fitz
+
+    pdf = fitz.open(); page = pdf.new_page(); page.insert_text((72, 72), "Quarterly report: revenue grew 12 percent.")
+    data = pdf.tobytes(); pdf.close()
+    job = _upload(client, [("report.bin", data)], "sniff")
+    doc = _wait_job(client, job["job_id"])["documents"][0]
+    assert doc["status"] == "COMPLETED", doc
+    assert doc["file_type"] == "pdf" and "content is PDF" in doc["reason"]
+    client.delete("/api/collections/sniff")
+
+
+def test_retry_stale_queued(client, monkeypatch):
+    """A QUEUED record that has not moved for RETRY_STALE_SECONDS can be re-queued; a fresh one cannot."""
+    from app import jobs as registry
+    from app.config import settings
+
+    job = _upload(client, [("stuck.txt", b"some text that will be indexed")], "stale")
+    doc = _wait_job(client, job["job_id"])["documents"][0]
+    # simulate a stuck worker: force QUEUED with an old timestamp
+    registry.update(doc["doc_id"], status="QUEUED", stage=None)
+    assert client.post(f"/api/documents/{doc['doc_id']}/retry").status_code == 409  # too fresh
+    monkeypatch.setattr(settings, "RETRY_STALE_SECONDS", 0)
+    r = client.post(f"/api/documents/{doc['doc_id']}/retry")
+    assert r.status_code == 202 and r.json()["status"] == "QUEUED"
+    # the re-run re-indexes cleanly (old chunks are replaced, not duplicated)
+    d = _wait_job(client, job["job_id"])["documents"][0]
+    assert d["status"] == "COMPLETED"
+    chunks = client.get("/api/chunks", params={"collection": "stale", "doc_id": doc["doc_id"]}).json()
+    assert len(chunks) == d["chunks"]
+    client.delete("/api/collections/stale")

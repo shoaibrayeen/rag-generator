@@ -67,9 +67,12 @@ cp .env.example .env                                       # edit the LLM_* line
 rag serve                                                  # http://localhost:8000
 ```
 
-OCR outside Docker needs the Tesseract binary (`brew install tesseract` / `apt install
-tesseract-ocr`). Without it the app still runs: scanned pages are skipped with a warning and
-image uploads end as `FAILED` with a clear reason.
+OCR outside Docker needs the Tesseract binary (`brew install tesseract tesseract-lang` / `apt install
+tesseract-ocr`). The binary is auto-detected from `PATH` and the usual install locations
+(`/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin`), so a Homebrew install works even when the server's
+PATH lacks it; set `TESSERACT_CMD` to point at a custom location. `GET /api/health` reports
+`ocr_available` and the resolved `tesseract_cmd`. Without a binary the app still runs: scanned pages end
+as `FAILED` with a clear reason and can be retried after installing it.
 
 ### Offline demo without an LLM key
 
@@ -120,7 +123,7 @@ max `LIST_MAX_PAGE_SIZE`). Every listing response is an envelope:
 | `COMPLETED` | indexed and searchable | yes | "Indexed N pages (k via OCR) into M chunks" |
 | `FAILED` | processing raised an error | no | `PROCESSING FAILED: <exception>` |
 | `EMPTY_FILE` | 0-byte upload | no | "The uploaded file is 0 bytes" |
-| `EXTRACTION_NOT_SUPPORTED` | extension not in `SUPPORTED_EXTENSIONS` | no | the extension and the supported list |
+| `EXTRACTION_NOT_SUPPORTED` | extension not in `SUPPORTED_EXTENSIONS` and content not recognised (file kept for retry) | no | the extension and the supported list |
 | `UPLOAD_FAILED` | unreadable stream, larger than `MAX_UPLOAD_MB`, or disk write error | no | `UPLOAD FAILED: <cause>` |
 
 Terminal statuses are all of them except `QUEUED` and `PROCESSING`. Duplicate detection is
@@ -157,7 +160,7 @@ Three pages plus a show page:
 The workbench (`/`):
 1. **Upload** — drop files, optionally name a *collection* (a document set); they are submitted as one job and the job id is shown.
 2. **Jobs** — JOB ID · DOCUMENTS · PAGES · STATUS · REASON, 5 per page with prev/next. Click a row to filter the documents to that job; tick a job to ask over it.
-3. **Documents** — DOC ID · NAME · PAGES · STATUS · REASON for every file, 5 per page with prev/next (job id shown under the doc id); duplicates link to their original; tick `COMPLETED` documents to ask over them; delete finished ones with ✕.
+3. **Documents** — DOC ID · NAME · PAGES · STATUS · REASON for every file, 5 per page with prev/next (job id shown under the doc id); duplicates link to their original; tick `COMPLETED` documents to ask over them; *retry* any document that is not COMPLETED/DUPLICATE; delete finished ones with ✕.
 4. **Ask** — the scope line shows what will be searched (whole collection or the ticked jobs/documents). The answer shows `[n]` markers, then a **Citations** list (file, page, section, doc id); click a marker to jump to the chunk.
 5. **Sources** — every retrieved chunk with file, page/section, doc id, whether it came from dense or BM25 (or both), its RRF score and a "cited" badge. OCR'd chunks are flagged.
 
@@ -191,7 +194,7 @@ The CLI talks to the API at `RAG_API_URL` (default `http://localhost:8000`, over
 | `GET` | `/api/documents/{doc_id}` | one document |
 | `GET` | `/api/documents/{doc_id}/file?download=` | the stored original file (inline for PDF/HTML/text/CSV/images, attachment otherwise) |
 | `GET` | `/api/documents/{doc_id}/pages` | page text of a `COMPLETED` document with the chunk ids per page (stored at ingest, or reconstructed from chunk offsets) — powers the viewer |
-| `POST` | `/api/documents/{doc_id}/retry` | re-queue a `FAILED` document from its stored file → **202** |
+| `POST` | `/api/documents/{doc_id}/retry` | re-process a non-`COMPLETED`, non-`DUPLICATE` document from its stored file → **202** (409 completed/duplicate/still running, 410 nothing stored) |
 | `DELETE` | `/api/documents/{doc_id}` | remove a finished document and its chunks |
 | `GET` | `/api/chunks?collection=&doc_id=&job_id=&limit=&offset=` | inspect the `document_chunks` store, filterable by document or job; each chunk carries `page`, `chunk_index`, `char_start`, `char_end` |
 | `POST` | `/api/ask` | `{"question", "collection"?, "doc_ids"?, "job_ids"?, "top_k"?}` → `answer`, `citations`, `sources`, `scope`, `unresolved_citations` |
@@ -221,8 +224,13 @@ curl -X POST localhost:8000/api/ask -H 'content-type: application/json' \
   `OCR_MIN_CHARS_PER_PAGE` characters) are OCR'd in place. Image files go straight to OCR.
   If neither tier yields text the document ends `FAILED` with a precise reason that names what the primary
   reader hit (e.g. `the docx reader failed (BadZipFile: File is not a zip file)`) and what the fallback said.
-- **Retry**: a `FAILED` document can be re-processed from its stored file (`POST /api/documents/{id}/retry`,
-  UI *retry* button, `rag retry <doc_id>`) — useful after installing Tesseract or upgrading the extractors.
+- **Retry** (`POST /api/documents/{id}/retry`, the *retry* button on the home page, `/documents` and the show page,
+  `rag retry <doc_id>`) is offered for every document that is not `COMPLETED` or `DUPLICATE`:
+  `FAILED` and `EXTRACTION_NOT_SUPPORTED` re-check the stored file (extension + content sniffing) and re-queue it
+  (unsupported files are stored too, so adding a format later makes them retryable); `QUEUED`/`PROCESSING` only when
+  the record has not moved for `RETRY_STALE_SECONDS` (stuck worker), otherwise 409; `EMPTY_FILE`/`UPLOAD_FAILED`
+  have nothing stored and answer 410 asking for a new upload. A retried document replaces its old chunks.
+- **Unknown extensions with recognisable content** (e.g. a PDF named `.bin`) are processed as the sniffed type.
 - **Page metadata:** PDF = printed page · DOCX = one page per heading section · HTML = one page, `<title>` as section ·
   MD = one page per heading · TXT = one page · CSV = one page per `CSV_ROWS_PER_PAGE` rows (header repeated) · images = one page per frame.
 - **Multiple document sets** via collections (names: 3-63 chars of letters, digits, `. _ -`); reset or delete without restarting.
@@ -282,10 +290,12 @@ Every tunable is a field on `Settings` with a default, overridable from `.env` (
 | `RRF_K` | 60 | RRF smoothing constant |
 | `EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | any fastembed model (clear `data/chroma` after changing) |
 | `OCR_ENABLED` / `OCR_MIN_CHARS_PER_PAGE` / `OCR_LANG` / `OCR_DPI` | true / 20 / eng / 200 | when and how the Tesseract fallback runs |
+| `TESSERACT_CMD` | auto | explicit path to the tesseract binary; empty = PATH, then `/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin` |
 | `LLM_TEMPERATURE` / `LLM_MAX_TOKENS` / `LLM_TIMEOUT_S` | 0.1 / 1024 / 60 | generation parameters |
 | `MAX_UPLOAD_MB` / `DEFAULT_COLLECTION` | 50 / `default` | upload limit, collection used when none is given |
 | `LIST_PAGE_SIZE` / `LIST_MAX_PAGE_SIZE` | 5 / 200 | default and maximum `size` for the job and document listings (`page` is 0-based) |
 | `LOG_LEVEL` / `SNIFF_CONTENT` | `INFO` / true | log verbosity (`DEBUG` adds per-batch detail); detect the real format from file bytes |
+| `RETRY_STALE_SECONDS` | 120 | a `QUEUED`/`PROCESSING` document older than this may be retried (stuck worker) |
 | `APP_PORT` / `APP_HOST` | 8000 / `0.0.0.0` | port the app listens on (`rag serve`) and the host port docker compose publishes (`${APP_PORT:-8000}`) |
 | `JUDGE_MODEL` / `EVAL_MIN_FAITHFULNESS` | `claude-opus-5` / 3.5 | evaluation |
 

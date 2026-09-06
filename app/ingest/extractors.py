@@ -94,8 +94,35 @@ def sniff_type(path: Path) -> str | None:
 
 # --------------------------------------------------------------------------- OCR
 
+_TESSERACT_CANDIDATES = (
+    "/opt/homebrew/bin/tesseract",      # Homebrew on Apple silicon (often not on a service's PATH)
+    "/usr/local/bin/tesseract",         # Homebrew on Intel macs / manual installs
+    "/opt/local/bin/tesseract",         # MacPorts
+    "/usr/bin/tesseract",               # apt / Docker image
+    "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
+)
+
+
+def tesseract_cmd() -> str | None:
+    """Resolve the tesseract binary: TESSERACT_CMD, then PATH, then common install locations.
+    Also points pytesseract at it, so a binary outside PATH works."""
+    found: str | None = None
+    if settings.TESSERACT_CMD:
+        found = settings.TESSERACT_CMD if Path(settings.TESSERACT_CMD).is_file() else None
+    else:
+        found = shutil.which("tesseract") or next((c for c in _TESSERACT_CANDIDATES if Path(c).is_file()), None)
+    if found:
+        try:
+            import pytesseract
+
+            pytesseract.pytesseract.tesseract_cmd = found
+        except ImportError:  # pragma: no cover
+            return None
+    return found
+
+
 def ocr_available() -> bool:
-    return shutil.which("tesseract") is not None
+    return tesseract_cmd() is not None
 
 
 def _require_ocr(what: str) -> None:
@@ -139,7 +166,7 @@ def extract_pdf(path: Path) -> list[Page]:
             extraction = "text"
             if len(text) < settings.OCR_MIN_CHARS_PER_PAGE and can_ocr:
                 ocr_text = _ocr_pdf_page(page)
-                if ocr_text:
+                if len(ocr_text) > len(text):  # keep the real text layer when OCR finds nothing better
                     text, extraction = ocr_text, "ocr"
             if text:
                 pages.append(Page(text=text, page_no=i + 1, extraction=extraction))
@@ -178,8 +205,43 @@ def extract_image(path: Path) -> list[Page]:
 
 # ------------------------------------------------------------------------- DOCX
 
+_W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+def _docx_blocks(container):
+    """Yield ("heading"|"para"|"row", text) for a DOCX body in document order, descending into
+    content controls (w:sdt / w:sdtContent) and tables — python-docx's `document.paragraphs`
+    ignores both, which makes contract templates built from content controls come out empty."""
+    for child in container:
+        tag = child.tag
+        if tag == f"{_W}p":
+            text = "".join(t.text or "" for t in child.iter(f"{_W}t", f"{_W}tab", f"{_W}br"))
+            text = "".join(("\t" if t.tag == f"{_W}tab" else "\n" if t.tag == f"{_W}br" else (t.text or ""))
+                           for t in child.iter(f"{_W}t", f"{_W}tab", f"{_W}br")).strip()
+            if not text:
+                continue
+            style = child.find(f"{_W}pPr/{_W}pStyle")
+            val = (style.get(f"{_W}val") if style is not None else "") or ""
+            yield ("heading" if val.lower().startswith(("heading", "title")) else "para"), text
+        elif tag == f"{_W}tbl":
+            for row in child.iter(f"{_W}tr"):
+                cells = []
+                for cell in row.findall(f"{_W}tc"):
+                    cells.append(" ".join(t for _, t in _docx_blocks(cell)))
+                if any(cells):
+                    yield "row", " | ".join(cells)
+        elif tag in (f"{_W}sdt", f"{_W}sdtContent", f"{_W}smartTag", f"{_W}ins", f"{_W}hyperlink",
+                     f"{_W}customXml", f"{_W}fldSimple"):
+            yield from _docx_blocks(child)
+        elif tag == f"{_W}sectPr":
+            continue
+        elif len(child):
+            yield from _docx_blocks(child)
+
+
 def extract_docx(path: Path) -> list[Page]:
-    """DOCX has no real pages: each heading starts a new 'page' (section)."""
+    """DOCX has no real pages: each heading starts a new 'page' (section). Walks the body XML in
+    order (including content controls and tables) via python-docx's element tree."""
     import docx
 
     document = docx.Document(str(path))
@@ -196,18 +258,11 @@ def extract_docx(path: Path) -> list[Page]:
             page_no += 1
         buffer = []
 
-    for para in document.paragraphs:
-        txt = para.text.strip()
-        if not txt:
-            continue
-        if para.style is not None and para.style.name.lower().startswith("heading"):
+    for kind, text in _docx_blocks(document.element.body):
+        if kind == "heading":
             flush()
-            section_title = txt
-        buffer.append(txt)
-    for table in document.tables:
-        rows = [" | ".join(c.text.strip() for c in row.cells) for row in table.rows]
-        if rows:
-            buffer.append("\n".join(rows))
+            section_title = text
+        buffer.append(text)
     flush()
     return pages
 
@@ -398,12 +453,16 @@ def file_type_for(filename: str) -> str | None:
 def resolve_type(path: Path) -> tuple[str, str | None]:
     """(extractor to use, note) — the sniffed content type overrides the extension when they differ."""
     by_ext = file_type_for(path.name)
+    sniffed = sniff_type(path) if settings.SNIFF_CONTENT else None
     if by_ext is None or by_ext not in EXTRACTORS:
+        if sniffed in EXTRACTORS:  # unknown extension but recognisable content (e.g. a PDF named .bin)
+            note = f"extension '{path.suffix or '(none)'}' is not registered but content is {sniffed.upper()}; read as {sniffed}"
+            log.info("[extract] %s: %s", path.name, note)
+            return sniffed, note
         raise UnsupportedFormat(
             f"Unsupported file type '{path.suffix}'. Supported: {sorted(SUPPORTED_EXTENSIONS)}")
     if not settings.SNIFF_CONTENT:
         return by_ext, None
-    sniffed = sniff_type(path)
     if sniffed in _UNREADABLE:
         raise ExtractionError(f"File '{_display_name(path)}' has extension '{path.suffix}' but its content is a legacy "
                               f"binary Word document. {_UNREADABLE[sniffed]}")

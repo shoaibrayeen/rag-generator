@@ -180,9 +180,18 @@ $('resetBtn').onclick = async () => {
   catch (e) { $('uploadErr').textContent = e.message; }
 };
 
+function retryTitle(d) {
+  return {FAILED: 'Process the stored file again with the current extractors',
+          EXTRACTION_NOT_SUPPORTED: 'Re-check the stored file (extension and content) and process it if it is now supported',
+          QUEUED: 'Re-queue if the worker has not made progress for a while',
+          PROCESSING: 'Re-queue if the worker has not made progress for a while',
+          EMPTY_FILE: 'Nothing was stored for an empty file — the retry will ask you to upload again',
+          UPLOAD_FAILED: 'Nothing was stored — the retry will ask you to upload again'}[d.status] || 'Retry';
+}
 async function retryDoc(id) {
-  try { await api(`/api/documents/${id}/retry`, { method: 'POST' }); await refresh(); }
-  catch (e) { $('uploadErr').textContent = e.message; }
+  $('uploadErr').textContent = '';
+  try { const d = await api(`/api/documents/${id}/retry`, { method: 'POST' }); await refresh(); if (d.status !== 'QUEUED') $('uploadErr').textContent = `${d.filename}: ${d.reason}`; }
+  catch (e) { $('uploadErr').textContent = `Retry not possible: ${e.message}`; }
 }
 
 async function deleteDoc(id) {
@@ -250,7 +259,7 @@ function renderDocs() {
       <td title="${d.pages ? `${d.pages} pages · ${d.chunks} chunks` : 'pages are known once extraction has run'}">${d.pages ? `${d.pages}<br><span class="muted">${d.chunks} chunks</span>` : '<span class="muted">–</span>'}</td>
       <td><span class="pill ${d.status}">${d.status}</span>${d.stage ? `<div class="muted">${esc(d.stage)}…</div>` : ''}</td>
       <td class="${BAD.includes(d.status) ? 'err' : 'muted'}" style="font-size:12px">${esc(d.reason || '')}${d.duplicate_of ? ` <a href="#" onclick="highlight('${d.duplicate_of}');return false;">→ original ${esc(d.duplicate_of)}</a>` : ''}</td>
-      <td style="white-space:nowrap">${d.status === 'FAILED' ? `<button class="small secondary" title="Process the stored file again" onclick="retryDoc('${d.doc_id}')">retry</button> ` : ''}${TERMINAL.includes(d.status) ? `<button class="del" title="Delete" onclick="deleteDoc('${d.doc_id}')">✕</button>` : ''}</td>
+      <td style="white-space:nowrap">${!['COMPLETED', 'DUPLICATE'].includes(d.status) ? `<button class="small secondary" title="${retryTitle(d)}" onclick="retryDoc('${d.doc_id}')">retry</button> ` : ''}${TERMINAL.includes(d.status) ? `<button class="del" title="Delete" onclick="deleteDoc('${d.doc_id}')">✕</button>` : ''}</td>
     </tr>`).join('');
 }
 function highlight(id) { activeJob = null; paging.docs.page = 0; refresh().then(() => { const row = $(`row-${id}`); if (row) { row.style.background = '#fef9c3'; row.scrollIntoView({behavior:'smooth', block:'center'}); setTimeout(() => row.style.background = '', 1500); } }); }

@@ -59,8 +59,8 @@
   </div>
   <div class="err" id="err"></div>
   <table>
-    <thead><tr><th>Doc ID</th><th>Name</th><th>Type</th><th>Job</th><th>Pages</th><th>Chunks</th><th>Status</th><th>Reason</th><th>Updated</th></tr></thead>
-    <tbody id="rows"><tr><td colspan="9" class="muted">Loading…</td></tr></tbody>
+    <thead><tr><th>Doc ID</th><th>Name</th><th>Type</th><th>Job</th><th>Pages</th><th>Chunks</th><th>Status</th><th>Reason</th><th>Updated</th><th></th></tr></thead>
+    <tbody id="rows"><tr><td colspan="10" class="muted">Loading…</td></tr></tbody>
   </table>
   <div class="pager" id="pager"></div>
 </div>
@@ -98,6 +98,11 @@ api('/api/health').then(h => {
 $('apply').onclick = () => { page = 0; setQuery({collection: $('collection').value.trim(), status: $('status').value, job_id: $('job').value.trim(), page: null}); load(); };
 ['collection', 'job'].forEach(id => $(id).onkeydown = (e) => { if (e.key === 'Enter') $('apply').click(); });
 $('status').onchange = () => $('apply').click();
+async function retryDoc(id) {
+  $('err').textContent = '';
+  try { const d = await api(`/api/documents/${id}/retry`, {method: 'POST'}); if (d.status !== 'QUEUED') $('err').textContent = `${d.filename}: ${d.reason}`; load(); }
+  catch (e) { $('err').textContent = `Retry not possible: ${e.message}`; }
+}
 function chips() {
   const parts = [];
   if (qs.get('job_id')) parts.push(`<span class="chip">job ${esc(qs.get('job_id'))} <a href="#" onclick="$('job').value='';$('apply').click();return false;">×</a></span>`);
@@ -123,7 +128,8 @@ async function load() {
         <td><span class="pill ${d.status}">${d.status}</span>${d.stage ? `<div class="muted">${esc(d.stage)}…</div>` : ''}</td>
         <td class="${BAD.includes(d.status) ? 'err' : 'muted'}" style="font-size:12px">${esc(d.reason || '')}${d.duplicate_of ? ` <a href="/documents/${d.duplicate_of}" onclick="event.stopPropagation()">→ original</a>` : ''}</td>
         <td class="muted">${esc(d.updated_at.replace('T', ' ').slice(0, 19))}</td>
-      </tr>`).join('') : '<tr><td colspan="9" class="muted">No documents match.</td></tr>';
+        <td style="white-space:nowrap">${!['COMPLETED', 'DUPLICATE'].includes(d.status) ? `<button class="small secondary" title="Re-process this document" onclick="event.stopPropagation(); retryDoc('${d.doc_id}')">retry</button>` : ''}</td>
+      </tr>`).join('') : '<tr><td colspan="10" class="muted">No documents match.</td></tr>';
     pager($('pager'), m, (p) => { page = p; setQuery({page: p || null}); load(); });
     if (m.items.some(d => !TERMINAL.includes(d.status))) setTimeout(load, 2000);
   } catch (e) { $('err').textContent = e.message; }

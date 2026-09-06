@@ -20,6 +20,36 @@
 <div class="sub">All notable changes to RAG Generator. Versions follow <code>app/main.py</code>'s FastAPI version.</div>
 
 <section class="rel">
+  <h2>0.10.2 <time>2026-09-06</time></h2>
+  <p><span class="tag fixed">Fixed</span> DOCX files built from content controls (<code>w:sdt</code>, typical for contract templates) extracted as empty.</p>
+  <ul>
+    <li><span class="tag changed">Changed</span> The DOCX extractor now walks the body XML in document order — through content controls, hyperlinks, smart tags and tables (rows rendered as <code>cell | cell</code>) — instead of relying on <code>document.paragraphs</code>, which ignores all of those. Headings still split "pages".</li>
+    <li><span class="tag changed">Changed</span> PDF pages with a short real text layer keep it unless OCR finds more text.</li>
+  </ul>
+</section>
+
+<section class="rel">
+  <h2>0.10.1 <time>2026-09-06</time></h2>
+  <p><span class="tag fixed">Fixed</span> Tesseract installed with Homebrew was invisible to the server because <code>/opt/homebrew/bin</code> was not on its PATH.</p>
+  <ul>
+    <li><span class="tag added">Added</span> <code>TESSERACT_CMD</code> setting and auto-detection of the binary (PATH, then <code>/opt/homebrew/bin</code>, <code>/usr/local/bin</code>, <code>/opt/local/bin</code>, <code>/usr/bin</code>, Windows default); pytesseract is pointed at the resolved path. <code>/api/health</code> reports <code>tesseract_cmd</code>.</li>
+    <li><span class="tag added">Added</span> A real-OCR test (PNG and image-only PDF) that runs wherever a Tesseract binary exists.</li>
+  </ul>
+</section>
+
+<section class="rel">
+  <h2>0.10.0 <time>2026-09-06</time></h2>
+  <p><span class="tag added">Added</span> Retry for every document that is not COMPLETED or DUPLICATE, everywhere a document is listed.</p>
+  <ul>
+    <li><span class="tag changed">Changed</span> <code>POST /api/documents/{id}/retry</code> now applies per-status rules: FAILED and EXTRACTION_NOT_SUPPORTED re-check the stored file (extension + content sniffing) and re-queue; QUEUED/PROCESSING only when stalled for <code>RETRY_STALE_SECONDS</code> (409 otherwise); EMPTY_FILE/UPLOAD_FAILED → 410 (nothing stored); COMPLETED/DUPLICATE → 409.</li>
+    <li><span class="tag added">Added</span> <i>retry</i> buttons on the home page Documents panel, the <code>/documents</code> listing (new actions column) and the show page banner, with tooltips explaining what will happen; outcomes that are not QUEUED show their reason inline.</li>
+    <li><span class="tag changed">Changed</span> Files with unsupported extensions are stored too (so they can be retried once a format is added), and an unknown extension with recognisable content (e.g. a PDF named <code>.bin</code>) is processed as the sniffed type at upload and on retry.</li>
+    <li><span class="tag fixed">Fixed</span> A retried document replaces its previous chunks instead of adding duplicates.</li>
+    <li><span class="tag docs">Docs</span> Flow page: “Retry?” column in the status table and retry mentions in the ingest, pages and show-page steps; demo GIF re-recorded with a retry step (17 → 19 frames).</li>
+  </ul>
+</section>
+
+<section class="rel">
   <h2>0.9.1 <time>2026-09-06</time></h2>
   <p><span class="tag docs">Docs</span> Interactive flow and animated demo now cover every page.</p>
   <ul>

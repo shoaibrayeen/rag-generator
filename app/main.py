@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from app import jobs
 from app.config import SUPPORTED_EXTENSIONS, settings
 from app.ingest import pipeline
-from app.ingest.extractors import file_type_for, ocr_available
+from app.ingest.extractors import EXTRACTORS, file_type_for, ocr_available, sniff_type, tesseract_cmd
 from app.llm.client import LLMError
 from app.models import (TERMINAL_STATUSES, AskRequest, AskResponse, ChunkOut, DocStatus, DocumentInfo,
                         DocumentPage, DocumentPages, HealthResponse, JobDetail, JobPage, PageOut, UploadResponse)
@@ -64,11 +64,12 @@ async def lifespan(_: FastAPI):
     for col in vector_store.list_collections():
         n = bm25_index.rebuild(col)
         log.info("BM25 rebuilt for '%s' (%d chunks)", col, n)
-    log.info("OCR available: %s | LLM: %s @ %s", ocr_available(), settings.LLM_MODEL, settings.LLM_API_URL)
+    log.info("OCR available: %s (%s) | LLM: %s @ %s", ocr_available(), tesseract_cmd() or "tesseract not found",
+             settings.LLM_MODEL, settings.LLM_API_URL)
     yield
 
 
-app = FastAPI(title="RAG Generator", version="0.9.1", lifespan=lifespan)
+app = FastAPI(title="RAG Generator", version="0.10.2", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 if DOCS_DIR.exists():
     app.mount("/documentation", StaticFiles(directory=DOCS_DIR), name="documentation")
@@ -104,7 +105,7 @@ def health():
     return HealthResponse(
         status="ok", llm_model=settings.LLM_MODEL, llm_api_url=settings.LLM_API_URL,
         embedding_model=settings.EMBEDDING_MODEL, supported_extensions=sorted(SUPPORTED_EXTENSIONS),
-        ocr_enabled=settings.OCR_ENABLED, ocr_available=ocr_available(),
+        ocr_enabled=settings.OCR_ENABLED, ocr_available=ocr_available(), tesseract_cmd=tesseract_cmd(),
         collections=sorted(set(vector_store.list_collections()) | set(jobs.collections())),
         statuses=list(get_args(DocStatus)), settings=public,
     )
@@ -148,11 +149,6 @@ async def upload(background: BackgroundTasks, files: list[UploadFile] = File(...
 
         sha = hashlib.sha256(data).hexdigest() if data else None  # computed at upload time, kept on every record
 
-        if kind is None:
-            record(doc_id, name, "EXTRACTION_NOT_SUPPORTED", sha256=sha,
-                   reason=f"Extension '{Path(name).suffix or '(none)'}' is not supported. "
-                          f"Supported: {' '.join(sorted(SUPPORTED_EXTENSIONS))}")
-            continue
         if not data:
             record(doc_id, name, "EMPTY_FILE", file_type=kind, reason="The uploaded file is 0 bytes")
             continue
@@ -161,7 +157,7 @@ async def upload(background: BackgroundTasks, files: list[UploadFile] = File(...
                    reason=f"UPLOAD FAILED: file is larger than {settings.MAX_UPLOAD_MB} MB")
             continue
 
-        # 1. upload step: store the file
+        # 1. upload step: store the file (also for unsupported types, so a retry can re-check them later)
         path = settings.uploads_dir / f"{doc_id}_{name}"
         try:
             path.write_bytes(data)
@@ -170,6 +166,16 @@ async def upload(background: BackgroundTasks, files: list[UploadFile] = File(...
                    reason=f"UPLOAD FAILED: could not store file ({exc})")
             continue
         log.debug("[upload] stored %s bytes=%d sha256=%s", ctx(job=job_id, doc=doc_id, file=name), len(data), sha)
+
+        if kind is None:
+            sniffed = sniff_type(path) if settings.SNIFF_CONTENT else None
+            if sniffed in EXTRACTORS:
+                kind = sniffed  # unknown extension, recognisable content: process it
+            else:
+                record(doc_id, name, "EXTRACTION_NOT_SUPPORTED", sha256=sha,
+                       reason=f"Extension '{Path(name).suffix or '(none)'}' is not supported and the content was not "
+                              f"recognised. Supported: {' '.join(sorted(SUPPORTED_EXTENSIONS))}")
+                continue
 
         # 2. duplicate check on the stored file's hash (same collection, live original)
         original = jobs.find_by_hash(col, sha)
@@ -251,18 +257,44 @@ def document_file(doc_id: str, download: bool = Query(default=False)):
 
 @app.post("/api/documents/{doc_id}/retry", response_model=DocumentInfo, status_code=202)
 def retry_document(doc_id: str, background: BackgroundTasks):
-    """Re-queue a FAILED document (the stored file is processed again with the current code)."""
+    """Re-process a document that is neither COMPLETED nor DUPLICATE.
+
+    FAILED / EXTRACTION_NOT_SUPPORTED: the stored file is checked again (extension + content sniffing)
+    and re-queued. QUEUED / PROCESSING: only if the record has not moved for RETRY_STALE_SECONDS
+    (stuck worker), otherwise 409. EMPTY_FILE / UPLOAD_FAILED: nothing was stored → 410, upload again.
+    """
+    from datetime import datetime, timezone
+
     doc = jobs.get(doc_id)
     if doc is None:
         raise HTTPException(404, "document not found")
-    if doc.status != "FAILED":
-        raise HTTPException(409, f"only FAILED documents can be retried; this one is {doc.status}")
+    if doc.status == "COMPLETED":
+        raise HTTPException(409, "document is already COMPLETED; nothing to retry")
+    if doc.status == "DUPLICATE":
+        raise HTTPException(409, f"document is a DUPLICATE of {doc.duplicate_of}; ask that document instead")
+    if doc.status in ("QUEUED", "PROCESSING"):
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(doc.updated_at)).total_seconds()
+        if age < settings.RETRY_STALE_SECONDS:
+            raise HTTPException(409, f"document is {doc.status} (updated {int(age)}s ago); wait for it to finish "
+                                     f"or retry after {settings.RETRY_STALE_SECONDS}s of no progress")
     path = next(iter(settings.uploads_dir.glob(f"{doc_id}_*")), None)
     if path is None:
-        raise HTTPException(410, "the uploaded file is no longer stored; upload it again")
-    log.info("[retry] %s", ctx(job=doc.job_id, doc=doc_id, file=doc.filename))
-    doc = jobs.update(doc_id, status="QUEUED", stage=None, pages=0, chunks=0, ocr_pages=0,
-                      reason="Retry requested; waiting for the background worker")
+        raise HTTPException(410, "the file was not stored (empty or failed upload); upload it again")
+
+    kind = file_type_for(doc.filename)
+    if kind is None:
+        sniffed = sniff_type(path) if settings.SNIFF_CONTENT else None
+        if sniffed in EXTRACTORS:
+            kind = sniffed
+    log.info("[retry] %s previous=%s type=%s", ctx(job=doc.job_id, doc=doc_id, file=doc.filename), doc.status, kind)
+    if kind is None:
+        return jobs.update(doc_id, status="EXTRACTION_NOT_SUPPORTED", stage=None,
+                           reason=f"Retried: extension '{Path(doc.filename).suffix or '(none)'}' is still not supported "
+                                  f"and the content was not recognised. Supported: {' '.join(sorted(SUPPORTED_EXTENSIONS))}")
+    if doc.status == "COMPLETED":  # defensive: never re-index twice
+        raise HTTPException(409, "already indexed")
+    doc = jobs.update(doc_id, status="QUEUED", stage=None, file_type=kind, pages=0, chunks=0, ocr_pages=0,
+                      reason=f"Retry requested (was {doc.status}); waiting for the background worker")
     background.add_task(pipeline.run, doc_id, path)
     return doc
 

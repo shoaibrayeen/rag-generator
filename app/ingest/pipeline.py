@@ -67,6 +67,7 @@ def run(doc_id: str, path: Path) -> None:
         with timed(log, "embed", **ids):
             vectors = embedder.embed_texts([c.text for c in chunks])
         with timed(log, "store", **ids):
+            vector_store.delete_document(doc.collection, doc_id)  # a retry must replace, never duplicate, chunks
             vector_store.add_chunks([c.chunk_id for c in chunks], [c.text for c in chunks], vectors,
                                     [c.metadata for c in chunks])
             save_pages(doc_id, pages, chunks)

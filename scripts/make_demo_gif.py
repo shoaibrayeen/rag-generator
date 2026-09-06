@@ -7,8 +7,9 @@ Record an animated walkthrough of the UI as documentation/demo.gif.
 
 The script drives the real pages headlessly: uploads the sample corpus as one job (including a
 duplicate and an unsupported file), shows the job → documents filter, asks a scoped question,
-visits /jobs and /documents, opens a show page, asks in the chat, clicks a page citation to
-highlight the passage, and finally shows a DUPLICATE document's not-applicable page. Every frame
+visits /jobs and /documents, retries a failed/unsupported document, opens a show page, asks in
+the chat, clicks a page citation to highlight the passage, and finally shows a DUPLICATE document's
+not-applicable page. Every frame
 gets a caption; clicks are marked with a red ring. Uses a throw-away collection `demo` and deletes
 it afterwards. Re-run whenever the UI flow changes (see CLAUDE.md).
 """
@@ -107,58 +108,71 @@ def record(api: str) -> None:
             page.wait_for_selector("#exts")
             page.fill("#collection", COLLECTION)
             page.dispatch_event("#collection", "change")
-            snap(page, "Home page: upload documents, follow jobs, ask questions", step="1 / 6 · Home", ms=2200)
+            snap(page, "Home page: upload documents, follow jobs, ask questions", step="1 / 7 · Home", ms=2200)
             page.set_input_files("#files", [str(f) for f in files])
             page.wait_for_timeout(300)
             snap(page, "7 files chosen — including a duplicate and an unsupported .xyz — uploaded as ONE job",
-                 mark=center(page.locator("#uploadBtn")), step="1 / 6 · Home")
+                 mark=center(page.locator("#uploadBtn")), step="1 / 7 · Home")
             page.click("#uploadBtn")
             page.wait_for_selector("#jobs tr.clickable")
             page.wait_for_timeout(700)
             snap(page, "Job accepted instantly (job id shown); files are QUEUED / PROCESSING in the background",
-                 step="1 / 6 · Home", ms=2600)
+                 step="1 / 7 · Home", ms=2600)
             job_id = httpx.get(f"{api}/api/jobs?collection={COLLECTION}&size=1", timeout=30).json()["items"][0]["job_id"]
             job = wait_job(api, job_id)
             page.wait_for_timeout(1800)
             snap(page, f"Job COMPLETED: {job['reason']} — Documents panel shows pages, status and reason per file",
-                 step="1 / 6 · Home", ms=3200)
+                 step="1 / 7 · Home", ms=3200)
 
             # ---------------- 2. job -> documents filter, scoped ask
             row = page.locator("#jobs tr.clickable").first
-            snap(page, "Click a job row to filter the Documents panel to that job", mark=center(row), step="2 / 6 · Home")
+            snap(page, "Click a job row to filter the Documents panel to that job", mark=center(row), step="2 / 7 · Home")
             row.click()
             page.wait_for_selector("#jobFilter .chip")
             page.wait_for_timeout(600)
             snap(page, "Documents filtered to the job (chip shows the active filter); DUPLICATE links to its original",
-                 step="2 / 6 · Home")
+                 step="2 / 7 · Home")
             cb = page.locator("#jobs input[type=checkbox]").first
             cb.check()
             page.fill("#question", "How long is the warranty on Titan series industrial arms?")
             page.wait_for_timeout(300)
-            snap(page, "Tick the job to narrow the scope, type a question, Ask", mark=center(page.locator("#askBtn")), step="2 / 6 · Home")
+            snap(page, "Tick the job to narrow the scope, type a question, Ask", mark=center(page.locator("#askBtn")), step="2 / 7 · Home")
             page.click("#askBtn")
             page.wait_for_selector("#cites b", timeout=120000)
             page.wait_for_timeout(800)
             snap(page, "Grounded answer with [n] citations, a Citations list and every retrieved chunk (dense + BM25 -> RRF)",
-                 step="2 / 6 · Home", ms=3600)
+                 step="2 / 7 · Home", ms=3600)
 
             # ---------------- 3. /jobs
             page.goto(f"{api}/jobs?collection={COLLECTION}")
             page.wait_for_selector("#rows tr.clickable")
             page.wait_for_timeout(500)
             snap(page, "/jobs — dedicated job listing, 20 per page: documents, pages, chunks, status, per-status counts, reason",
-                 step="3 / 6 · Jobs page", ms=3000)
+                 step="3 / 7 · Jobs page", ms=3000)
 
             # ---------------- 4. /documents
             page.goto(f"{api}/documents?collection={COLLECTION}")
             page.wait_for_selector("#rows tr.clickable")
             page.wait_for_timeout(500)
             snap(page, "/documents — every uploaded file, 20 per page, with pages, chunks, status, reason; filters in the URL",
-                 step="4 / 6 · Documents page", ms=3000)
+                 step="4 / 7 · Documents page", ms=3000)
             page.select_option("#status", "DUPLICATE")
             page.wait_for_timeout(900)
             snap(page, "Filter by status (here DUPLICATE); click a job id to see that job's files, click a row for the show page",
-                 step="4 / 6 · Documents page", ms=2800)
+                 step="4 / 7 · Documents page", ms=2800)
+
+            # ---------------- 4b. retry a document that is not COMPLETED / DUPLICATE
+            page.select_option("#status", "EXTRACTION_NOT_SUPPORTED")
+            page.wait_for_timeout(900)
+            retry_btn = page.locator("#rows button", has_text="retry").first
+            snap(page, "Every document that is not COMPLETED or DUPLICATE has a retry button (also on the home page and the show page)",
+                 mark=center(retry_btn), step="5 / 7 · Retry", ms=2600)
+            retry_btn.click()
+            page.wait_for_timeout(1500)
+            snap(page, "Retry re-checks the stored file with the current extractors (extension + content sniffing) and re-queues it; the reason tells the outcome",
+                 step="5 / 7 · Retry", ms=3600)
+            page.select_option("#status", "")
+            page.wait_for_timeout(600)
 
             # ---------------- 5. show page: viewer + chat + highlight
             docs = httpx.get(f"{api}/api/documents?collection={COLLECTION}&size=50", timeout=30).json()["items"]
@@ -168,28 +182,28 @@ def record(api: str) -> None:
             page.wait_for_selector(".vpage")
             page.wait_for_timeout(600)
             snap(page, "Show page: left 55% = Text view of the indexed pages (Original file / Details tabs); right 45% = chat for THIS document only",
-                 step="5 / 6 · Show page", ms=3400)
+                 step="6 / 7 · Show page", ms=3400)
             page.fill("#q", "How long is the warranty on Titan series industrial arms, and what is excluded?")
-            snap(page, "Ask in the chat — the question is sent with doc_ids=[this document]", mark=center(page.locator("#send")), step="5 / 6 · Show page", ms=2200)
+            snap(page, "Ask in the chat — the question is sent with doc_ids=[this document]", mark=center(page.locator("#send")), step="6 / 7 · Show page", ms=2200)
             page.click("#send")
             page.wait_for_selector(".msg.bot cite.c", timeout=120000)
             page.wait_for_timeout(900)
             snap(page, "Answer arrives with PAGE-NUMBER chips; the first cited page is focused and its passages highlighted in light blue",
-                 step="5 / 6 · Show page", ms=3800)
+                 step="6 / 7 · Show page", ms=3800)
             chips = page.locator(".msg.bot cite.c")
             last = chips.nth(chips.count() - 1)
-            snap(page, "Click any page chip ...", mark=center(last), step="5 / 6 · Show page", ms=1800)
+            snap(page, "Click any page chip ...", mark=center(last), step="6 / 7 · Show page", ms=1800)
             last.click()
             page.wait_for_timeout(1200)
             snap(page, "... the viewer scrolls to that page, outlines it and highlights the cited passage (clicked page darker blue)",
-                 step="5 / 6 · Show page", ms=3800)
+                 step="6 / 7 · Show page", ms=3800)
 
             # ---------------- 6. duplicate show page
             page.goto(f"{api}/documents/{dup['doc_id']}")
             page.wait_for_selector(".banner")
             page.wait_for_timeout(500)
             snap(page, "A DUPLICATE document's show page: viewer/chat not applicable, with the ORIGINAL document's show-page URL",
-                 step="6 / 6 · Not applicable", ms=3600)
+                 step="7 / 7 · Not applicable", ms=3600)
             browser.close()
     finally:
         junk.unlink(missing_ok=True)

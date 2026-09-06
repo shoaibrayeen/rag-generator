@@ -131,9 +131,12 @@ uv pip install -r requirements.txt &amp;&amp; pip install -e .     # `-e .` inst
 cp .env.example .env                                       # edit the LLM_* lines
 rag serve                                                  # http://localhost:8000
 </code></pre>
-<p>OCR outside Docker needs the Tesseract binary (<code>brew install tesseract</code> / <code>apt install
-tesseract-ocr</code>). Without it the app still runs: scanned pages are skipped with a warning and
-image uploads end as <code>FAILED</code> with a clear reason.</p>
+<p>OCR outside Docker needs the Tesseract binary (<code>brew install tesseract tesseract-lang</code> / <code>apt install
+tesseract-ocr</code>). The binary is auto-detected from <code>PATH</code> and the usual install locations
+(<code>/opt/homebrew/bin</code>, <code>/usr/local/bin</code>, <code>/usr/bin</code>), so a Homebrew install works even when the server's
+PATH lacks it; set <code>TESSERACT_CMD</code> to point at a custom location. <code>GET /api/health</code> reports
+<code>ocr_available</code> and the resolved <code>tesseract_cmd</code>. Without a binary the app still runs: scanned pages end
+as <code>FAILED</code> with a clear reason and can be retried after installing it.</p>
 <h3 id="offline-demo-without-an-llm-key">Offline demo without an LLM key</h3>
 <p><code>scripts/mock_llm.py</code> is a tiny OpenAI-compatible server that answers <strong>extractively</strong> from the
 retrieved context (it is not a language model — for demos and CI only):</p>
@@ -214,7 +217,7 @@ max <code>LIST_MAX_PAGE_SIZE</code>). Every listing response is an envelope:</p>
 </tr>
 <tr>
 <td><code>EXTRACTION_NOT_SUPPORTED</code></td>
-<td>extension not in <code>SUPPORTED_EXTENSIONS</code></td>
+<td>extension not in <code>SUPPORTED_EXTENSIONS</code> and content not recognised (file kept for retry)</td>
 <td>no</td>
 <td>the extension and the supported list</td>
 </tr>
@@ -272,7 +275,7 @@ citation it cannot open.</p>
 <p>The workbench (<code>/</code>):
 1. <strong>Upload</strong> — drop files, optionally name a <em>collection</em> (a document set); they are submitted as one job and the job id is shown.
 2. <strong>Jobs</strong> — JOB ID · DOCUMENTS · PAGES · STATUS · REASON, 5 per page with prev/next. Click a row to filter the documents to that job; tick a job to ask over it.
-3. <strong>Documents</strong> — DOC ID · NAME · PAGES · STATUS · REASON for every file, 5 per page with prev/next (job id shown under the doc id); duplicates link to their original; tick <code>COMPLETED</code> documents to ask over them; delete finished ones with ✕.
+3. <strong>Documents</strong> — DOC ID · NAME · PAGES · STATUS · REASON for every file, 5 per page with prev/next (job id shown under the doc id); duplicates link to their original; tick <code>COMPLETED</code> documents to ask over them; <em>retry</em> any document that is not COMPLETED/DUPLICATE; delete finished ones with ✕.
 4. <strong>Ask</strong> — the scope line shows what will be searched (whole collection or the ticked jobs/documents). The answer shows <code>[n]</code> markers, then a <strong>Citations</strong> list (file, page, section, doc id); click a marker to jump to the chunk.
 5. <strong>Sources</strong> — every retrieved chunk with file, page/section, doc id, whether it came from dense or BM25 (or both), its RRF score and a "cited" badge. OCR'd chunks are flagged.</p>
 <p><strong>Reset collection</strong> wipes a document set so you can load a different one.</p>
@@ -344,7 +347,7 @@ rag serve
 <tr>
 <td><code>POST</code></td>
 <td><code>/api/documents/{doc_id}/retry</code></td>
-<td>re-queue a <code>FAILED</code> document from its stored file → <strong>202</strong></td>
+<td>re-process a non-<code>COMPLETED</code>, non-<code>DUPLICATE</code> document from its stored file → <strong>202</strong> (409 completed/duplicate/still running, 410 nothing stored)</td>
 </tr>
 <tr>
 <td><code>DELETE</code></td>
@@ -390,8 +393,13 @@ curl -X POST localhost:8000/api/ask -H 'content-type: application/json' \
   <code>OCR_MIN_CHARS_PER_PAGE</code> characters) are OCR'd in place. Image files go straight to OCR.
   If neither tier yields text the document ends <code>FAILED</code> with a precise reason that names what the primary
   reader hit (e.g. <code>the docx reader failed (BadZipFile: File is not a zip file)</code>) and what the fallback said.</li>
-<li><strong>Retry</strong>: a <code>FAILED</code> document can be re-processed from its stored file (<code>POST /api/documents/{id}/retry</code>,
-  UI <em>retry</em> button, <code>rag retry &lt;doc_id&gt;</code>) — useful after installing Tesseract or upgrading the extractors.</li>
+<li><strong>Retry</strong> (<code>POST /api/documents/{id}/retry</code>, the <em>retry</em> button on the home page, <code>/documents</code> and the show page,
+  <code>rag retry &lt;doc_id&gt;</code>) is offered for every document that is not <code>COMPLETED</code> or <code>DUPLICATE</code>:
+  <code>FAILED</code> and <code>EXTRACTION_NOT_SUPPORTED</code> re-check the stored file (extension + content sniffing) and re-queue it
+  (unsupported files are stored too, so adding a format later makes them retryable); <code>QUEUED</code>/<code>PROCESSING</code> only when
+  the record has not moved for <code>RETRY_STALE_SECONDS</code> (stuck worker), otherwise 409; <code>EMPTY_FILE</code>/<code>UPLOAD_FAILED</code>
+  have nothing stored and answer 410 asking for a new upload. A retried document replaces its old chunks.</li>
+<li><strong>Unknown extensions with recognisable content</strong> (e.g. a PDF named <code>.bin</code>) are processed as the sniffed type.</li>
 <li><strong>Page metadata:</strong> PDF = printed page · DOCX = one page per heading section · HTML = one page, <code>&lt;title&gt;</code> as section ·
   MD = one page per heading · TXT = one page · CSV = one page per <code>CSV_ROWS_PER_PAGE</code> rows (header repeated) · images = one page per frame.</li>
 <li><strong>Multiple document sets</strong> via collections (names: 3-63 chars of letters, digits, <code>. _ -</code>); reset or delete without restarting.</li>
@@ -503,6 +511,11 @@ ask    ─► resolve scope (collection | doc_ids | job_ids) ─► embed ─►
 <td>when and how the Tesseract fallback runs</td>
 </tr>
 <tr>
+<td><code>TESSERACT_CMD</code></td>
+<td>auto</td>
+<td>explicit path to the tesseract binary; empty = PATH, then <code>/opt/homebrew/bin</code>, <code>/usr/local/bin</code>, <code>/usr/bin</code></td>
+</tr>
+<tr>
 <td><code>LLM_TEMPERATURE</code> / <code>LLM_MAX_TOKENS</code> / <code>LLM_TIMEOUT_S</code></td>
 <td>0.1 / 1024 / 60</td>
 <td>generation parameters</td>
@@ -521,6 +534,11 @@ ask    ─► resolve scope (collection | doc_ids | job_ids) ─► embed ─►
 <td><code>LOG_LEVEL</code> / <code>SNIFF_CONTENT</code></td>
 <td><code>INFO</code> / true</td>
 <td>log verbosity (<code>DEBUG</code> adds per-batch detail); detect the real format from file bytes</td>
+</tr>
+<tr>
+<td><code>RETRY_STALE_SECONDS</code></td>
+<td>120</td>
+<td>a <code>QUEUED</code>/<code>PROCESSING</code> document older than this may be retried (stuck worker)</td>
 </tr>
 <tr>
 <td><code>APP_PORT</code> / <code>APP_HOST</code></td>

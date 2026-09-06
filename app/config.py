@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     OCR_MIN_CHARS_PER_PAGE: int = 20  # a PDF page with fewer extractable chars is OCR'd
     OCR_LANG: str = "eng"
     OCR_DPI: int = 200
+    TESSERACT_CMD: str = ""                  # path to the tesseract binary; empty = auto-detect (PATH, then common install dirs)
 
     # --- Retrieval (hybrid: dense + BM25, fused with RRF) ---
     DENSE_TOP_K: int = 20
@@ -59,6 +60,7 @@ class Settings(BaseSettings):
     LIST_MAX_PAGE_SIZE: int = 200
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
+    RETRY_STALE_SECONDS: int = 120           # a QUEUED/PROCESSING document older than this may be retried (stuck worker)
     LOG_LEVEL: str = "INFO"                  # DEBUG for per-chunk / per-batch detail
     SNIFF_CONTENT: bool = True               # detect the real format from file bytes, not just the extension
 

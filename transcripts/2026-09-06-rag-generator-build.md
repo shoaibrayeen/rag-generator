@@ -1,7 +1,7 @@
 # Claude Code transcript — session `a88920a3-6212-4085-ad05-80ba0afca34d`
 
 Project: `/Users/shoaib.rayeen/my_space/rag-generator`  
-Exported: 2026-09-06T16:44:01  
+Exported: 2026-09-06T17:10:06  
 Source log: `/Users/shoaib.rayeen/.claude/projects/-Users-shoaib-rayeen-my-space-rag-generator/a88920a3-6212-4085-ad05-80ba0afca34d.jsonl`
 
 ---
@@ -6220,5 +6220,1357 @@ exported 342 messages from a88920a3-6212-4085-ad05-80ba0afca34d.jsonl -> transcr
   "command": "cd /Users/shoaib.rayeen/my_space/rag-generator\nsed -i '' 's/dense + BM25 → RRF/dense + BM25 -> RRF/; s/Click any page chip …/Click any page chip .../; s/\"… the viewer scrolls/\"... the viewer scrolls/' scripts/make_demo_gif.py\ngrep -c \"→\" scripts/make_demo_gif.py || true\n.venv/bin/python scripts/make_demo_gif.py 2>&1 | tail -1\n.venv/bin/python -m compileall -q scripts && .venv/bin/python -m pytest -q 2>&1 | grep -E \"passed|failed\"\n.venv/bin/python scripts/export_transcript.py --session a88920a3-6212-4085-ad05-80ba0afca34d && wc -l transcripts/2026-09-06-rag-generator-build.md; git status --short | wc -l; ls samples | grep -c _unsupported || echo \"samples clean\"",
   "description": "Replace arrow glyphs in captions, re-record the GIF, final tests and transcript export",
   "timeout": 600000
+}
+```
+
+## Tool  <sub>2026-09-06T11:14:01.892Z</sub>
+
+**Tool result**
+
+```
+1
+wrote /Users/shoaib.rayeen/my_space/rag-generator/documentation/demo.gif (1251 KB, 17 frames)
+34 passed, 6 warnings in 0.84s
+exported 344 messages from a88920a3-6212-4085-ad05-80ba0afca34d.jsonl -> transcripts/2026-09-06-rag-generator-build.md
+    6224 transcripts/2026-09-06-rag-generator-build.md
+      15
+0
+samples clean
+```
+
+## Assistant  <sub>2026-09-06T11:14:09.628Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator; grep -n \"→\" scripts/make_demo_gif.py",
+  "description": "Locate the remaining arrow glyph in the recorder"
+}
+```
+
+## Tool  <sub>2026-09-06T11:14:09.659Z</sub>
+
+**Tool result**
+
+```
+9:duplicate and an unsupported file), shows the job → documents filter, asks a scoped question,
+```
+
+## Assistant  <sub>2026-09-06T11:14:25.602Z</sub>
+
+The remaining arrow is only in the module docstring, not in any caption, so the recorded GIF is clean. Everything is complete.
+
+**Interactive flow page** (`documentation/flow.html`, served at `/documentation/flow.html`) now has five tabs:
+1. After upload (async job)
+2. Asking a question
+3. **Pages: home, jobs, documents** — six steps: the workbench, upload → job id, `/jobs` listing, `/documents` listing, job → its documents, document → show page, plus a table of every URL with what it shows, its page size and the API behind it.
+4. **Show page: chat + highlighting** — six steps: opening the page, Text view as "what retrieval sees", asking only this document, page-number citations, click → jump + highlight, and the not-applicable states. It includes a live mini demo where clicking the page chips highlights the corresponding passage.
+5. Status vocabulary
+
+**Animated demo** (`documentation/demo.gif`, 17 captioned frames, 1.25 MB) recorded from the real UI by the new `scripts/make_demo_gif.py` (Playwright + Chromium, from `requirements-dev.txt`). It walks through: choosing 7 files including a duplicate and an unsupported one, the job accepted instantly, the job completing with per-file pages/status/reason, clicking a job to filter documents, ticking a job and asking with a cited answer and sources, the `/jobs` and `/documents` pages with the status filter, the show page with its chat, the answer with page-number chips and the first passage highlighted, clicking a chip to scroll and highlight another page, and a DUPLICATE document's not-applicable page linking to the original. Clicks are marked with a red ring, captions wrap to fit, and the script uses and then deletes a throw-away `demo` collection.
+
+Along the way I widened the workbench's left column so the six-column Jobs table stays readable. The GIF is linked from the README's new "Two-minute tour" section and from the flow page, the changelog is at 0.9.1, and the rules now require re-recording the GIF when a UI flow it shows changes.
+
+Validation: 34 tests pass, rules in sync, docs rebuilt, sample folder clean. Transcript re-exported (344 messages) to `transcripts/2026-09-06-rag-generator-build.md`; run `/export` on that path at session end to capture these last messages. Nothing committed; 15 changed files await your review.
+
+## User  <sub>2026-09-06T11:19:10.442Z</sub>
+
+Provide a linkedin post for this,a long with repo link
+
+rich tech format since linkedin does not support normal text
+
+## Assistant  <sub>2026-09-06T11:19:29.214Z</sub>
+
+I'll generate the post with Unicode bold headings (LinkedIn's only "rich text"), emoji bullets and line breaks, and save a copy in the repo so you can paste it directly.
+
+## Assistant  <sub>2026-09-06T11:19:49.061Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": ".venv/bin/python - <<'EOF'\nfrom pathlib import Path\nB = {c: chr(0x1D5D4 + i) for i, c in enumerate(\"ABCDEFGHIJKLMNOPQRSTUVWXYZ\")}\nB.update({c: chr(0x1D5EE + i) for i, c in enumerate(\"abcdefghijklmnopqrstuvwxyz\")})\nB.update({c: chr(0x1D7EC + i) for i, c in enumerate(\"0123456789\")})\ndef b(s): return \"\".join(B.get(ch, ch) for ch in s)\n\npost = f\"\"\"{b(\"I built a RAG Generator that turns any pile of documents into a grounded Q&A app - at runtime, with zero code changes between document sets.\")}\n\nUpload PDFs, DOCX, RTF, HTML, TXT, MD, CSV (even scanned pages and images), and within seconds you can ask questions and get answers that cite the exact file, page and passage. Swap the documents, ask again. Nothing to redeploy - only the LLM URL and key live in .env.\n\n{b(\"What's inside\")}\n🔎 Hybrid retrieval: fastembed vectors in ChromaDB + BM25 (rank-bm25), fused with Reciprocal Rank Fusion\n✂️ Overlapping, metadata-tagged chunks (page, section, offsets) so every citation is precise\n🧾 Two-tier extraction: PyMuPDF / python-docx / striprtf / BeautifulSoup first, Tesseract OCR strictly as fallback - and the real format is sniffed from the bytes (an RTF saved as .docx just works)\n⚙️ Async ingestion: one upload = one job, each file tracked as QUEUED / DUPLICATE / PROCESSING / COMPLETED / FAILED / EMPTY_FILE / EXTRACTION_NOT_SUPPORTED / UPLOAD_FAILED, always with a human-readable reason; SHA-256 dedupe\n🖥️ FastAPI REST API + single-page UI + CLI: job and document listings with pagination, scoped questions over selected documents or jobs, and a document show page with a 55/45 viewer + chat where citations are page numbers - click one and the passage lights up in blue\n🔌 Any OpenAI-compatible LLM for generation (OpenAI, OpenRouter, Groq, Ollama, vLLM, Azure...)\n🧪 Own evaluation script with Claude as judge: faithfulness, relevance, correctness, hallucination\n🐳 Docker + docker compose, everything tunable from one config file\n\n{b(\"How it was built\")}\nEntirely with agentic coding in Claude Code, in one session, with the full transcripts committed to the repo. Along the way I turned my working preferences into rules the agent follows (synced for Claude Code, Cursor and Codex): docs move with the code, tests + compile check after every change, project memory read before planning, no commits by the agent.\n\nTwo things I'd highlight from the process:\n1️⃣ The best fix of the day came from a real failure: a \"DOCX\" that wouldn't extract turned out to be RTF in disguise. Content sniffing + precise failure reasons + a retry button now make that class of problem self-explanatory.\n2️⃣ Step-level logging everywhere (grep doc=<id> tells the whole story of one file) paid for itself immediately.\n\n{b(\"Stack\")}: Python 3.11 · FastAPI · fastembed · ChromaDB · rank-bm25 · PyMuPDF · Tesseract · anthropic SDK (judge) · Docker\n\n🔗 Repo: https://github.com/shoaibrayeen/rag-generator\n📽️ There's an animated walkthrough and an interactive flow diagram in the docs folder.\n\nFeedback welcome - especially on retrieval quality tricks you've found worth the complexity.\n\n#RAG #LLM #GenAI #Python #FastAPI #ChromaDB #AgenticCoding #ClaudeCode #OpenSource #InformationRetrieval\n\"\"\"\nPath(\"documentation/linkedin-post.txt\").write_text(post, encoding=\"utf-8\")\nprint(post)\nprint(f\"--- {len(post)} chars (LinkedIn limit 3000)\")\nEOF",
+  "description": "Generate the LinkedIn post with Unicode bold formatting and save it"
+}
+```
+
+## Tool  <sub>2026-09-06T11:19:49.117Z</sub>
+
+**Tool result**
+
+```
+𝗜 𝗯𝘂𝗶𝗹𝘁 𝗮 𝗥𝗔𝗚 𝗚𝗲𝗻𝗲𝗿𝗮𝘁𝗼𝗿 𝘁𝗵𝗮𝘁 𝘁𝘂𝗿𝗻𝘀 𝗮𝗻𝘆 𝗽𝗶𝗹𝗲 𝗼𝗳 𝗱𝗼𝗰𝘂𝗺𝗲𝗻𝘁𝘀 𝗶𝗻𝘁𝗼 𝗮 𝗴𝗿𝗼𝘂𝗻𝗱𝗲𝗱 𝗤&𝗔 𝗮𝗽𝗽 - 𝗮𝘁 𝗿𝘂𝗻𝘁𝗶𝗺𝗲, 𝘄𝗶𝘁𝗵 𝘇𝗲𝗿𝗼 𝗰𝗼𝗱𝗲 𝗰𝗵𝗮𝗻𝗴𝗲𝘀 𝗯𝗲𝘁𝘄𝗲𝗲𝗻 𝗱𝗼𝗰𝘂𝗺𝗲𝗻𝘁 𝘀𝗲𝘁𝘀.
+
+Upload PDFs, DOCX, RTF, HTML, TXT, MD, CSV (even scanned pages and images), and within seconds you can ask questions and get answers that cite the exact file, page and passage. Swap the documents, ask again. Nothing to redeploy - only the LLM URL and key live in .env.
+
+𝗪𝗵𝗮𝘁'𝘀 𝗶𝗻𝘀𝗶𝗱𝗲
+🔎 Hybrid retrieval: fastembed vectors in ChromaDB + BM25 (rank-bm25), fused with Reciprocal Rank Fusion
+✂️ Overlapping, metadata-tagged chunks (page, section, offsets) so every citation is precise
+🧾 Two-tier extraction: PyMuPDF / python-docx / striprtf / BeautifulSoup first, Tesseract OCR strictly as fallback - and the real format is sniffed from the bytes (an RTF saved as .docx just works)
+⚙️ Async ingestion: one upload = one job, each file tracked as QUEUED / DUPLICATE / PROCESSING / COMPLETED / FAILED / EMPTY_FILE / EXTRACTION_NOT_SUPPORTED / UPLOAD_FAILED, always with a human-readable reason; SHA-256 dedupe
+🖥️ FastAPI REST API + single-page UI + CLI: job and document listings with pagination, scoped questions over selected documents or jobs, and a document show page with a 55/45 viewer + chat where citations are page numbers - click one and the passage lights up in blue
+🔌 Any OpenAI-compatible LLM for generation (OpenAI, OpenRouter, Groq, Ollama, vLLM, Azure...)
+🧪 Own evaluation script with Claude as judge: faithfulness, relevance, correctness, hallucination
+🐳 Docker + docker compose, everything tunable from one config file
+
+𝗛𝗼𝘄 𝗶𝘁 𝘄𝗮𝘀 𝗯𝘂𝗶𝗹𝘁
+Entirely with agentic coding in Claude Code, in one session, with the full transcripts committed to the repo. Along the way I turned my working preferences into rules the agent follows (synced for Claude Code, Cursor and Codex): docs move with the code, tests + compile check after every change, project memory read before planning, no commits by the agent.
+
+Two things I'd highlight from the process:
+1️⃣ The best fix of the day came from a real failure: a "DOCX" that wouldn't extract turned out to be RTF in disguise. Content sniffing + precise failure reasons + a retry button now make that class of problem self-explanatory.
+2️⃣ Step-level logging everywhere (grep doc=<id> tells the whole story of one file) paid for itself immediately.
+
+𝗦𝘁𝗮𝗰𝗸: Python 3.11 · FastAPI · fastembed · ChromaDB · rank-bm25 · PyMuPDF · Tesseract · anthropic SDK (judge) · Docker
+
+🔗 Repo: https://github.com/shoaibrayeen/rag-generator
+📽️ There's an animated walkthrough and an interactive flow diagram in the docs folder.
+
+Feedback welcome - especially on retrieval quality tricks you've found worth the complexity.
+
+#RAG #LLM #GenAI #Python #FastAPI #ChromaDB #AgenticCoding #ClaudeCode #OpenSource #InformationRetrieval
+
+--- 2795 chars (LinkedIn limit 3000)
+```
+
+## Assistant  <sub>2026-09-06T11:20:20.750Z</sub>
+
+Here is the post, ready to paste. LinkedIn has no markdown, so the headings use Unicode bold characters and the bullets are emoji; line breaks are preserved when pasted. It is 2,795 characters, under LinkedIn's 3,000 limit, and saved at `documentation/linkedin-post.txt` for copying.
+
+```
+𝗜 𝗯𝘂𝗶𝗹𝘁 𝗮 𝗥𝗔𝗚 𝗚𝗲𝗻𝗲𝗿𝗮𝘁𝗼𝗿 𝘁𝗵𝗮𝘁 𝘁𝘂𝗿𝗻𝘀 𝗮𝗻𝘆 𝗽𝗶𝗹𝗲 𝗼𝗳 𝗱𝗼𝗰𝘂𝗺𝗲𝗻𝘁𝘀 𝗶𝗻𝘁𝗼 𝗮 𝗴𝗿𝗼𝘂𝗻𝗱𝗲𝗱 𝗤&𝗔 𝗮𝗽𝗽 - 𝗮𝘁 𝗿𝘂𝗻𝘁𝗶𝗺𝗲, 𝘄𝗶𝘁𝗵 𝘇𝗲𝗿𝗼 𝗰𝗼𝗱𝗲 𝗰𝗵𝗮𝗻𝗴𝗲𝘀 𝗯𝗲𝘁𝘄𝗲𝗲𝗻 𝗱𝗼𝗰𝘂𝗺𝗲𝗻𝘁 𝘀𝗲𝘁𝘀.
+
+Upload PDFs, DOCX, RTF, HTML, TXT, MD, CSV (even scanned pages and images), and within seconds you can ask questions and get answers that cite the exact file, page and passage. Swap the documents, ask again. Nothing to redeploy - only the LLM URL and key live in .env.
+
+𝗪𝗵𝗮𝘁'𝘀 𝗶𝗻𝘀𝗶𝗱𝗲
+🔎 Hybrid retrieval: fastembed vectors in ChromaDB + BM25 (rank-bm25), fused with Reciprocal Rank Fusion
+✂️ Overlapping, metadata-tagged chunks (page, section, offsets) so every citation is precise
+🧾 Two-tier extraction: PyMuPDF / python-docx / striprtf / BeautifulSoup first, Tesseract OCR strictly as fallback - and the real format is sniffed from the bytes (an RTF saved as .docx just works)
+⚙️ Async ingestion: one upload = one job, each file tracked as QUEUED / DUPLICATE / PROCESSING / COMPLETED / FAILED / EMPTY_FILE / EXTRACTION_NOT_SUPPORTED / UPLOAD_FAILED, always with a human-readable reason; SHA-256 dedupe
+🖥️ FastAPI REST API + single-page UI + CLI: job and document listings with pagination, scoped questions over selected documents or jobs, and a document show page with a 55/45 viewer + chat where citations are page numbers - click one and the passage lights up in blue
+🔌 Any OpenAI-compatible LLM for generation (OpenAI, OpenRouter, Groq, Ollama, vLLM, Azure...)
+🧪 Own evaluation script with Claude as judge: faithfulness, relevance, correctness, hallucination
+🐳 Docker + docker compose, everything tunable from one config file
+
+𝗛𝗼𝘄 𝗶𝘁 𝘄𝗮𝘀 𝗯𝘂𝗶𝗹𝘁
+Entirely with agentic coding in Claude Code, in one session, with the full transcripts committed to the repo. Along the way I turned my working preferences into rules the agent follows (synced for Claude Code, Cursor and Codex): docs move with the code, tests + compile check after every change, project memory read before planning, no commits by the agent.
+
+Two things I'd highlight from the process:
+1️⃣ The best fix of the day came from a real failure: a "DOCX" that wouldn't extract turned out to be RTF in disguise. Content sniffing + precise failure reasons + a retry button now make that class of problem self-explanatory.
+2️⃣ Step-level logging everywhere (grep doc=<id> tells the whole story of one file) paid for itself immediately.
+
+𝗦𝘁𝗮𝗰𝗸: Python 3.11 · FastAPI · fastembed · ChromaDB · rank-bm25 · PyMuPDF · Tesseract · anthropic SDK (judge) · Docker
+
+🔗 Repo: https://github.com/shoaibrayeen/rag-generator
+📽️ There's an animated walkthrough and an interactive flow diagram in the docs folder.
+
+Feedback welcome - especially on retrieval quality tricks you've found worth the complexity.
+
+#RAG #LLM #GenAI #Python #FastAPI #ChromaDB #AgenticCoding #ClaudeCode #OpenSource #InformationRetrieval
+```
+
+Two notes before posting:
+- The repo link is derived from your git remote (`shoaibrayeen/rag-generator`). The repository is still uncommitted and unpushed locally, so push it first and make it public if the link should work for readers.
+- Attaching `documentation/demo.gif` as the post's media will make it far more engaging than a text-only post; LinkedIn plays GIFs inline.
+
+## User  <sub>2026-09-06T11:23:50.555Z</sub>
+
+Main Heading
+Built a RAG Generator for Document Parsing and Conversation with Documents
+
+
+remove 
+QUEUED / DUPLICATE / PROCESSING / COMPLETED / FAILED / EMPTY_FILE / EXTRACTION_NOT_SUPPORTED / UPLOAD_FAILED, always with a human-readable reason
+
+## Assistant  <sub>2026-09-06T11:24:01.310Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": ".venv/bin/python - <<'EOF'\nfrom pathlib import Path\nB = {c: chr(0x1D5D4 + i) for i, c in enumerate(\"ABCDEFGHIJKLMNOPQRSTUVWXYZ\")}\nB.update({c: chr(0x1D5EE + i) for i, c in enumerate(\"abcdefghijklmnopqrstuvwxyz\")})\ndef b(s): return \"\".join(B.get(ch, ch) for ch in s)\np = Path(\"documentation/linkedin-post.txt\"); s = p.read_text(encoding=\"utf-8\")\nold_head = s.split(\"\\n\", 1)[0]\ns = s.replace(old_head, b(\"Built a RAG Generator for Document Parsing and Conversation with Documents\"), 1)\ns = s.replace(\"⚙️ Async ingestion: one upload = one job, each file tracked as QUEUED / DUPLICATE / PROCESSING / COMPLETED / FAILED / EMPTY_FILE / EXTRACTION_NOT_SUPPORTED / UPLOAD_FAILED, always with a human-readable reason; SHA-256 dedupe\",\n              \"⚙️ Async ingestion: one upload = one job, every file tracked with a clear status and reason; SHA-256 dedupe\")\np.write_text(s, encoding=\"utf-8\")\nprint(s); print(f\"--- {len(s)} chars\")\nEOF",
+  "description": "Update the LinkedIn post heading and trim the status list"
+}
+```
+
+## Tool  <sub>2026-09-06T11:24:01.357Z</sub>
+
+**Tool result**
+
+```
+𝗕𝘂𝗶𝗹𝘁 𝗮 𝗥𝗔𝗚 𝗚𝗲𝗻𝗲𝗿𝗮𝘁𝗼𝗿 𝗳𝗼𝗿 𝗗𝗼𝗰𝘂𝗺𝗲𝗻𝘁 𝗣𝗮𝗿𝘀𝗶𝗻𝗴 𝗮𝗻𝗱 𝗖𝗼𝗻𝘃𝗲𝗿𝘀𝗮𝘁𝗶𝗼𝗻 𝘄𝗶𝘁𝗵 𝗗𝗼𝗰𝘂𝗺𝗲𝗻𝘁𝘀
+
+Upload PDFs, DOCX, RTF, HTML, TXT, MD, CSV (even scanned pages and images), and within seconds you can ask questions and get answers that cite the exact file, page and passage. Swap the documents, ask again. Nothing to redeploy - only the LLM URL and key live in .env.
+
+𝗪𝗵𝗮𝘁'𝘀 𝗶𝗻𝘀𝗶𝗱𝗲
+🔎 Hybrid retrieval: fastembed vectors in ChromaDB + BM25 (rank-bm25), fused with Reciprocal Rank Fusion
+✂️ Overlapping, metadata-tagged chunks (page, section, offsets) so every citation is precise
+🧾 Two-tier extraction: PyMuPDF / python-docx / striprtf / BeautifulSoup first, Tesseract OCR strictly as fallback - and the real format is sniffed from the bytes (an RTF saved as .docx just works)
+⚙️ Async ingestion: one upload = one job, every file tracked with a clear status and reason; SHA-256 dedupe
+🖥️ FastAPI REST API + single-page UI + CLI: job and document listings with pagination, scoped questions over selected documents or jobs, and a document show page with a 55/45 viewer + chat where citations are page numbers - click one and the passage lights up in blue
+🔌 Any OpenAI-compatible LLM for generation (OpenAI, OpenRouter, Groq, Ollama, vLLM, Azure...)
+🧪 Own evaluation script with Claude as judge: faithfulness, relevance, correctness, hallucination
+🐳 Docker + docker compose, everything tunable from one config file
+
+𝗛𝗼𝘄 𝗶𝘁 𝘄𝗮𝘀 𝗯𝘂𝗶𝗹𝘁
+Entirely with agentic coding in Claude Code, in one session, with the full transcripts committed to the repo. Along the way I turned my working preferences into rules the agent follows (synced for Claude Code, Cursor and Codex): docs move with the code, tests + compile check after every change, project memory read before planning, no commits by the agent.
+
+Two things I'd highlight from the process:
+1️⃣ The best fix of the day came from a real failure: a "DOCX" that wouldn't extract turned out to be RTF in disguise. Content sniffing + precise failure reasons + a retry button now make that class of problem self-explanatory.
+2️⃣ Step-level logging everywhere (grep doc=<id> tells the whole story of one file) paid for itself immediately.
+
+𝗦𝘁𝗮𝗰𝗸: Python 3.11 · FastAPI · fastembed · ChromaDB · rank-bm25 · PyMuPDF · Tesseract · anthropic SDK (judge) · Docker
+
+🔗 Repo: https://github.com/shoaibrayeen/rag-generator
+📽️ There's an animated walkthrough and an interactive flow diagram in the docs folder.
+
+Feedback welcome - especially on retrieval quality tricks you've found worth the complexity.
+
+#RAG #LLM #GenAI #Python #FastAPI #ChromaDB #AgenticCoding #ClaudeCode #OpenSource #InformationRetrieval
+
+--- 2612 chars
+```
+
+## Assistant  <sub>2026-09-06T11:24:23.972Z</sub>
+
+Updated. The heading is now your text in bold, the status list is gone, and the post is 2,612 characters. The saved copy at `documentation/linkedin-post.txt` reflects the change.
+
+```
+𝗕𝘂𝗶𝗹𝘁 𝗮 𝗥𝗔𝗚 𝗚𝗲𝗻𝗲𝗿𝗮𝘁𝗼𝗿 𝗳𝗼𝗿 𝗗𝗼𝗰𝘂𝗺𝗲𝗻𝘁 𝗣𝗮𝗿𝘀𝗶𝗻𝗴 𝗮𝗻𝗱 𝗖𝗼𝗻𝘃𝗲𝗿𝘀𝗮𝘁𝗶𝗼𝗻 𝘄𝗶𝘁𝗵 𝗗𝗼𝗰𝘂𝗺𝗲𝗻𝘁𝘀
+
+Upload PDFs, DOCX, RTF, HTML, TXT, MD, CSV (even scanned pages and images), and within seconds you can ask questions and get answers that cite the exact file, page and passage. Swap the documents, ask again. Nothing to redeploy - only the LLM URL and key live in .env.
+
+𝗪𝗵𝗮𝘁'𝘀 𝗶𝗻𝘀𝗶𝗱𝗲
+🔎 Hybrid retrieval: fastembed vectors in ChromaDB + BM25 (rank-bm25), fused with Reciprocal Rank Fusion
+✂️ Overlapping, metadata-tagged chunks (page, section, offsets) so every citation is precise
+🧾 Two-tier extraction: PyMuPDF / python-docx / striprtf / BeautifulSoup first, Tesseract OCR strictly as fallback - and the real format is sniffed from the bytes (an RTF saved as .docx just works)
+⚙️ Async ingestion: one upload = one job, every file tracked with a clear status and reason; SHA-256 dedupe
+🖥️ FastAPI REST API + single-page UI + CLI: job and document listings with pagination, scoped questions over selected documents or jobs, and a document show page with a 55/45 viewer + chat where citations are page numbers - click one and the passage lights up in blue
+🔌 Any OpenAI-compatible LLM for generation (OpenAI, OpenRouter, Groq, Ollama, vLLM, Azure...)
+🧪 Own evaluation script with Claude as judge: faithfulness, relevance, correctness, hallucination
+🐳 Docker + docker compose, everything tunable from one config file
+
+𝗛𝗼𝘄 𝗶𝘁 𝘄𝗮𝘀 𝗯𝘂𝗶𝗹𝘁
+Entirely with agentic coding in Claude Code, in one session, with the full transcripts committed to the repo. Along the way I turned my working preferences into rules the agent follows (synced for Claude Code, Cursor and Codex): docs move with the code, tests + compile check after every change, project memory read before planning, no commits by the agent.
+
+Two things I'd highlight from the process:
+1️⃣ The best fix of the day came from a real failure: a "DOCX" that wouldn't extract turned out to be RTF in disguise. Content sniffing + precise failure reasons + a retry button now make that class of problem self-explanatory.
+2️⃣ Step-level logging everywhere (grep doc=<id> tells the whole story of one file) paid for itself immediately.
+
+𝗦𝘁𝗮𝗰𝗸: Python 3.11 · FastAPI · fastembed · ChromaDB · rank-bm25 · PyMuPDF · Tesseract · anthropic SDK (judge) · Docker
+
+🔗 Repo: https://github.com/shoaibrayeen/rag-generator
+📽️ There's an animated walkthrough and an interactive flow diagram in the docs folder.
+
+Feedback welcome - especially on retrieval quality tricks you've found worth the complexity.
+
+#RAG #LLM #GenAI #Python #FastAPI #ChromaDB #AgenticCoding #ClaudeCode #OpenSource #InformationRetrieval
+```
+
+## User  <sub>2026-09-06T11:24:48.984Z</sub>
+
+add somewhere, this took around 90 minutes to build
+
+## Assistant  <sub>2026-09-06T11:24:57.894Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": ".venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"documentation/linkedin-post.txt\"); s = p.read_text(encoding=\"utf-8\")\ns = s.replace(\"Entirely with agentic coding in Claude Code, in one session, with the full transcripts committed to the repo.\",\n              \"Entirely with agentic coding in Claude Code, in one session of roughly 90 minutes from brief to working app, with the full transcripts committed to the repo.\")\np.write_text(s, encoding=\"utf-8\")\nprint(s.split(\"𝗛𝗼𝘄 𝗶𝘁 𝘄𝗮𝘀 𝗯𝘂𝗶𝗹𝘁\")[1].split(\"\\n\")[1]); print(f\"--- {len(s)} chars\")\nEOF",
+  "description": "Add the 90-minute build time to the LinkedIn post"
+}
+```
+
+## Tool  <sub>2026-09-06T11:24:57.948Z</sub>
+
+**Tool result**
+
+```
+Entirely with agentic coding in Claude Code, in one session of roughly 90 minutes from brief to working app, with the full transcripts committed to the repo. Along the way I turned my working preferences into rules the agent follows (synced for Claude Code, Cursor and Codex): docs move with the code, tests + compile check after every change, project memory read before planning, no commits by the agent.
+--- 2660 chars
+```
+
+## Assistant  <sub>2026-09-06T11:25:06.622Z</sub>
+
+Added under "How it was built". The paragraph now reads:
+
+```
+𝗛𝗼𝘄 𝗶𝘁 𝘄𝗮𝘀 𝗯𝘂𝗶𝗹𝘁
+Entirely with agentic coding in Claude Code, in one session of roughly 90 minutes from brief to working app, with the full transcripts committed to the repo. Along the way I turned my working preferences into rules the agent follows (synced for Claude Code, Cursor and Codex): docs move with the code, tests + compile check after every change, project memory read before planning, no commits by the agent.
+```
+
+The rest of the post is unchanged, the total is 2,660 characters, and the saved copy at `documentation/linkedin-post.txt` is updated.
+
+## User  <sub>2026-09-06T11:25:33.021Z</sub>
+
+provide complete post, don't add in doucmentation folder
+
+## Assistant  <sub>2026-09-06T11:25:40.288Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat documentation/linkedin-post.txt && rm documentation/linkedin-post.txt && echo \"--- file removed from documentation/\"",
+  "description": "Print the final post and remove it from the documentation folder"
+}
+```
+
+## Tool  <sub>2026-09-06T11:25:40.326Z</sub>
+
+**Tool result**
+
+```
+𝗕𝘂𝗶𝗹𝘁 𝗮 𝗥𝗔𝗚 𝗚𝗲𝗻𝗲𝗿𝗮𝘁𝗼𝗿 𝗳𝗼𝗿 𝗗𝗼𝗰𝘂𝗺𝗲𝗻𝘁 𝗣𝗮𝗿𝘀𝗶𝗻𝗴 𝗮𝗻𝗱 𝗖𝗼𝗻𝘃𝗲𝗿𝘀𝗮𝘁𝗶𝗼𝗻 𝘄𝗶𝘁𝗵 𝗗𝗼𝗰𝘂𝗺𝗲𝗻𝘁𝘀
+
+Upload PDFs, DOCX, RTF, HTML, TXT, MD, CSV (even scanned pages and images), and within seconds you can ask questions and get answers that cite the exact file, page and passage. Swap the documents, ask again. Nothing to redeploy - only the LLM URL and key live in .env.
+
+𝗪𝗵𝗮𝘁'𝘀 𝗶𝗻𝘀𝗶𝗱𝗲
+🔎 Hybrid retrieval: fastembed vectors in ChromaDB + BM25 (rank-bm25), fused with Reciprocal Rank Fusion
+✂️ Overlapping, metadata-tagged chunks (page, section, offsets) so every citation is precise
+🧾 Two-tier extraction: PyMuPDF / python-docx / striprtf / BeautifulSoup first, Tesseract OCR strictly as fallback - and the real format is sniffed from the bytes (an RTF saved as .docx just works)
+⚙️ Async ingestion: one upload = one job, every file tracked with a clear status and reason; SHA-256 dedupe
+🖥️ FastAPI REST API + single-page UI + CLI: job and document listings with pagination, scoped questions over selected documents or jobs, and a document show page with a 55/45 viewer + chat where citations are page numbers - click one and the passage lights up in blue
+🔌 Any OpenAI-compatible LLM for generation (OpenAI, OpenRouter, Groq, Ollama, vLLM, Azure...)
+🧪 Own evaluation script with Claude as judge: faithfulness, relevance, correctness, hallucination
+🐳 Docker + docker compose, everything tunable from one config file
+
+𝗛𝗼𝘄 𝗶𝘁 𝘄𝗮𝘀 𝗯𝘂𝗶𝗹𝘁
+Entirely with agentic coding in Claude Code, in one session of roughly 90 minutes from brief to working app, with the full transcripts committed to the repo. Along the way I turned my working preferences into rules the agent follows (synced for Claude Code, Cursor and Codex): docs move with the code, tests + compile check after every change, project memory read before planning, no commits by the agent.
+
+Two things I'd highlight from the process:
+1️⃣ The best fix of the day came from a real failure: a "DOCX" that wouldn't extract turned out to be RTF in disguise. Content sniffing + precise failure reasons + a retry button now make that class of problem self-explanatory.
+2️⃣ Step-level logging everywhere (grep doc=<id> tells the whole story of one file) paid for itself immediately.
+
+𝗦𝘁𝗮𝗰𝗸: Python 3.11 · FastAPI · fastembed · ChromaDB · rank-bm25 · PyMuPDF · Tesseract · anthropic SDK (judge) · Docker
+
+🔗 Repo: https://github.com/shoaibrayeen/rag-generator
+📽️ There's an animated walkthrough and an interactive flow diagram in the docs folder.
+
+Feedback welcome - especially on retrieval quality tricks you've found worth the complexity.
+
+#RAG #LLM #GenAI #Python #FastAPI #ChromaDB #AgenticCoding #ClaudeCode #OpenSource #InformationRetrieval
+--- file removed from documentation/
+```
+
+## Assistant  <sub>2026-09-06T11:26:02.711Z</sub>
+
+The file has been removed from the documentation folder. Here is the complete post, ready to paste into LinkedIn (2,660 characters):
+
+```
+𝗕𝘂𝗶𝗹𝘁 𝗮 𝗥𝗔𝗚 𝗚𝗲𝗻𝗲𝗿𝗮𝘁𝗼𝗿 𝗳𝗼𝗿 𝗗𝗼𝗰𝘂𝗺𝗲𝗻𝘁 𝗣𝗮𝗿𝘀𝗶𝗻𝗴 𝗮𝗻𝗱 𝗖𝗼𝗻𝘃𝗲𝗿𝘀𝗮𝘁𝗶𝗼𝗻 𝘄𝗶𝘁𝗵 𝗗𝗼𝗰𝘂𝗺𝗲𝗻𝘁𝘀
+
+Upload PDFs, DOCX, RTF, HTML, TXT, MD, CSV (even scanned pages and images), and within seconds you can ask questions and get answers that cite the exact file, page and passage. Swap the documents, ask again. Nothing to redeploy - only the LLM URL and key live in .env.
+
+𝗪𝗵𝗮𝘁'𝘀 𝗶𝗻𝘀𝗶𝗱𝗲
+🔎 Hybrid retrieval: fastembed vectors in ChromaDB + BM25 (rank-bm25), fused with Reciprocal Rank Fusion
+✂️ Overlapping, metadata-tagged chunks (page, section, offsets) so every citation is precise
+🧾 Two-tier extraction: PyMuPDF / python-docx / striprtf / BeautifulSoup first, Tesseract OCR strictly as fallback - and the real format is sniffed from the bytes (an RTF saved as .docx just works)
+⚙️ Async ingestion: one upload = one job, every file tracked with a clear status and reason; SHA-256 dedupe
+🖥️ FastAPI REST API + single-page UI + CLI: job and document listings with pagination, scoped questions over selected documents or jobs, and a document show page with a 55/45 viewer + chat where citations are page numbers - click one and the passage lights up in blue
+🔌 Any OpenAI-compatible LLM for generation (OpenAI, OpenRouter, Groq, Ollama, vLLM, Azure...)
+🧪 Own evaluation script with Claude as judge: faithfulness, relevance, correctness, hallucination
+🐳 Docker + docker compose, everything tunable from one config file
+
+𝗛𝗼𝘄 𝗶𝘁 𝘄𝗮𝘀 𝗯𝘂𝗶𝗹𝘁
+Entirely with agentic coding in Claude Code, in one session of roughly 90 minutes from brief to working app, with the full transcripts committed to the repo. Along the way I turned my working preferences into rules the agent follows (synced for Claude Code, Cursor and Codex): docs move with the code, tests + compile check after every change, project memory read before planning, no commits by the agent.
+
+Two things I'd highlight from the process:
+1️⃣ The best fix of the day came from a real failure: a "DOCX" that wouldn't extract turned out to be RTF in disguise. Content sniffing + precise failure reasons + a retry button now make that class of problem self-explanatory.
+2️⃣ Step-level logging everywhere (grep doc=<id> tells the whole story of one file) paid for itself immediately.
+
+𝗦𝘁𝗮𝗰𝗸: Python 3.11 · FastAPI · fastembed · ChromaDB · rank-bm25 · PyMuPDF · Tesseract · anthropic SDK (judge) · Docker
+
+🔗 Repo: https://github.com/shoaibrayeen/rag-generator
+📽️ There's an animated walkthrough and an interactive flow diagram in the docs folder.
+
+Feedback welcome - especially on retrieval quality tricks you've found worth the complexity.
+
+#RAG #LLM #GenAI #Python #FastAPI #ChromaDB #AgenticCoding #ClaudeCode #OpenSource #InformationRetrieval
+```
+
+Attach `documentation/demo.gif` as the post's media for the best effect, and push the repository before posting so the link resolves.
+
+## User  <sub>2026-09-06T11:28:35.125Z</sub>
+
+Now provide a retry options for each documents on document listing, showpage and homepage, for no completed and no duplicate docs and update flow.html and gif accordingly to show failed doc can be retries
+
+once all done
+provide linkedin updated post
+
+## Assistant  <sub>2026-09-06T11:29:14.509Z</sub>
+
+I'll extend retry to every document that is neither COMPLETED nor DUPLICATE, with sensible semantics per status, add the button to all three places, update the flow page and re-record the GIF with a retry step, then update the post.
+
+## Assistant  <sub>2026-09-06T11:30:19.978Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "set -e; cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\n\n# ---------------- config\np = Path(\"app/config.py\"); s = p.read_text()\ns = s.replace('''    LOG_LEVEL: str = \"INFO\"''', '''    RETRY_STALE_SECONDS: int = 120           # a QUEUED/PROCESSING document older than this may be retried (stuck worker)\n    LOG_LEVEL: str = \"INFO\"''')\np.write_text(s)\n\n# ---------------- extractors: sniff rescues unknown extensions\np = Path(\"app/ingest/extractors.py\"); s = p.read_text()\ns = s.replace('''    by_ext = file_type_for(path.name)\n    if by_ext is None or by_ext not in EXTRACTORS:\n        raise UnsupportedFormat(\n            f\"Unsupported file type '{path.suffix}'. Supported: {sorted(SUPPORTED_EXTENSIONS)}\")\n    if not settings.SNIFF_CONTENT:\n        return by_ext, None\n    sniffed = sniff_type(path)''', '''    by_ext = file_type_for(path.name)\n    sniffed = sniff_type(path) if settings.SNIFF_CONTENT else None\n    if by_ext is None or by_ext not in EXTRACTORS:\n        if sniffed in EXTRACTORS:  # unknown extension but recognisable content (e.g. a PDF named .bin)\n            note = f\"extension '{path.suffix or '(none)'}' is not registered but content is {sniffed.upper()}; read as {sniffed}\"\n            log.info(\"[extract] %s: %s\", path.name, note)\n            return sniffed, note\n        raise UnsupportedFormat(\n            f\"Unsupported file type '{path.suffix}'. Supported: {sorted(SUPPORTED_EXTENSIONS)}\")\n    if not settings.SNIFF_CONTENT:\n        return by_ext, None''')\np.write_text(s)\n\n# ---------------- main.py: store unsupported files, sniff at upload, generalised retry\np = Path(\"app/main.py\"); s = p.read_text()\ns = s.replace(\"from app.ingest.extractors import file_type_for, ocr_available\",\n              \"from app.ingest.extractors import EXTRACTORS, file_type_for, ocr_available, sniff_type\")\ns = s.replace('''        sha = hashlib.sha256(data).hexdigest() if data else None  # computed at upload time, kept on every record\n\n        if kind is None:\n            record(doc_id, name, \"EXTRACTION_NOT_SUPPORTED\", sha256=sha,\n                   reason=f\"Extension '{Path(name).suffix or '(none)'}' is not supported. \"\n                          f\"Supported: {' '.join(sorted(SUPPORTED_EXTENSIONS))}\")\n            continue\n        if not data:\n            record(doc_id, name, \"EMPTY_FILE\", file_type=kind, reason=\"The uploaded file is 0 bytes\")\n            continue\n        if len(data) > limit:\n            record(doc_id, name, \"UPLOAD_FAILED\", file_type=kind, sha256=sha,\n                   reason=f\"UPLOAD FAILED: file is larger than {settings.MAX_UPLOAD_MB} MB\")\n            continue\n\n        # 1. upload step: store the file\n        path = settings.uploads_dir / f\"{doc_id}_{name}\"\n        try:\n            path.write_bytes(data)\n        except OSError as exc:\n            record(doc_id, name, \"UPLOAD_FAILED\", file_type=kind, sha256=sha,\n                   reason=f\"UPLOAD FAILED: could not store file ({exc})\")\n            continue\n        log.debug(\"[upload] stored %s bytes=%d sha256=%s\", ctx(job=job_id, doc=doc_id, file=name), len(data), sha)\n''', '''        sha = hashlib.sha256(data).hexdigest() if data else None  # computed at upload time, kept on every record\n\n        if not data:\n            record(doc_id, name, \"EMPTY_FILE\", file_type=kind, reason=\"The uploaded file is 0 bytes\")\n            continue\n        if len(data) > limit:\n            record(doc_id, name, \"UPLOAD_FAILED\", file_type=kind, sha256=sha,\n                   reason=f\"UPLOAD FAILED: file is larger than {settings.MAX_UPLOAD_MB} MB\")\n            continue\n\n        # 1. upload step: store the file (also for unsupported types, so a retry can re-check them later)\n        path = settings.uploads_dir / f\"{doc_id}_{name}\"\n        try:\n            path.write_bytes(data)\n        except OSError as exc:\n            record(doc_id, name, \"UPLOAD_FAILED\", file_type=kind, sha256=sha,\n                   reason=f\"UPLOAD FAILED: could not store file ({exc})\")\n            continue\n        log.debug(\"[upload] stored %s bytes=%d sha256=%s\", ctx(job=job_id, doc=doc_id, file=name), len(data), sha)\n\n        if kind is None:\n            sniffed = sniff_type(path) if settings.SNIFF_CONTENT else None\n            if sniffed in EXTRACTORS:\n                kind = sniffed  # unknown extension, recognisable content: process it\n            else:\n                record(doc_id, name, \"EXTRACTION_NOT_SUPPORTED\", sha256=sha,\n                       reason=f\"Extension '{Path(name).suffix or '(none)'}' is not supported and the content was not \"\n                              f\"recognised. Supported: {' '.join(sorted(SUPPORTED_EXTENSIONS))}\")\n                continue\n''')\n# generalised retry\nold_start = s.index('@app.post(\"/api/documents/{doc_id}/retry\"')\nold_end = s.index('@app.delete(\"/api/documents/{doc_id}\", status_code=204)')\ns = s[:old_start] + '''@app.post(\"/api/documents/{doc_id}/retry\", response_model=DocumentInfo, status_code=202)\ndef retry_document(doc_id: str, background: BackgroundTasks):\n    \"\"\"Re-process a document that is neither COMPLETED nor DUPLICATE.\n\n    FAILED / EXTRACTION_NOT_SUPPORTED: the stored file is checked again (extension + content sniffing)\n    and re-queued. QUEUED / PROCESSING: only if the record has not moved for RETRY_STALE_SECONDS\n    (stuck worker), otherwise 409. EMPTY_FILE / UPLOAD_FAILED: nothing was stored → 410, upload again.\n    \"\"\"\n    from datetime import datetime, timezone\n\n    doc = jobs.get(doc_id)\n    if doc is None:\n        raise HTTPException(404, \"document not found\")\n    if doc.status == \"COMPLETED\":\n        raise HTTPException(409, \"document is already COMPLETED; nothing to retry\")\n    if doc.status == \"DUPLICATE\":\n        raise HTTPException(409, f\"document is a DUPLICATE of {doc.duplicate_of}; ask that document instead\")\n    if doc.status in (\"QUEUED\", \"PROCESSING\"):\n        age = (datetime.now(timezone.utc) - datetime.fromisoformat(doc.updated_at)).total_seconds()\n        if age < settings.RETRY_STALE_SECONDS:\n            raise HTTPException(409, f\"document is {doc.status} (updated {int(age)}s ago); wait for it to finish \"\n                                     f\"or retry after {settings.RETRY_STALE_SECONDS}s of no progress\")\n    path = next(iter(settings.uploads_dir.glob(f\"{doc_id}_*\")), None)\n    if path is None:\n        raise HTTPException(410, \"the file was not stored (empty or failed upload); upload it again\")\n\n    kind = file_type_for(doc.filename)\n    if kind is None:\n        sniffed = sniff_type(path) if settings.SNIFF_CONTENT else None\n        if sniffed in EXTRACTORS:\n            kind = sniffed\n    log.info(\"[retry] %s previous=%s type=%s\", ctx(job=doc.job_id, doc=doc_id, file=doc.filename), doc.status, kind)\n    if kind is None:\n        return jobs.update(doc_id, status=\"EXTRACTION_NOT_SUPPORTED\", stage=None,\n                           reason=f\"Retried: extension '{Path(doc.filename).suffix or '(none)'}' is still not supported \"\n                                  f\"and the content was not recognised. Supported: {' '.join(sorted(SUPPORTED_EXTENSIONS))}\")\n    if doc.status == \"COMPLETED\":  # defensive: never re-index twice\n        raise HTTPException(409, \"already indexed\")\n    doc = jobs.update(doc_id, status=\"QUEUED\", stage=None, file_type=kind, pages=0, chunks=0, ocr_pages=0,\n                      reason=f\"Retry requested (was {doc.status}); waiting for the background worker\")\n    background.add_task(pipeline.run, doc_id, path)\n    return doc\n\n\n''' + s[old_end:]\ns = s.replace('version=\"0.9.1\"', 'version=\"0.10.0\"')\np.write_text(s)\n\n# ---------------- UI: retry buttons everywhere for non-COMPLETED / non-DUPLICATE\np = Path(\"app/static/index.html\"); s = p.read_text()\ns = s.replace('''      <td style=\"white-space:nowrap\">${d.status === 'FAILED' ? `<button class=\"small secondary\" title=\"Process the stored file again\" onclick=\"retryDoc('${d.doc_id}')\">retry</button> ` : ''}${TERMINAL.includes(d.status) ? `<button class=\"del\" title=\"Delete\" onclick=\"deleteDoc('${d.doc_id}')\">✕</button>` : ''}</td>''',\n'''      <td style=\"white-space:nowrap\">${!['COMPLETED', 'DUPLICATE'].includes(d.status) ? `<button class=\"small secondary\" title=\"${retryTitle(d)}\" onclick=\"retryDoc('${d.doc_id}')\">retry</button> ` : ''}${TERMINAL.includes(d.status) ? `<button class=\"del\" title=\"Delete\" onclick=\"deleteDoc('${d.doc_id}')\">✕</button>` : ''}</td>''')\ns = s.replace('''async function retryDoc(id) {\n  try { await api(`/api/documents/${id}/retry`, { method: 'POST' }); await refresh(); }\n  catch (e) { $('uploadErr').textContent = e.message; }\n}''', '''function retryTitle(d) {\n  return {FAILED: 'Process the stored file again with the current extractors',\n          EXTRACTION_NOT_SUPPORTED: 'Re-check the stored file (extension and content) and process it if it is now supported',\n          QUEUED: 'Re-queue if the worker has not made progress for a while',\n          PROCESSING: 'Re-queue if the worker has not made progress for a while',\n          EMPTY_FILE: 'Nothing was stored for an empty file — the retry will ask you to upload again',\n          UPLOAD_FAILED: 'Nothing was stored — the retry will ask you to upload again'}[d.status] || 'Retry';\n}\nasync function retryDoc(id) {\n  $('uploadErr').textContent = '';\n  try { const d = await api(`/api/documents/${id}/retry`, { method: 'POST' }); await refresh(); if (d.status !== 'QUEUED') $('uploadErr').textContent = `${d.filename}: ${d.reason}`; }\n  catch (e) { $('uploadErr').textContent = `Retry not possible: ${e.message}`; }\n}''')\np.write_text(s)\n\np = Path(\"app/static/documents.html\"); s = p.read_text()\ns = s.replace('<thead><tr><th>Doc ID</th><th>Name</th><th>Type</th><th>Job</th><th>Pages</th><th>Chunks</th><th>Status</th><th>Reason</th><th>Updated</th></tr></thead>',\n              '<thead><tr><th>Doc ID</th><th>Name</th><th>Type</th><th>Job</th><th>Pages</th><th>Chunks</th><th>Status</th><th>Reason</th><th>Updated</th><th></th></tr></thead>')\ns = s.replace('<tbody id=\"rows\"><tr><td colspan=\"9\" class=\"muted\">Loading…</td></tr></tbody>', '<tbody id=\"rows\"><tr><td colspan=\"10\" class=\"muted\">Loading…</td></tr></tbody>')\ns = s.replace(\"'<tr><td colspan=\\\"9\\\" class=\\\"muted\\\">No documents match.</td></tr>'\", \"'<tr><td colspan=\\\"10\\\" class=\\\"muted\\\">No documents match.</td></tr>'\")\ns = s.replace('''        <td class=\"muted\">${esc(d.updated_at.replace('T', ' ').slice(0, 19))}</td>\n      </tr>`).join('')''', '''        <td class=\"muted\">${esc(d.updated_at.replace('T', ' ').slice(0, 19))}</td>\n        <td style=\"white-space:nowrap\">${!['COMPLETED', 'DUPLICATE'].includes(d.status) ? `<button class=\"small secondary\" title=\"Re-process this document\" onclick=\"event.stopPropagation(); retryDoc('${d.doc_id}')\">retry</button>` : ''}</td>\n      </tr>`).join('')''')\ns = s.replace(\"function chips() {\", '''async function retryDoc(id) {\n  $('err').textContent = '';\n  try { const d = await api(`/api/documents/${id}/retry`, {method: 'POST'}); if (d.status !== 'QUEUED') $('err').textContent = `${d.filename}: ${d.reason}`; load(); }\n  catch (e) { $('err').textContent = `Retry not possible: ${e.message}`; }\n}\nfunction chips() {''')\np.write_text(s)\n\np = Path(\"app/static/document.html\"); s = p.read_text()\ns = s.replace(\"\"\"    if (doc.status === 'FAILED') extra = `<br><button class=\"small\" id=\"retry\">Retry processing</button>`;\"\"\",\n              \"\"\"    if (!['DUPLICATE', 'COMPLETED'].includes(doc.status)) extra += `<br><button class=\"small\" id=\"retry\">Retry processing</button> <span class=\"muted\" id=\"retryMsg\">${doc.status === 'FAILED' || doc.status === 'EXTRACTION_NOT_SUPPORTED' ? 'Re-checks the stored file with the current extractors.' : (doc.status === 'QUEUED' || doc.status === 'PROCESSING') ? 'Only if the worker has stalled.' : 'Nothing was stored for this file; you will be asked to upload it again.'}</span>`;\"\"\")\ns = s.replace(\"\"\"    if (doc.status === 'FAILED') $('retry').onclick = async () => { try { await api(`/api/documents/${docId}/retry`, {method: 'POST'}); load(); } catch (e) { alert(e.message); } };\"\"\",\n              \"\"\"    const rb = $('retry'); if (rb) rb.onclick = async () => { try { const d = await api(`/api/documents/${docId}/retry`, {method: 'POST'}); if (d.status !== 'QUEUED') $('retryMsg').textContent = d.reason; load(); } catch (e) { $('retryMsg').textContent = `Retry not possible: ${e.message}`; } };\"\"\")\np.write_text(s)\n\n# ---------------- tests\np = Path(\"tests/test_api.py\"); s = p.read_text()\ns = s.replace('''    # retry: only FAILED documents; simulate a failure then retry from the stored file\n    r = client.post(f\"/api/documents/{doc['doc_id']}/retry\")\n    assert r.status_code == 409''', '''    # retry: not for COMPLETED documents\n    r = client.post(f\"/api/documents/{doc['doc_id']}/retry\")\n    assert r.status_code == 409 and \"COMPLETED\" in r.json()[\"detail\"]''')\ns = s.replace('''    rejected = next(d for d in job[\"documents\"] if d[\"filename\"] == \"x.exe\")\n    assert client.get(f\"/api/documents/{rejected['doc_id']}/file\").status_code == 410  # never stored''',\n'''    rejected = next(d for d in job[\"documents\"] if d[\"filename\"] == \"x.exe\")\n    assert client.get(f\"/api/documents/{rejected['doc_id']}/file\").status_code == 200  # unsupported files are stored too''')\ns += '''\n\ndef test_retry_semantics_per_status(client):\n    job = _upload(client, [(\"junk.xyz\", b\"not recognisable\"), (\"empty.txt\", b\"\"), (\"policy.md\", POLICY),\n                           (\"copy.md\", POLICY)], \"retry\")\n    done = _wait_job(client, job[\"job_id\"])\n    by = {d[\"filename\"]: d for d in done[\"documents\"]}\n    # unsupported: the file is stored, retry re-checks it and it stays unsupported with a \"Retried\" reason\n    r = client.post(f\"/api/documents/{by['junk.xyz']['doc_id']}/retry\")\n    assert r.status_code == 202 and r.json()[\"status\"] == \"EXTRACTION_NOT_SUPPORTED\" and r.json()[\"reason\"].startswith(\"Retried\")\n    # empty: nothing stored -> 410\n    assert client.post(f\"/api/documents/{by['empty.txt']['doc_id']}/retry\").status_code == 410\n    # completed / duplicate -> 409\n    assert client.post(f\"/api/documents/{by['policy.md']['doc_id']}/retry\").status_code == 409\n    r = client.post(f\"/api/documents/{by['copy.md']['doc_id']}/retry\")\n    assert r.status_code == 409 and \"DUPLICATE\" in r.json()[\"detail\"]\n    client.delete(\"/api/collections/retry\")\n\n\ndef test_unknown_extension_with_recognisable_content_is_processed(client):\n    import fitz\n\n    pdf = fitz.open(); page = pdf.new_page(); page.insert_text((72, 72), \"Quarterly report: revenue grew 12 percent.\")\n    data = pdf.tobytes(); pdf.close()\n    job = _upload(client, [(\"report.bin\", data)], \"sniff\")\n    doc = _wait_job(client, job[\"job_id\"])[\"documents\"][0]\n    assert doc[\"status\"] == \"COMPLETED\", doc\n    assert doc[\"file_type\"] == \"pdf\" and \"content is PDF\" in doc[\"reason\"]\n    client.delete(\"/api/collections/sniff\")\n\n\ndef test_retry_stale_queued(client, monkeypatch):\n    \"\"\"A QUEUED record that has not moved for RETRY_STALE_SECONDS can be re-queued; a fresh one cannot.\"\"\"\n    from app import jobs as registry\n    from app.config import settings\n\n    job = _upload(client, [(\"stuck.txt\", b\"some text that will be indexed\")], \"stale\")\n    doc = _wait_job(client, job[\"job_id\"])[\"documents\"][0]\n    # simulate a stuck worker: force QUEUED with an old timestamp\n    registry.update(doc[\"doc_id\"], status=\"QUEUED\", stage=None)\n    assert client.post(f\"/api/documents/{doc['doc_id']}/retry\").status_code == 409  # too fresh\n    monkeypatch.setattr(settings, \"RETRY_STALE_SECONDS\", 0)\n    r = client.post(f\"/api/documents/{doc['doc_id']}/retry\")\n    assert r.status_code == 202 and r.json()[\"status\"] == \"QUEUED\"\n    # the re-run re-indexes cleanly (old chunks are replaced, not duplicated)\n    d = _wait_job(client, job[\"job_id\"])[\"documents\"][0]\n    assert d[\"status\"] == \"COMPLETED\"\n    chunks = client.get(\"/api/chunks\", params={\"collection\": \"stale\", \"doc_id\": doc[\"doc_id\"]}).json()\n    assert len(chunks) == d[\"chunks\"]\n    client.delete(\"/api/collections/stale\")\n'''\np.write_text(s)\nprint(\"code updated\")\nEOF\n.venv/bin/python -m compileall -q app cli evaluation scripts tests && .venv/bin/python -m pytest -q 2>&1 | grep -E \"^(FAILED|ERROR)|passed|failed|Error\" | head",
+  "description": "Generalise retry per status, store unsupported files, sniff unknown extensions, add retry buttons to all pages, add tests",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T11:30:21.273Z</sub>
+
+**Tool result**
+
+```
+code updated
+37 passed, 6 warnings in 0.99s
+```
+
+## Assistant  <sub>2026-09-06T11:30:40.080Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"app/ingest/pipeline.py\"); s = p.read_text()\ns = s.replace('''        with timed(log, \"store\", **ids):\n            vector_store.add_chunks(''', '''        with timed(log, \"store\", **ids):\n            vector_store.delete_document(doc.collection, doc_id)  # a retry must replace, never duplicate, chunks\n            vector_store.add_chunks(''')\np.write_text(s); print(\"pipeline patched\")\nEOF\n.venv/bin/python -m compileall -q app && .venv/bin/python -m pytest -q 2>&1 | grep -E \"passed|failed\"",
+  "description": "Make retried documents replace their old chunks; rerun tests",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T11:30:41.255Z</sub>
+
+**Tool result**
+
+```
+pipeline patched
+37 passed, 6 warnings in 0.89s
+```
+
+## Assistant  <sub>2026-09-06T11:31:00.725Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"documentation/flow.html\"); s = p.read_text()\n# statuses table: add Retry column\ns = s.replace('''    <thead><tr><th>Status</th><th>Meaning</th><th>Processed?</th><th>Reason column shows</th></tr></thead>''',\n              '''    <thead><tr><th>Status</th><th>Meaning</th><th>Processed?</th><th>Reason column shows</th><th>Retry?</th></tr></thead>''')\nrows = {\n \"QUEUED\": \"only if stalled for RETRY_STALE_SECONDS (stuck worker) → re-queued\",\n \"DUPLICATE\": \"no — use the original document\",\n \"PROCESSING\": \"only if stalled for RETRY_STALE_SECONDS → re-queued\",\n \"COMPLETED\": \"no — already indexed\",\n \"FAILED\": \"<b>yes</b> — stored file is processed again with the current extractors\",\n \"EMPTY_FILE\": \"no file stored → asks you to upload again (410)\",\n \"EXTRACTION_NOT_SUPPORTED\": \"<b>yes</b> — stored file is re-checked (extension + content sniffing); processed if now recognised\",\n \"UPLOAD_FAILED\": \"no file stored → asks you to upload again (410)\",\n}\nimport re\nfor st, txt in rows.items():\n    # append a cell to the row whose first cell is the status pill\n    pat = re.compile(r'(<tr><td><span class=\"pill[^\"]*\">' + st + r'</span></td>.*?)(</tr>)', re.S)\n    s, n = pat.subn(lambda m: m.group(1) + f\"<td>{txt}</td>\" + m.group(2), s, count=1)\n    assert n == 1, st\ns = s.replace(\"Terminal statuses (no further change): everything except QUEUED and PROCESSING. Poll <code>GET /api/jobs/{job_id}</code> until the status is terminal.\",\n              \"Terminal statuses (no further change): everything except QUEUED and PROCESSING. Poll <code>GET /api/jobs/{job_id}</code> until the status is terminal. <b>Retry</b> (<code>POST /api/documents/{id}/retry</code>, the <i>retry</i> button on the home page, /documents and the show page, or <code>rag retry</code>) is offered for every document that is not COMPLETED or DUPLICATE; the server applies the rules in the last column.\")\n# ingest COMPLETED step branches\ns = s.replace(\"['document FAILED','bad','PROCESSING FAILED: <exception>'],\", \"['document FAILED','bad','PROCESSING FAILED: <exception> → retry button re-processes the stored file'],\")\n# pages tab step 5 branches\ns = s.replace(\"['FAILED','bad','reason names the cause; retry available'],['other','bad','EMPTY_FILE · EXTRACTION_NOT_SUPPORTED · UPLOAD_FAILED — recorded, never processed']]},\",\n              \"['FAILED','bad','reason names the cause; retry re-processes the stored file'],['EXTRACTION_NOT_SUPPORTED','bad','file stored anyway; retry re-checks it once a format is added'],['EMPTY_FILE / UPLOAD_FAILED','bad','nothing stored; retry asks you to upload again']]},\")\n# pages tab step 4: mention retry column\ns = s.replace(\"Filters for collection, status and job are kept in the URL (?job_id=&status=&page=) so a filtered view can be shared. Clicking a row opens the show page.',\",\n              \"Filters for collection, status and job are kept in the URL (?job_id=&status=&page=) so a filtered view can be shared. Every non-COMPLETED, non-DUPLICATE row has a retry button. Clicking a row opens the show page.',\")\n# show tab step 6\ns = s.replace(\"{t:'Not applicable states', d:'If the document is not COMPLETED the chat is disabled and a banner explains why: QUEUED/PROCESSING refresh automatically; FAILED shows the reason and a Retry button; DUPLICATE shows the original document\\\\\\\\'s show-page URL to ask there instead; EMPTY_FILE / EXTRACTION_NOT_SUPPORTED / UPLOAD_FAILED explain that nothing was ever processed.',\",\n              \"{t:'Not applicable states', d:'If the document is not COMPLETED the chat is disabled and a banner explains why, with a Retry button for every status except DUPLICATE: QUEUED/PROCESSING refresh automatically (retry only when stalled); FAILED and EXTRACTION_NOT_SUPPORTED re-process the stored file; EMPTY_FILE / UPLOAD_FAILED explain that nothing was stored and ask for a new upload; DUPLICATE shows the original document\\\\\\\\'s show-page URL to ask there instead.',\")\ns = s.replace(\"branches:[['QUEUED / PROCESSING','warn','auto-refresh until terminal'],['FAILED','bad','reason + Retry'],['DUPLICATE','warn','→ /documents/<original id>'],['others','bad','never processed; nothing to show']]},\",\n              \"branches:[['QUEUED / PROCESSING','warn','auto-refresh; retry only if stalled'],['FAILED / EXTRACTION_NOT_SUPPORTED','bad','reason + Retry (re-processes the stored file)'],['DUPLICATE','warn','→ /documents/<original id>'],['EMPTY_FILE / UPLOAD_FAILED','bad','nothing stored; retry asks to upload again']]},\")\np.write_text(s); print(\"flow.html patched; Retry? column present:\", s.count(\"<th>Retry?</th>\"))\nEOF",
+  "description": "Update flow.html: retry column in the status table and retry mentions in the steps"
+}
+```
+
+## Tool  <sub>2026-09-06T11:31:00.779Z</sub>
+
+**Tool result**
+
+```
+flow.html patched; Retry? column present: 1
+```
+
+## Assistant  <sub>2026-09-06T11:31:11.203Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"scripts/make_demo_gif.py\"); s = p.read_text()\ns = s.replace(\"visits /jobs and /documents, opens a show page, asks in the chat, clicks a page citation to\\nhighlight the passage, and finally shows a DUPLICATE document's not-applicable page.\",\n              \"visits /jobs and /documents, retries a failed/unsupported document, opens a show page, asks in\\nthe chat, clicks a page citation to highlight the passage, and finally shows a DUPLICATE document's\\nnot-applicable page.\")\ns = s.replace('''            page.select_option(\"#status\", \"DUPLICATE\")\n            page.wait_for_timeout(900)\n            snap(page, \"Filter by status (here DUPLICATE); click a job id to see that job's files, click a row for the show page\",\n                 step=\"4 / 6 · Documents page\", ms=2800)\n''', '''            page.select_option(\"#status\", \"DUPLICATE\")\n            page.wait_for_timeout(900)\n            snap(page, \"Filter by status (here DUPLICATE); click a job id to see that job's files, click a row for the show page\",\n                 step=\"4 / 7 · Documents page\", ms=2800)\n\n            # ---------------- 4b. retry a document that is not COMPLETED / DUPLICATE\n            page.select_option(\"#status\", \"EXTRACTION_NOT_SUPPORTED\")\n            page.wait_for_timeout(900)\n            retry_btn = page.locator(\"#rows button\", has_text=\"retry\").first\n            snap(page, \"Every document that is not COMPLETED or DUPLICATE has a retry button (also on the home page and the show page)\",\n                 mark=center(retry_btn), step=\"5 / 7 · Retry\", ms=2600)\n            retry_btn.click()\n            page.wait_for_timeout(1500)\n            snap(page, \"Retry re-checks the stored file with the current extractors (extension + content sniffing) and re-queues it; the reason tells the outcome\",\n                 step=\"5 / 7 · Retry\", ms=3600)\n            page.select_option(\"#status\", \"\")\n            page.wait_for_timeout(600)\n''')\ns = s.replace('step=\"5 / 6 · Show page\"', 'step=\"6 / 7 · Show page\"').replace('step=\"6 / 6 · Not applicable\"', 'step=\"7 / 7 · Not applicable\"')\nfor a, b in (('step=\"1 / 6 · Home\"', 'step=\"1 / 7 · Home\"'), ('step=\"2 / 6 · Home\"', 'step=\"2 / 7 · Home\"'),\n             ('step=\"3 / 6 · Jobs page\"', 'step=\"3 / 7 · Jobs page\"'), ('step=\"4 / 6 · Documents page\"', 'step=\"4 / 7 · Documents page\"')):\n    s = s.replace(a, b)\np.write_text(s); print(\"gif script patched; steps:\", s.count(\"/ 7 ·\"))\nEOF\n.venv/bin/python -m compileall -q scripts && echo ok",
+  "description": "Add a retry step to the GIF recorder"
+}
+```
+
+## Tool  <sub>2026-09-06T11:31:11.277Z</sub>
+
+**Tool result**
+
+```
+gif script patched; steps: 19
+ok
+```
+
+## Assistant  <sub>2026-09-06T11:31:42.685Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"README.md\"); s = p.read_text()\ns = s.replace(\"\"\"- **Retry**: a `FAILED` document can be re-processed from its stored file (`POST /api/documents/{id}/retry`,\n  UI *retry* button, `rag retry <doc_id>`) — useful after installing Tesseract or upgrading the extractors.\"\"\",\n\"\"\"- **Retry** (`POST /api/documents/{id}/retry`, the *retry* button on the home page, `/documents` and the show page,\n  `rag retry <doc_id>`) is offered for every document that is not `COMPLETED` or `DUPLICATE`:\n  `FAILED` and `EXTRACTION_NOT_SUPPORTED` re-check the stored file (extension + content sniffing) and re-queue it\n  (unsupported files are stored too, so adding a format later makes them retryable); `QUEUED`/`PROCESSING` only when\n  the record has not moved for `RETRY_STALE_SECONDS` (stuck worker), otherwise 409; `EMPTY_FILE`/`UPLOAD_FAILED`\n  have nothing stored and answer 410 asking for a new upload. A retried document replaces its old chunks.\n- **Unknown extensions with recognisable content** (e.g. a PDF named `.bin`) are processed as the sniffed type.\"\"\")\ns = s.replace(\"| `POST` | `/api/documents/{doc_id}/retry` | re-queue a `FAILED` document from its stored file → **202** |\",\n              \"| `POST` | `/api/documents/{doc_id}/retry` | re-process a non-`COMPLETED`, non-`DUPLICATE` document from its stored file → **202** (409 completed/duplicate/still running, 410 nothing stored) |\")\ns = s.replace(\"| `LOG_LEVEL` / `SNIFF_CONTENT` | `INFO` / true | log verbosity (`DEBUG` adds per-batch detail); detect the real format from file bytes |\",\n              \"| `LOG_LEVEL` / `SNIFF_CONTENT` | `INFO` / true | log verbosity (`DEBUG` adds per-batch detail); detect the real format from file bytes |\\n| `RETRY_STALE_SECONDS` | 120 | a `QUEUED`/`PROCESSING` document older than this may be retried (stuck worker) |\")\ns = s.replace(\"| `EXTRACTION_NOT_SUPPORTED` | extension not in `SUPPORTED_EXTENSIONS` | no | the extension and the supported list |\",\n              \"| `EXTRACTION_NOT_SUPPORTED` | extension not in `SUPPORTED_EXTENSIONS` and content not recognised (file kept for retry) | no | the extension and the supported list |\")\ns = s.replace(\"3. **Documents** — DOC ID · NAME · PAGES · STATUS · REASON for every file, 5 per page with prev/next (job id shown under the doc id); duplicates link to their original; tick `COMPLETED` documents to ask over them; delete finished ones with ✕.\",\n              \"3. **Documents** — DOC ID · NAME · PAGES · STATUS · REASON for every file, 5 per page with prev/next (job id shown under the doc id); duplicates link to their original; tick `COMPLETED` documents to ask over them; *retry* any document that is not COMPLETED/DUPLICATE; delete finished ones with ✕.\")\np.write_text(s)\n\np = Path(\".env.example\"); s = p.read_text()\ns = s.replace(\"#LOG_LEVEL=INFO\", \"#RETRY_STALE_SECONDS=120   # QUEUED/PROCESSING documents older than this can be retried (stuck worker)\\n#LOG_LEVEL=INFO\")\np.write_text(s)\n\np = Path(\"documentation/architecture.md\"); s = p.read_text()\ns = s.replace(\"`POST /api/documents/{doc_id}/retry` re-queues a FAILED document from its stored file.\",\n              \"`POST /api/documents/{doc_id}/retry` re-processes any document that is not COMPLETED or DUPLICATE: FAILED and\\nEXTRACTION_NOT_SUPPORTED re-check the stored file (extension, then content sniffing) and re-queue; QUEUED/PROCESSING\\nonly when stale for `RETRY_STALE_SECONDS`; EMPTY_FILE/UPLOAD_FAILED have no stored file (410). The pipeline deletes\\nthe document's previous chunks before storing new ones, so a retry replaces rather than duplicates.\")\ns = s.replace(\"                                                        │  extension ∉ SUPPORTED_EXTENSIONS ──► EXTRACTION_NOT_SUPPORTED\\n\",\n              \"\")\ns = s.replace(\"                                                        │  upload step: store to data/uploads/<doc_id>_<name> ──fail──► UPLOAD_FAILED\\n\",\n              \"                                                        │  upload step: store to data/uploads/<doc_id>_<name> ──fail──► UPLOAD_FAILED\\n                                                        │  extension ∉ SUPPORTED_EXTENSIONS and content not sniffable ──► EXTRACTION_NOT_SUPPORTED (file kept for retry)\\n\")\np.write_text(s)\n\np = Path(\"documentation/changelog.html\"); s = p.read_text()\nentry = \"\"\"<section class=\"rel\">\n  <h2>0.10.0 <time>2026-09-06</time></h2>\n  <p><span class=\"tag added\">Added</span> Retry for every document that is not COMPLETED or DUPLICATE, everywhere a document is listed.</p>\n  <ul>\n    <li><span class=\"tag changed\">Changed</span> <code>POST /api/documents/{id}/retry</code> now applies per-status rules: FAILED and EXTRACTION_NOT_SUPPORTED re-check the stored file (extension + content sniffing) and re-queue; QUEUED/PROCESSING only when stalled for <code>RETRY_STALE_SECONDS</code> (409 otherwise); EMPTY_FILE/UPLOAD_FAILED → 410 (nothing stored); COMPLETED/DUPLICATE → 409.</li>\n    <li><span class=\"tag added\">Added</span> <i>retry</i> buttons on the home page Documents panel, the <code>/documents</code> listing (new actions column) and the show page banner, with tooltips explaining what will happen; outcomes that are not QUEUED show their reason inline.</li>\n    <li><span class=\"tag changed\">Changed</span> Files with unsupported extensions are stored too (so they can be retried once a format is added), and an unknown extension with recognisable content (e.g. a PDF named <code>.bin</code>) is processed as the sniffed type at upload and on retry.</li>\n    <li><span class=\"tag fixed\">Fixed</span> A retried document replaces its previous chunks instead of adding duplicates.</li>\n    <li><span class=\"tag docs\">Docs</span> Flow page: “Retry?” column in the status table and retry mentions in the ingest, pages and show-page steps; demo GIF re-recorded with a retry step (17 → 19 frames).</li>\n  </ul>\n</section>\n\n<section class=\"rel\">\n  <h2>0.9.1 <time>2026-09-06</time></h2>\"\"\"\ns = s.replace('<section class=\"rel\">\\n  <h2>0.9.1 <time>2026-09-06</time></h2>', entry, 1)\np.write_text(s)\n\np = Path(\"memory.md\"); s = p.read_text()\ns = s.replace(\"  v0.9.1 flow.html tabs for pages + show page, `documentation/demo.gif` recorded by `scripts/make_demo_gif.py` (Playwright).\",\n              \"  v0.9.1 flow.html tabs for pages + show page, `documentation/demo.gif` recorded by `scripts/make_demo_gif.py` (Playwright);\\n  v0.10.0 retry for every non-COMPLETED/non-DUPLICATE document (per-status rules), unsupported files stored, sniffing rescues unknown extensions.\")\ns = s.replace(\"## Environment gotchas\", \"- **Retry rules** (user requirement: retry on every non-completed, non-duplicate doc): FAILED/EXTRACTION_NOT_SUPPORTED\\n  re-check the stored file; QUEUED/PROCESSING only if stale (`RETRY_STALE_SECONDS`); EMPTY_FILE/UPLOAD_FAILED → 410.\\n  Pipeline deletes a doc's chunks before re-adding so retries never duplicate vectors.\\n\\n## Environment gotchas\")\np.write_text(s)\np = Path(\"plans/2026-09-06-rag-generator-plan.md\"); s = p.read_text()\ns = s.replace(\"| 10 | **Pagination**\", \"| 16 | Retry on every document that is not COMPLETED/DUPLICATE (home page, /documents, show page) with per-status rules; unsupported files stored; flow + GIF updated | `app/main.py`, `app/static/*.html`, `documentation/flow.html`, `scripts/make_demo_gif.py` |\\n| 10 | **Pagination**\")\np.write_text(s)\nprint(\"docs ok\")\nEOF\n.venv/bin/python scripts/build_docs.py >/dev/null && .venv/bin/python scripts/sync_rules.py --check",
+  "description": "Document retry semantics, changelog 0.10.0, config, memory, plan; rebuild docs"
+}
+```
+
+## Tool  <sub>2026-09-06T11:31:42.812Z</sub>
+
+**Tool result**
+
+```
+docs ok
+rules in sync
+```
+
+## Assistant  <sub>2026-09-06T11:31:42.962Z</sub>
+
+**Tool call — `mcp__Claude_Browser__preview_stop`**
+
+```json
+{
+  "serverId": "26334907-0710-47e5-ae52-aad51f8d512f"
+}
+```
+
+## Tool  <sub>2026-09-06T11:31:45.257Z</sub>
+
+**Tool result**
+
+```
+Server 26334907-0710-47e5-ae52-aad51f8d512f stopped
+```
+
+## Assistant  <sub>2026-09-06T11:31:54.512Z</sub>
+
+**Tool call — `mcp__Claude_Browser__preview_start`**
+
+```json
+{
+  "name": "rag-api"
+}
+```
+
+## Tool  <sub>2026-09-06T11:31:59.616Z</sub>
+
+**Tool result**
+
+```
+{
+  "serverId": "6cc87194-03b8-43ef-857a-95cd68aff1f7",
+  "port": 8000,
+  "name": "rag-api",
+  "reused": false,
+  "previewId": "preview-local_ed8547aa-7d57-4f03-9aba-91798b56bd6d",
+  "tabId": "seed"
+}
+Server started successfully on port 8000. Opened tab "seed" at http://localhost:8000. Use tabId "seed" with read_page / computer / navigate; serverId is for preview_stop and preview_logs only.
+```
+
+## Assistant  <sub>2026-09-06T11:32:00.531Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator; for i in $(seq 1 60); do curl -sf localhost:8000/api/health >/dev/null && break; sleep 1; done\ncurl -s localhost:8000/openapi.json | .venv/bin/python -c \"import sys,json; print('api version', json.load(sys.stdin)['info']['version'])\"\n.venv/bin/python scripts/make_demo_gif.py 2>&1 | grep -E \"frame 1[0-3]|wrote|Error|Traceback\" ; echo \"recorder done\"\nS=/private/tmp/claude-502/-Users-shoaib-rayeen-my-space-rag-generator/a88920a3-6212-4085-ad05-80ba0afca34d/scratchpad/frames\n.venv/bin/python - \"$S\" <<'EOF'\nimport sys\nfrom pathlib import Path\nfrom PIL import Image, ImageSequence\nout = Path(sys.argv[1]); im = Image.open(\"documentation/demo.gif\")\nfor i, fr in enumerate(ImageSequence.Iterator(im)):\n    if i in (11, 12):\n        fr.convert(\"RGB\").save(out / f\"r{i+1:02d}.png\")\nprint(\"frames:\", im.n_frames)\nEOF",
+  "description": "Wait for the server, re-record the demo GIF with the retry step, extract the retry frames",
+  "timeout": 600000
+}
+```
+
+## Tool  <sub>2026-09-06T11:32:18.492Z</sub>
+
+**Tool result**
+
+```
+api version 0.10.0
+  frame 10: /documents — every uploaded file, 20 per page, with pages, chunks, status, reaso
+  frame 11: Filter by status (here DUPLICATE); click a job id to see that job's files, click
+  frame 12: Every document that is not COMPLETED or DUPLICATE has a retry button (also on th
+  frame 13: Retry re-checks the stored file with the current extractors (extension + content
+wrote /Users/shoaib.rayeen/my_space/rag-generator/documentation/demo.gif (1338 KB, 19 frames)
+recorder done
+frames: 19
+```
+
+## Assistant  <sub>2026-09-06T11:32:27.923Z</sub>
+
+**Tool call — `Read`**
+
+```json
+{
+  "file_path": "/private/tmp/claude-502/-Users-shoaib-rayeen-my-space-rag-generator/a88920a3-6212-4085-ad05-80ba0afca34d/scratchpad/frames/r12.png"
+}
+```
+
+## Tool  <sub>2026-09-06T11:32:27.940Z</sub>
+
+**Tool result**
+
+```
+
+```
+
+## Assistant  <sub>2026-09-06T11:32:28.737Z</sub>
+
+**Tool call — `Read`**
+
+```json
+{
+  "file_path": "/private/tmp/claude-502/-Users-shoaib-rayeen-my-space-rag-generator/a88920a3-6212-4085-ad05-80ba0afca34d/scratchpad/frames/r13.png"
+}
+```
+
+## Tool  <sub>2026-09-06T11:32:28.748Z</sub>
+
+**Tool result**
+
+```
+
+```
+
+## Assistant  <sub>2026-09-06T11:32:34.100Z</sub>
+
+**Tool call — `mcp__Claude_Browser__browser_batch`**
+
+```json
+{
+  "actions": [
+    {
+      "name": "navigate",
+      "input": {
+        "url": "http://localhost:8000/?collection=default",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "wait",
+        "duration": 3,
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "javascript_tool",
+      "input": {
+        "action": "javascript_exec",
+        "tabId": "seed",
+        "text": "const rows = [...document.querySelectorAll('#docs tr')]; ({homeRetryButtons: rows.filter(r => r.innerText.includes('retry')).map(r => r.querySelector('.pill')?.innerText), nonCompletedRows: rows.filter(r => !/COMPLETED|DUPLICATE/.test(r.querySelector('.pill')?.innerText || 'COMPLETED')).length})"
+      }
+    },
+    {
+      "name": "navigate",
+      "input": {
+        "url": "http://localhost:8000/documents/f5672b5bd60e",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "wait",
+        "duration": 2,
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "javascript_tool",
+      "input": {
+        "action": "javascript_exec",
+        "tabId": "seed",
+        "text": "({status: document.getElementById('status').innerText, hasRetry: !!document.getElementById('retry'), retryMsg: document.getElementById('retryMsg')?.innerText, banner: document.getElementById('banner').innerText.slice(0, 120)})"
+      }
+    }
+  ]
+}
+```
+
+## Assistant  <sub>2026-09-06T11:32:36.695Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator; .venv/bin/python -m compileall -q app cli evaluation scripts tests && echo compile-ok; .venv/bin/python -m pytest -q 2>&1 | grep -E \"passed|failed\"; .venv/bin/python scripts/sync_rules.py --check; .venv/bin/python scripts/build_docs.py >/dev/null && echo docs-ok; ls samples | grep -c _unsupported || echo \"samples clean\"; .venv/bin/python scripts/export_transcript.py --session a88920a3-6212-4085-ad05-80ba0afca34d && wc -l transcripts/2026-09-06-rag-generator-build.md; git status --short | wc -l",
+  "description": "Final validation, cleanup check, transcript export, git status",
+  "timeout": 120000
+}
+```
+
+## Tool  <sub>2026-09-06T11:32:41.276Z</sub>
+
+**Tool result**
+
+```
+[navigate] navigated to http://localhost:8000
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+[computer:wait] waited 3s
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+[javascript_tool:javascript_exec] {
+  "homeRetryButtons": [
+    "FAILED"
+  ],
+  "nonCompletedRows": 1
+}
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+[navigate] navigated to http://localhost:8000
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · Document" (http://localhost:8000)
+[computer:wait] waited 2s
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · client_doc_1643_401933.docx" (http://localhost:8000)
+[javascript_tool:javascript_exec] {
+  "banner": "Show page not applicable — status FAILED. Processing failed, so there is no indexed content to show or ask about. Fix th",
+  "hasRetry": true,
+  "retryMsg": "Re-checks the stored file with the current extractors.",
+  "status": "FAILED"
+}
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · client_doc_1643_401933.docx" (http://localhost:8000)
+```
+
+## Tool  <sub>2026-09-06T11:32:42.622Z</sub>
+
+**Tool result**
+
+```
+compile-ok
+37 passed, 6 warnings in 0.93s
+rules in sync
+docs-ok
+0
+samples clean
+exported 390 messages from a88920a3-6212-4085-ad05-80ba0afca34d.jsonl -> transcripts/2026-09-06-rag-generator-build.md
+    6940 transcripts/2026-09-06-rag-generator-build.md
+      20
+```
+
+## Assistant  <sub>2026-09-06T11:33:18.789Z</sub>
+
+Everything is done and verified.
+
+**Retry everywhere** (v0.10.0)
+- Retry buttons now appear for every document that is not COMPLETED or DUPLICATE, on the home-page Documents panel, on `/documents` (new actions column) and on the show page banner, each with a tooltip saying what will happen. `rag retry` covers the CLI.
+- Per-status rules on `POST /api/documents/{id}/retry`: FAILED and EXTRACTION_NOT_SUPPORTED re-check the stored file (extension, then content sniffing) and re-queue it; QUEUED/PROCESSING only when the record has stalled for `RETRY_STALE_SECONDS` (409 otherwise); EMPTY_FILE/UPLOAD_FAILED have nothing stored and answer 410 asking for a new upload; COMPLETED/DUPLICATE answer 409. Outcomes that don't end in QUEUED show their reason inline.
+- Files with unsupported extensions are now stored too, so they become retryable once a format is added, and an unknown extension with recognisable content (a PDF named `.bin`, say) is processed as the sniffed type. A retried document replaces its old chunks instead of duplicating them.
+
+**Flow page and GIF**: the status table has a "Retry?" column and the ingest, pages and show-page steps mention retry. The demo GIF is re-recorded with a retry step (19 frames): it filters `/documents` to an unsupported file, clicks retry, and shows the "Retried: …" outcome.
+
+**Validation**: 37 tests pass (new tests cover each retry rule, the `.bin`-PDF sniff rescue, and stale re-queue with chunk replacement). Verified live: the retry button shows on the home page for your FAILED document and on its show page. Docs, changelog, rules and transcript (390 messages) are updated; nothing committed, 20 changed files await your review.
+
+**Updated LinkedIn post** (2,746 characters):
+
+```
+𝗕𝘂𝗶𝗹𝘁 𝗮 𝗥𝗔𝗚 𝗚𝗲𝗻𝗲𝗿𝗮𝘁𝗼𝗿 𝗳𝗼𝗿 𝗗𝗼𝗰𝘂𝗺𝗲𝗻𝘁 𝗣𝗮𝗿𝘀𝗶𝗻𝗴 𝗮𝗻𝗱 𝗖𝗼𝗻𝘃𝗲𝗿𝘀𝗮𝘁𝗶𝗼𝗻 𝘄𝗶𝘁𝗵 𝗗𝗼𝗰𝘂𝗺𝗲𝗻𝘁𝘀
+
+Upload PDFs, DOCX, RTF, HTML, TXT, MD, CSV (even scanned pages and images), and within seconds you can ask questions and get answers that cite the exact file, page and passage. Swap the documents, ask again. Nothing to redeploy - only the LLM URL and key live in .env.
+
+𝗪𝗵𝗮𝘁'𝘀 𝗶𝗻𝘀𝗶𝗱𝗲
+🔎 Hybrid retrieval: fastembed vectors in ChromaDB + BM25 (rank-bm25), fused with Reciprocal Rank Fusion
+✂️ Overlapping, metadata-tagged chunks (page, section, offsets) so every citation is precise
+🧾 Two-tier extraction: PyMuPDF / python-docx / striprtf / BeautifulSoup first, Tesseract OCR strictly as fallback - and the real format is sniffed from the bytes (an RTF saved as .docx just works)
+⚙️ Async ingestion: one upload = one job, every file tracked with a clear status and reason, SHA-256 dedupe, and a one-click retry for anything that did not index
+🖥️ FastAPI REST API + single-page UI + CLI: job and document listings with pagination, scoped questions over selected documents or jobs, and a document show page with a 55/45 viewer + chat where citations are page numbers - click one and the passage lights up in blue
+🔌 Any OpenAI-compatible LLM for generation (OpenAI, OpenRouter, Groq, Ollama, vLLM, Azure...)
+🧪 Own evaluation script with Claude as judge: faithfulness, relevance, correctness, hallucination
+🐳 Docker + docker compose, everything tunable from one config file
+
+𝗛𝗼𝘄 𝗶𝘁 𝘄𝗮𝘀 𝗯𝘂𝗶𝗹𝘁
+Entirely with agentic coding in Claude Code, in one session of roughly 90 minutes from brief to working app, with the full transcripts committed to the repo. Along the way I turned my working preferences into rules the agent follows (synced for Claude Code, Cursor and Codex): docs move with the code, tests + compile check after every change, project memory read before planning, no commits by the agent.
+
+Two things I'd highlight from the process:
+1️⃣ The best fix of the day came from a real failure: a "DOCX" that wouldn't extract turned out to be RTF in disguise. Content sniffing + precise failure reasons + a retry button now make that class of problem self-explanatory.
+2️⃣ Step-level logging everywhere (grep doc=<id> tells the whole story of one file) paid for itself immediately.
+
+𝗦𝘁𝗮𝗰𝗸: Python 3.11 · FastAPI · fastembed · ChromaDB · rank-bm25 · PyMuPDF · Tesseract · anthropic SDK (judge) · Docker
+
+🔗 Repo: https://github.com/shoaibrayeen/rag-generator
+📽️ There's an animated walkthrough and an interactive flow diagram in the docs folder.
+
+Feedback welcome - especially on retrieval quality tricks you've found worth the complexity.
+
+#RAG #LLM #GenAI #Python #FastAPI #ChromaDB #AgenticCoding #ClaudeCode #OpenSource #InformationRetrieval
+```
+
+Attach `documentation/demo.gif` as the media and push the repository before posting so the link resolves.
+
+## User  <sub>2026-09-06T11:34:29.541Z</sub>
+
+installed tesseract-lang and tesseract locally, now validate
+
+## Assistant  <sub>2026-09-06T11:34:40.756Z</sub>
+
+I'll check the Tesseract install, confirm the running server sees it, then retry the OCR-only documents that failed earlier and ask a question over one of them.
+
+## Assistant  <sub>2026-09-06T11:34:46.561Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator\nwhich tesseract; tesseract --version 2>&1 | head -2; echo \"langs: $(tesseract --list-langs 2>/dev/null | tail -n +2 | wc -l | tr -d ' ') installed ($(tesseract --list-langs 2>/dev/null | tail -n +2 | head -8 | tr '\\n' ' ')...)\"\necho \"--- server sees OCR? ---\"; curl -s localhost:8000/api/health | .venv/bin/python -c \"import sys,json; h=json.load(sys.stdin); print('ocr_enabled', h['ocr_enabled'], '| ocr_available', h['ocr_available'])\"\necho \"--- OCR-only documents in default collection ---\"\ncurl -s \"localhost:8000/api/documents?collection=default&size=100\" | .venv/bin/python -c \"\nimport sys,json\nfor d in json.load(sys.stdin)['items']:\n    if d['filename'] in ('scanned_memo.pdf','whiteboard.png') or 'Tesseract' in (d.get('reason') or ''):\n        print(d['doc_id'], d['filename'], d['status'], '|', (d['reason'] or '')[:90])\"",
+  "description": "Check Tesseract install, server OCR availability, and OCR-only documents"
+}
+```
+
+## Tool  <sub>2026-09-06T11:34:46.655Z</sub>
+
+**Tool result**
+
+```
+tesseract not found
+(eval):2: command not found: tesseract
+langs: 0 installed (...)
+--- server sees OCR? ---
+ocr_enabled True | ocr_available False
+--- OCR-only documents in default collection ---
+4e7916565d29 1.4 CW55648  Section 4 _HSSE (1).pdf FAILED | PROCESSING FAILED: The pdf reader found no text. Fallback: This PDF contains no text layer
+0323de333b27 2P CRA dated 17_12_2025 (1).pdf FAILED | PROCESSING FAILED: The pdf reader found no text. Fallback: This PDF contains no text layer
+f5672b5bd60e client_doc_1643_401933.docx FAILED | PROCESSING FAILED: This DOCX contains no text layer and Tesseract OCR is not installed on 
+92e0bd742129 2P CRA dated 17_12_2025 (1) (2).docx FAILED | PROCESSING FAILED: This DOCX contains no text layer and Tesseract OCR is not installed on 
+a259123ccbba scanned_memo.pdf FAILED | PROCESSING FAILED: This PDF contains no text layer and Tesseract OCR is not installed on t
+```
+
+## Assistant  <sub>2026-09-06T11:34:59.434Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "for p in /opt/homebrew/bin/tesseract /usr/local/bin/tesseract /opt/local/bin/tesseract \"$HOME/.local/bin/tesseract\"; do [ -x \"$p\" ] && echo \"FOUND $p\"; done; ls /opt/homebrew/bin 2>/dev/null | grep -i tesseract; ls /opt/homebrew/share/tessdata 2>/dev/null | head -5; ls /usr/local/share/tessdata 2>/dev/null | head -3; echo \"PATH=$PATH\"; echo \"TESSDATA_PREFIX=${TESSDATA_PREFIX:-unset}\"",
+  "description": "Search common install locations for the Tesseract binary and language data"
+}
+```
+
+## Tool  <sub>2026-09-06T11:34:59.490Z</sub>
+
+**Tool result**
+
+```
+FOUND /opt/homebrew/bin/tesseract
+tesseract
+LICENSE
+README.md
+afr.traineddata
+amh.traineddata
+ara.traineddata
+PATH=/Users/shoaib.rayeen/tools/apache-maven-3.9.4/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/usr/local/go/bin:/Users/shoaib.rayeen/Library/Application Support/JetBrains/Toolbox/scripts:/Users/shoaib.rayeen/.local/bin:/Users/shoaib.rayeen/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin/58cc4f32-6b4d-4ced-9d1f-101d4686e858/0f5be425-20dd-4b55-814b-fd218c3756a1/bin
+TESSDATA_PREFIX=unset
+```
+
+## Assistant  <sub>2026-09-06T11:35:01.164Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "ps -eo pid,command | grep -E \"uvicorn app.main\" | grep -v grep | head -2; PID=$(pgrep -f \"uvicorn app.main\" | head -1); [ -n \"$PID\" ] && ps eww -p \"$PID\" | tr ' ' '\\n' | grep -E \"^PATH=\" | head -1",
+  "description": "Show the running server's PATH"
+}
+```
+
+## Tool  <sub>2026-09-06T11:35:01.261Z</sub>
+
+**Tool result**
+
+```
+ 2588 /Applications/Claude.app/Contents/Helpers/disclaimer -- .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+ 2589 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+PATH=/Users/shoaib.rayeen/tools/apache-maven-3.9.4/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/usr/local/go/bin:/Users/shoaib.rayeen/Library/Application
+```
+
+## Assistant  <sub>2026-09-06T11:35:34.556Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "set -e; cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"app/config.py\"); s = p.read_text()\ns = s.replace('''    OCR_LANG: str = \"eng\"\n    OCR_DPI: int = 200''', '''    OCR_LANG: str = \"eng\"\n    OCR_DPI: int = 200\n    TESSERACT_CMD: str = \"\"                  # path to the tesseract binary; empty = auto-detect (PATH, then common install dirs)''')\np.write_text(s)\n\np = Path(\"app/ingest/extractors.py\"); s = p.read_text()\ns = s.replace('''def ocr_available() -> bool:\n    return shutil.which(\"tesseract\") is not None\n''', '''_TESSERACT_CANDIDATES = (\n    \"/opt/homebrew/bin/tesseract\",      # Homebrew on Apple silicon (often not on a service's PATH)\n    \"/usr/local/bin/tesseract\",         # Homebrew on Intel macs / manual installs\n    \"/opt/local/bin/tesseract\",         # MacPorts\n    \"/usr/bin/tesseract\",               # apt / Docker image\n    \"C:\\\\\\\\Program Files\\\\\\\\Tesseract-OCR\\\\\\\\tesseract.exe\",\n)\n\n\ndef tesseract_cmd() -> str | None:\n    \"\"\"Resolve the tesseract binary: TESSERACT_CMD, then PATH, then common install locations.\n    Also points pytesseract at it, so a binary outside PATH works.\"\"\"\n    found: str | None = None\n    if settings.TESSERACT_CMD:\n        found = settings.TESSERACT_CMD if Path(settings.TESSERACT_CMD).is_file() else None\n    else:\n        found = shutil.which(\"tesseract\") or next((c for c in _TESSERACT_CANDIDATES if Path(c).is_file()), None)\n    if found:\n        try:\n            import pytesseract\n\n            pytesseract.pytesseract.tesseract_cmd = found\n        except ImportError:  # pragma: no cover\n            return None\n    return found\n\n\ndef ocr_available() -> bool:\n    return tesseract_cmd() is not None\n''')\np.write_text(s)\n\n# main.py health: expose resolved binary\np = Path(\"app/main.py\"); s = p.read_text()\ns = s.replace(\"from app.ingest.extractors import EXTRACTORS, file_type_for, ocr_available, sniff_type\",\n              \"from app.ingest.extractors import EXTRACTORS, file_type_for, ocr_available, sniff_type, tesseract_cmd\")\ns = s.replace('''    log.info(\"OCR available: %s | LLM: %s @ %s\", ocr_available(), settings.LLM_MODEL, settings.LLM_API_URL)''',\n              '''    log.info(\"OCR available: %s (%s) | LLM: %s @ %s\", ocr_available(), tesseract_cmd() or \"tesseract not found\",\n             settings.LLM_MODEL, settings.LLM_API_URL)''')\ns = s.replace('version=\"0.10.0\"', 'version=\"0.10.1\"')\np.write_text(s)\np = Path(\"app/models.py\"); s = p.read_text()\ns = s.replace(\"    ocr_enabled: bool\\n    ocr_available: bool\\n\", \"    ocr_enabled: bool\\n    ocr_available: bool\\n    tesseract_cmd: Optional[str] = None\\n\")\np.write_text(s)\np = Path(\"app/main.py\"); s = p.read_text()\ns = s.replace(\"        ocr_enabled=settings.OCR_ENABLED, ocr_available=ocr_available(),\",\n              \"        ocr_enabled=settings.OCR_ENABLED, ocr_available=ocr_available(), tesseract_cmd=tesseract_cmd(),\")\np.write_text(s)\n\n# tests: real OCR when a binary exists on this host\np = Path(\"tests/test_extractors.py\"); s = p.read_text()\ns += '''\n\n@pytest.mark.skipif(extractors.tesseract_cmd() is None, reason=\"tesseract binary not installed on this host\")\ndef test_real_ocr_on_rendered_image_and_scanned_pdf(tmp_path: Path):\n    \"\"\"Runs only where Tesseract exists: text drawn as pixels must come back through OCR.\"\"\"\n    from PIL import Image, ImageDraw, ImageFont\n\n    img = Image.new(\"RGB\", (900, 220), \"white\")\n    d = ImageDraw.Draw(img)\n    try:\n        f = ImageFont.truetype(\"Helvetica.ttc\", 40)\n    except OSError:\n        f = ImageFont.load_default(size=40)\n    d.text((30, 40), \"Maintenance window 9 to 11 April 2026\", fill=\"black\", font=f)\n    d.text((30, 120), \"Contact ops at northwind example\", fill=\"black\", font=f)\n    png = tmp_path / \"board.png\"\n    img.save(png)\n    pages = extract(png)\n    assert pages and pages[0].extraction == \"ocr\"\n    assert \"April 2026\" in pages[0].text.replace(\"\\\\n\", \" \")\n\n    scanned = tmp_path / \"scan.pdf\"\n    img.save(scanned, \"PDF\", resolution=150)\n    pages = extract(scanned)\n    assert pages and pages[0].extraction == \"ocr\" and \"Maintenance\" in pages[0].text\n'''\np.write_text(s)\nprint(\"patched\")\nEOF\n.venv/bin/python -m compileall -q app tests && .venv/bin/python -m pytest -q 2>&1 | grep -E \"^(FAILED|ERROR)|passed|failed|skipped\"",
+  "description": "Auto-detect the Tesseract binary outside PATH, expose it in health, add a real-OCR test; run suite",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T11:35:36.178Z</sub>
+
+**Tool result**
+
+```
+patched
+FAILED tests/test_extractors.py::test_pdf_primary_pymupdf - AssertionError: a...
+1 failed, 37 passed, 6 warnings in 1.31s
+```
+
+## Assistant  <sub>2026-09-06T11:35:53.590Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\".env.example\"); s = p.read_text()\ns = s.replace(\"#OCR_DPI=200\\n\", \"#OCR_DPI=200\\n#TESSERACT_CMD=            # path to the tesseract binary; empty = auto-detect (PATH, /opt/homebrew/bin, /usr/local/bin, /usr/bin)\\n\")\np.write_text(s)\np = Path(\"README.md\"); s = p.read_text()\ns = s.replace(\"\"\"OCR outside Docker needs the Tesseract binary (`brew install tesseract` / `apt install\ntesseract-ocr`). Without it the app still runs: scanned pages are skipped with a warning and\nimage uploads end as `FAILED` with a clear reason.\"\"\",\n\"\"\"OCR outside Docker needs the Tesseract binary (`brew install tesseract tesseract-lang` / `apt install\ntesseract-ocr`). The binary is auto-detected from `PATH` and the usual install locations\n(`/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin`), so a Homebrew install works even when the server's\nPATH lacks it; set `TESSERACT_CMD` to point at a custom location. `GET /api/health` reports\n`ocr_available` and the resolved `tesseract_cmd`. Without a binary the app still runs: scanned pages end\nas `FAILED` with a clear reason and can be retried after installing it.\"\"\")\ns = s.replace(\"| `OCR_ENABLED` / `OCR_MIN_CHARS_PER_PAGE` / `OCR_LANG` / `OCR_DPI` | true / 20 / eng / 200 | when and how the Tesseract fallback runs |\",\n              \"| `OCR_ENABLED` / `OCR_MIN_CHARS_PER_PAGE` / `OCR_LANG` / `OCR_DPI` | true / 20 / eng / 200 | when and how the Tesseract fallback runs |\\n| `TESSERACT_CMD` | auto | explicit path to the tesseract binary; empty = PATH, then `/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin` |\")\np.write_text(s)\np = Path(\"documentation/changelog.html\"); s = p.read_text()\nentry = \"\"\"<section class=\"rel\">\n  <h2>0.10.1 <time>2026-09-06</time></h2>\n  <p><span class=\"tag fixed\">Fixed</span> Tesseract installed with Homebrew was invisible to the server because <code>/opt/homebrew/bin</code> was not on its PATH.</p>\n  <ul>\n    <li><span class=\"tag added\">Added</span> <code>TESSERACT_CMD</code> setting and auto-detection of the binary (PATH, then <code>/opt/homebrew/bin</code>, <code>/usr/local/bin</code>, <code>/opt/local/bin</code>, <code>/usr/bin</code>, Windows default); pytesseract is pointed at the resolved path. <code>/api/health</code> reports <code>tesseract_cmd</code>.</li>\n    <li><span class=\"tag added\">Added</span> A real-OCR test (PNG and image-only PDF) that runs wherever a Tesseract binary exists.</li>\n  </ul>\n</section>\n\n<section class=\"rel\">\n  <h2>0.10.0 <time>2026-09-06</time></h2>\"\"\"\ns = s.replace('<section class=\"rel\">\\n  <h2>0.10.0 <time>2026-09-06</time></h2>', entry, 1)\np.write_text(s)\np = Path(\"memory.md\"); s = p.read_text()\ns = s.replace(\"- The dev Mac has no Docker, Homebrew or Tesseract; Python is 3.9 system-wide. Use\\n  `uv venv --python 3.11 .venv`. Docker image must be built/verified elsewhere.\",\n              \"- The dev Mac has no Docker; Python is 3.9 system-wide. Use `uv venv --python 3.11 .venv`. Docker image\\n  must be built/verified elsewhere. Homebrew + Tesseract (with `tesseract-lang`) were installed on 2026-09-06 at\\n  `/opt/homebrew/bin`, which is NOT on the PATH of the Claude Code shell or the preview server — hence the\\n  `tesseract_cmd()` auto-detection in `app/ingest/extractors.py`.\")\ns = s.replace(\"- Locally OCR is therefore unavailable: `scanned_memo.pdf` and `whiteboard.png` end `FAILED` with\\n  \\\"…Tesseract OCR is not installed on this host…\\\" — expected; they succeed inside Docker.\",\n              \"- OCR works locally since v0.10.1 (auto-detected Homebrew binary); the real-OCR test in `tests/test_extractors.py`\\n  is skipped automatically on hosts without a binary.\")\ns = s.replace(\"  v0.10.0 retry for every non-COMPLETED/non-DUPLICATE document (per-status rules), unsupported files stored, sniffing rescues unknown extensions.\",\n              \"  v0.10.0 retry for every non-COMPLETED/non-DUPLICATE document (per-status rules), unsupported files stored, sniffing rescues unknown extensions;\\n  v0.10.1 `TESSERACT_CMD` + binary auto-detection (Homebrew path not on PATH), real-OCR test.\")\np.write_text(s)\nprint(\"docs ok\")\nEOF\n.venv/bin/python scripts/build_docs.py >/dev/null && .venv/bin/python scripts/sync_rules.py --check",
+  "description": "Document TESSERACT_CMD and auto-detection; changelog 0.10.1; memory update"
+}
+```
+
+## Tool  <sub>2026-09-06T11:35:53.724Z</sub>
+
+**Tool result**
+
+```
+docs ok
+rules in sync
+```
+
+## Assistant  <sub>2026-09-06T11:35:54.654Z</sub>
+
+**Tool call — `mcp__Claude_Browser__preview_stop`**
+
+```json
+{
+  "serverId": "6cc87194-03b8-43ef-857a-95cd68aff1f7"
+}
+```
+
+## Tool  <sub>2026-09-06T11:35:56.962Z</sub>
+
+**Tool result**
+
+```
+Server 6cc87194-03b8-43ef-857a-95cd68aff1f7 stopped
+```
+
+## Assistant  <sub>2026-09-06T11:36:19.272Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"app/ingest/extractors.py\"); s = p.read_text()\nold = '''            if len(text) < settings.OCR_MIN_CHARS_PER_PAGE and can_ocr:\n                ocr_text = _ocr_pdf_page(page)\n                if ocr_text:\n                    text, extraction = ocr_text, \"ocr\"'''\nnew = '''            if len(text) < settings.OCR_MIN_CHARS_PER_PAGE and can_ocr:\n                ocr_text = _ocr_pdf_page(page)\n                if len(ocr_text) > len(text):  # keep the real text layer when OCR finds nothing better\n                    text, extraction = ocr_text, \"ocr\"'''\nassert old in s; p.write_text(s.replace(old, new))\nt = Path(\"tests/test_extractors.py\"); x = t.read_text()\nx = x.replace('''    pages = extract(_text_pdf(tmp_path / \"t.pdf\", \"Hello PyMuPDF world\"))\n    assert len(pages) == 1 and \"PyMuPDF\" in pages[0].text and pages[0].extraction == \"text\"''',\n'''    pages = extract(_text_pdf(tmp_path / \"t.pdf\", \"Hello PyMuPDF world, this page has a real text layer.\"))\n    assert len(pages) == 1 and \"PyMuPDF\" in pages[0].text and pages[0].extraction == \"text\"''')\nt.write_text(x); print(\"patched\")\nEOF\n.venv/bin/python -m compileall -q app tests && .venv/bin/python -m pytest -q 2>&1 | grep -E \"^(FAILED|ERROR)|passed|failed\"",
+  "description": "Keep the real text layer when OCR yields less; fix short-text test; rerun suite",
+  "timeout": 300000
+}
+```
+
+## Assistant  <sub>2026-09-06T11:36:19.957Z</sub>
+
+**Tool call — `mcp__Claude_Browser__preview_start`**
+
+```json
+{
+  "name": "rag-api"
+}
+```
+
+## Tool  <sub>2026-09-06T11:36:20.648Z</sub>
+
+**Tool result**
+
+```
+patched
+38 passed, 6 warnings in 1.08s
+```
+
+## Tool  <sub>2026-09-06T11:36:26.614Z</sub>
+
+**Tool result**
+
+```
+{
+  "serverId": "0529829b-66a4-4ea9-9096-323477f4b4dc",
+  "port": 8000,
+  "name": "rag-api",
+  "reused": false,
+  "previewId": "preview-local_ed8547aa-7d57-4f03-9aba-91798b56bd6d",
+  "tabId": "seed"
+}
+Server started successfully on port 8000. Opened tab "seed" at http://localhost:8000. Use tabId "seed" with read_page / computer / navigate; serverId is for preview_stop and preview_logs only.
+```
+
+## Assistant  <sub>2026-09-06T11:36:28.180Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator; for i in $(seq 1 60); do curl -sf localhost:8000/api/health >/dev/null 2>&1 && break; sleep 1; done; sleep 2\necho \"=== health ===\"; curl -s localhost:8000/api/health | .venv/bin/python -c \"import sys,json; h=json.load(sys.stdin); print('ocr_available', h['ocr_available'], '| tesseract_cmd', h['tesseract_cmd'])\"\necho \"=== retry the OCR-only documents ===\"\nfor id in a259123ccbba 0323de333b27 4e7916565d29 f5672b5bd60e 92e0bd742129; do\n  curl -s -X POST localhost:8000/api/documents/$id/retry -o /dev/null -w \"retry $id -> HTTP %{http_code}\\n\"\ndone\necho \"=== waiting ===\"\nfor i in $(seq 1 240); do\n  busy=$(curl -s \"localhost:8000/api/documents?collection=default&size=100\" | .venv/bin/python -c \"import sys,json; print(sum(1 for d in json.load(sys.stdin)['items'] if d['status'] in ('QUEUED','PROCESSING')))\")\n  [ \"$busy\" = \"0\" ] && break; sleep 2\ndone\ncurl -s \"localhost:8000/api/documents?collection=default&size=100\" | .venv/bin/python -c \"\nimport sys,json\nfor d in json.load(sys.stdin)['items']:\n    if d['doc_id'] in ('a259123ccbba','0323de333b27','4e7916565d29','f5672b5bd60e','92e0bd742129'):\n        print(f\\\"{d['doc_id']} {d['filename'][:40]:40} {d['status']:10} pages={d['pages']} ocr_pages={d['ocr_pages']} chunks={d['chunks']} | {(d['reason'] or '')[:110]}\\\")\"\necho \"=== ask the scanned memo (OCR text) ===\"\n.venv/bin/python -m cli.rag_cli ask \"When will the Rotterdam assembly line pause for maintenance and which form must be completed?\" --doc a259123ccbba 2>&1 | head -6",
+  "description": "Restart-aware check: OCR availability, retry the failed OCR documents, verify results, ask over the scanned memo",
+  "timeout": 600000
+}
+```
+
+## Tool  <sub>2026-09-06T11:37:04.192Z</sub>
+
+**Tool result**
+
+```
+=== health ===
+ocr_available True | tesseract_cmd /opt/homebrew/bin/tesseract
+=== retry the OCR-only documents ===
+retry a259123ccbba -> HTTP 202
+retry 0323de333b27 -> HTTP 202
+retry 4e7916565d29 -> HTTP 202
+retry f5672b5bd60e -> HTTP 202
+retry 92e0bd742129 -> HTTP 202
+=== waiting ===
+4e7916565d29 1.4 CW55648  Section 4 _HSSE (1).pdf     COMPLETED  pages=32 ocr_pages=32 chunks=85 | Indexed 32 pages, 32 via OCR into 85 chunks
+0323de333b27 2P CRA dated 17_12_2025 (1).pdf          COMPLETED  pages=5 ocr_pages=5 chunks=30 | Indexed 5 pages, 5 via OCR into 30 chunks
+f5672b5bd60e client_doc_1643_401933.docx              FAILED     pages=0 ocr_pages=0 chunks=0 | PROCESSING FAILED: Could not read 'client_doc_1643_401933.docx': the docx reader found no text, and the fallba
+92e0bd742129 2P CRA dated 17_12_2025 (1) (2).docx     COMPLETED  pages=3 ocr_pages=0 chunks=30 | Indexed 3 pages into 30 chunks (extension '.docx' but content is RTF; read as rtf)
+a259123ccbba scanned_memo.pdf                         COMPLETED  pages=1 ocr_pages=1 chunks=1 | Indexed 1 pages, 1 via OCR into 1 chunks
+=== ask the scanned memo (OCR text) ===
+The Rotterdam assembly line will pause for maintenance from 9 to 11 April 2026, and the safety checklist form OPS-17 must be completed before restart [1].
+
+[gpt-4o · 1158 ms · scope: 1 selected document(s) · 1 citation(s) from 1 retrieved chunks]
+  [1] scanned_memo.pdf — page 1  (doc a259123ccbba)
+```
+
+## Assistant  <sub>2026-09-06T11:37:23.707Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator; F=$(ls data/uploads/f5672b5bd60e_* | head -1); echo \"$F\"; file \"$F\"\n.venv/bin/python - \"$F\" <<'EOF'\nimport sys, zipfile, re\npath = sys.argv[1]\nwith zipfile.ZipFile(path) as z:\n    names = z.namelist()\n    print(\"entries:\", len(names)); print([n for n in names if n.startswith(\"word/\")][:40])\n    xml = z.read(\"word/document.xml\").decode(\"utf8\", \"replace\")\n    print(\"document.xml bytes:\", len(xml))\n    for tag in (\"w:p\", \"w:t\", \"w:tbl\", \"w:sdt\", \"w:txbxContent\", \"mc:AlternateContent\", \"w:drawing\", \"a:blip\", \"w:altChunk\", \"w:fldSimple\", \"w:instrText\"):\n        print(f\"  <{tag}>: {xml.count('<' + tag)}\")\n    texts = re.findall(r\"<w:t[^>]*>([^<]*)</w:t>\", xml)\n    print(\"w:t chars:\", sum(len(t) for t in texts), \"| sample:\", \" \".join(texts)[:200])\n    media = [n for n in names if \"media/\" in n]; print(\"media:\", media[:10])\n    others = [n for n in names if n.startswith(\"word/\") and n.endswith(\".xml\") and \"document\" not in n]\n    for n in others[:12]:\n        x = z.read(n).decode(\"utf8\", \"replace\"); t = re.findall(r\"<w:t[^>]*>([^<]*)</w:t>\", x)\n        if t: print(f\"  {n}: {sum(len(s) for s in t)} chars -> {' '.join(t)[:100]}\")\nEOF\nimport_docx=$(.venv/bin/python -c \"\nimport docx,sys\nd=docx.Document(sys.argv[1]); print('paragraphs:', len(d.paragraphs), 'nonempty:', sum(1 for p in d.paragraphs if p.text.strip()), 'tables:', len(d.tables), 'sections:', len(d.sections))\n\" \"$F\" 2>&1); echo \"$import_docx\"",
+  "description": "Inspect the structure of the DOCX that still yields no text"
+}
+```
+
+## Tool  <sub>2026-09-06T11:37:23.840Z</sub>
+
+**Tool result**
+
+```
+data/uploads/f5672b5bd60e_client_doc_1643_401933.docx
+data/uploads/f5672b5bd60e_client_doc_1643_401933.docx: Microsoft Word 2007+
+entries: 34
+['word/document.xml', 'word/_rels/document.xml.rels', 'word/comments.xml', 'word/commentsExtended.xml', 'word/commentsIds.xml', 'word/fontTable.xml', 'word/footer1.xml', 'word/footer2.xml', 'word/footer3.xml', 'word/glossary/_rels/document.xml.rels', 'word/glossary/document.xml', 'word/glossary/fontTable.xml', 'word/glossary/settings.xml', 'word/glossary/styles.xml', 'word/glossary/webSettings.xml', 'word/numbering.xml', 'word/settings.xml', 'word/styles.xml', 'word/theme/theme1.xml', 'word/webSettings.xml']
+document.xml bytes: 405778
+  <w:p>: 1531
+  <w:t>: 1650
+  <w:tbl>: 43
+  <w:sdt>: 1581
+  <w:txbxContent>: 0
+  <mc:AlternateContent>: 0
+  <w:drawing>: 0
+  <a:blip>: 0
+  <w:altChunk>: 0
+  <w:fldSimple>: 0
+  <w:instrText>: 0
+w:t chars: 82808 | sample:     TERMS AND CONDITIONS OF SALE AND DELIVERY ADM GROUP AS OF MAY 12, 2025   PART 1 – GENERAL TERMS AND CONDITIONS  Group  companies set out in 1.1 (“ ADM ”) and a customer ( “Purchaser ”) for the sal
+media: []
+  word/comments.xml: 6075 chars -> Name  : {'text': 'Terms and Conditions of Sale and Delivery ADM Group', 'source': 'extracted'} Domin
+  word/footer1.xml: 68 chars -> Terms and Conditions of Sale and Delivery ADM 12/05/2025                   1    
+  word/footer2.xml: 69 chars -> Terms and Conditions of Sale and Delivery ADM 12/05/2025                   22    
+  word/footer3.xml: 68 chars -> Terms and Conditions of Sale and Delivery ADM 12/05/2025                   1    
+paragraphs: 0 nonempty: 0 tables: 0 sections: 1
+```
+
+## Assistant  <sub>2026-09-06T11:38:10.913Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "set -e; cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"app/ingest/extractors.py\"); s = p.read_text()\nold_start = s.index(\"def extract_docx(path: Path) -> list[Page]:\")\nold_end = s.index(\"def fallback_docx(path: Path) -> list[Page]:\")\nnew = '''_W = \"{http://schemas.openxmlformats.org/wordprocessingml/2006/main}\"\n\n\ndef _docx_blocks(container):\n    \"\"\"Yield (\"heading\"|\"para\"|\"row\", text) for a DOCX body in document order, descending into\n    content controls (w:sdt / w:sdtContent) and tables — python-docx's `document.paragraphs`\n    ignores both, which makes contract templates built from content controls come out empty.\"\"\"\n    for child in container:\n        tag = child.tag\n        if tag == f\"{_W}p\":\n            text = \"\".join(t.text or \"\" for t in child.iter(f\"{_W}t\", f\"{_W}tab\", f\"{_W}br\"))\n            text = \"\".join((\"\\\\t\" if t.tag == f\"{_W}tab\" else \"\\\\n\" if t.tag == f\"{_W}br\" else (t.text or \"\"))\n                           for t in child.iter(f\"{_W}t\", f\"{_W}tab\", f\"{_W}br\")).strip()\n            if not text:\n                continue\n            style = child.find(f\"{_W}pPr/{_W}pStyle\")\n            val = (style.get(f\"{_W}val\") if style is not None else \"\") or \"\"\n            yield (\"heading\" if val.lower().startswith((\"heading\", \"title\")) else \"para\"), text\n        elif tag == f\"{_W}tbl\":\n            for row in child.iter(f\"{_W}tr\"):\n                cells = []\n                for cell in row.findall(f\"{_W}tc\"):\n                    cells.append(\" \".join(t for _, t in _docx_blocks(cell)))\n                if any(cells):\n                    yield \"row\", \" | \".join(cells)\n        elif tag in (f\"{_W}sdt\", f\"{_W}sdtContent\", f\"{_W}smartTag\", f\"{_W}ins\", f\"{_W}hyperlink\",\n                     f\"{_W}customXml\", f\"{_W}fldSimple\"):\n            yield from _docx_blocks(child)\n        elif tag == f\"{_W}sectPr\":\n            continue\n        elif len(child):\n            yield from _docx_blocks(child)\n\n\ndef extract_docx(path: Path) -> list[Page]:\n    \"\"\"DOCX has no real pages: each heading starts a new 'page' (section). Walks the body XML in\n    order (including content controls and tables) via python-docx's element tree.\"\"\"\n    import docx\n\n    document = docx.Document(str(path))\n    pages: list[Page] = []\n    section_title: str | None = None\n    buffer: list[str] = []\n    page_no = 1\n\n    def flush():\n        nonlocal page_no, buffer\n        text = \"\\\\n\".join(buffer).strip()\n        if text:\n            pages.append(Page(text=text, page_no=page_no, section=section_title))\n            page_no += 1\n        buffer = []\n\n    for kind, text in _docx_blocks(document.element.body):\n        if kind == \"heading\":\n            flush()\n            section_title = text\n        buffer.append(text)\n    flush()\n    return pages\n\n\n'''\ns = s[:old_start] + new + s[old_end:]\np.write_text(s)\n\n# test: content-control DOCX built by hand\nt = Path(\"tests/test_extractors.py\"); x = t.read_text()\nx += '''\n\ndef _sdt_docx(path: Path) -> Path:\n    \"\"\"A minimal DOCX whose paragraphs are all wrapped in w:sdt content controls (python-docx sees 0 paragraphs).\"\"\"\n    import zipfile\n\n    W = 'xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"'\n    body = (\n        '<w:sdt><w:sdtContent><w:p><w:pPr><w:pStyle w:val=\"Heading1\"/></w:pPr><w:r><w:t>Terms of Sale</w:t></w:r></w:p></w:sdtContent></w:sdt>'\n        '<w:sdt><w:sdtContent><w:p><w:r><w:t>Payment is due within </w:t></w:r><w:r><w:t>30 days</w:t></w:r><w:r><w:t> of invoice.</w:t></w:r></w:p></w:sdtContent></w:sdt>'\n        '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>Item</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Price</w:t></w:r></w:p></w:tc></w:tr>'\n        '<w:tr><w:tc><w:p><w:r><w:t>Widget</w:t></w:r></w:p></w:tc><w:tc><w:sdt><w:sdtContent><w:p><w:r><w:t>EUR 10</w:t></w:r></w:p></w:sdtContent></w:sdt></w:tc></w:tr></w:tbl>'\n        '<w:sdt><w:sdtContent><w:p><w:pPr><w:pStyle w:val=\"Heading1\"/></w:pPr><w:r><w:t>Delivery</w:t></w:r></w:p></w:sdtContent></w:sdt>'\n        '<w:p><w:r><w:t>Goods ship within 12 weeks.</w:t></w:r></w:p>'\n    )\n    doc_xml = f'<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><w:document {W}><w:body>{body}<w:sectPr/></w:body></w:document>'\n    ct = ('<?xml version=\"1.0\" encoding=\"UTF-8\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">'\n          '<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>'\n          '<Default Extension=\"xml\" ContentType=\"application/xml\"/>'\n          '<Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/></Types>')\n    rels = ('<?xml version=\"1.0\" encoding=\"UTF-8\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">'\n            '<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/></Relationships>')\n    with zipfile.ZipFile(path, \"w\") as z:\n        z.writestr(\"[Content_Types].xml\", ct)\n        z.writestr(\"_rels/.rels\", rels)\n        z.writestr(\"word/document.xml\", doc_xml)\n        z.writestr(\"word/_rels/document.xml.rels\", '<?xml version=\"1.0\" encoding=\"UTF-8\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"/>')\n    return path\n\n\ndef test_docx_content_controls_and_tables_are_read(tmp_path: Path):\n    import docx\n\n    p = _sdt_docx(tmp_path / \"template.docx\")\n    assert sum(1 for para in docx.Document(str(p)).paragraphs if para.text.strip()) == 0  # python-docx alone sees nothing\n    pages = extract(p)\n    assert [pg.section for pg in pages] == [\"Terms of Sale\", \"Delivery\"]\n    assert \"Payment is due within 30 days of invoice.\" in pages[0].text\n    assert \"Widget | EUR 10\" in pages[0].text          # table row, including a cell wrapped in a content control\n    assert \"12 weeks\" in pages[1].text\n'''\nt.write_text(x)\nprint(\"patched\")\nEOF\n.venv/bin/python -m compileall -q app tests && .venv/bin/python -m pytest -q 2>&1 | grep -E \"^(FAILED|ERROR)|passed|failed\"",
+  "description": "Walk the DOCX body XML through content controls and tables; add a content-control test; run suite",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T11:38:12.547Z</sub>
+
+**Tool result**
+
+```
+patched
+FAILED tests/test_extractors.py::test_docx_content_controls_and_tables_are_read
+1 failed, 38 passed, 6 warnings in 1.28s
+```
+
+## Assistant  <sub>2026-09-06T11:38:22.994Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"documentation/changelog.html\"); s = p.read_text()\nentry = \"\"\"<section class=\"rel\">\n  <h2>0.10.2 <time>2026-09-06</time></h2>\n  <p><span class=\"tag fixed\">Fixed</span> DOCX files built from content controls (<code>w:sdt</code>, typical for contract templates) extracted as empty.</p>\n  <ul>\n    <li><span class=\"tag changed\">Changed</span> The DOCX extractor now walks the body XML in document order — through content controls, hyperlinks, smart tags and tables (rows rendered as <code>cell | cell</code>) — instead of relying on <code>document.paragraphs</code>, which ignores all of those. Headings still split \"pages\".</li>\n    <li><span class=\"tag changed\">Changed</span> PDF pages with a short real text layer keep it unless OCR finds more text.</li>\n  </ul>\n</section>\n\n<section class=\"rel\">\n  <h2>0.10.1 <time>2026-09-06</time></h2>\"\"\"\ns = s.replace('<section class=\"rel\">\\n  <h2>0.10.1 <time>2026-09-06</time></h2>', entry, 1)\np.write_text(s)\np = Path(\"app/main.py\"); s = p.read_text(); p.write_text(s.replace('version=\"0.10.1\"', 'version=\"0.10.2\"'))\np = Path(\"documentation/architecture.md\"); s = p.read_text()\ns = s.replace(\"| DOCX | python-docx paragraphs + tables | OCR of embedded images (`word/media/*`) → Tesseract | one page per heading block | heading text |\",\n              \"| DOCX | python-docx element tree walked in document order: paragraphs, content controls (`w:sdt`), hyperlinks, tables (`cell \\\\| cell`) | OCR of embedded images (`word/media/*`) → Tesseract | one page per heading block | heading text |\")\np.write_text(s)\np = Path(\"memory.md\"); s = p.read_text()\ns = s.replace(\"## Environment gotchas\", \"- **DOCX content controls**: `document.paragraphs` in python-docx skips `w:sdt`-wrapped paragraphs and tables\\n  (a real client contract came out empty). `_docx_blocks()` walks `document.element.body` in order instead.\\n\\n## Environment gotchas\")\ns = s.replace(\"  v0.10.1 `TESSERACT_CMD` + binary auto-detection (Homebrew path not on PATH), real-OCR test.\",\n              \"  v0.10.1 `TESSERACT_CMD` + binary auto-detection (Homebrew path not on PATH), real-OCR test;\\n  v0.10.2 DOCX body walk (content controls + tables).\")\np.write_text(s)\nprint(\"docs ok\")\nEOF\n.venv/bin/python scripts/build_docs.py >/dev/null && .venv/bin/python scripts/sync_rules.py --check",
+  "description": "Changelog 0.10.2, architecture and memory updates for the DOCX fix"
+}
+```
+
+## Tool  <sub>2026-09-06T11:38:23.131Z</sub>
+
+**Tool result**
+
+```
+docs ok
+rules in sync
+```
+
+## Assistant  <sub>2026-09-06T11:38:23.205Z</sub>
+
+**Tool call — `mcp__Claude_Browser__preview_stop`**
+
+```json
+{
+  "serverId": "0529829b-66a4-4ea9-9096-323477f4b4dc"
+}
+```
+
+## Tool  <sub>2026-09-06T11:38:25.239Z</sub>
+
+**Tool result**
+
+```
+Server 0529829b-66a4-4ea9-9096-323477f4b4dc stopped
+```
+
+## Assistant  <sub>2026-09-06T11:38:32.059Z</sub>
+
+The new content-control test fails; checking the assertion details before restarting the server.
+
+## Assistant  <sub>2026-09-06T11:38:33.724Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator; .venv/bin/python -m pytest -q tests/test_extractors.py::test_docx_content_controls_and_tables_are_read 2>&1 | grep -E \"^E|assert\" | head -8",
+  "description": "Show the failing assertion for the content-control DOCX test",
+  "timeout": 60000
+}
+```
+
+## Tool  <sub>2026-09-06T11:38:34.025Z</sub>
+
+**Tool result**
+
+```
+>       assert sum(1 for para in docx.Document(str(p)).paragraphs if para.text.strip()) == 0  # python-docx alone sees nothing
+E       assert 1 == 0
+E        +  where 1 = sum(<generator object test_docx_content_controls_and_tables_are_read.<locals>.<genexpr> at 0x10a45be00>)
+```
+
+## Assistant  <sub>2026-09-06T11:38:48.292Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\nt = Path(\"tests/test_extractors.py\"); x = t.read_text()\nx = x.replace(\"    assert sum(1 for para in docx.Document(str(p)).paragraphs if para.text.strip()) == 0  # python-docx alone sees nothing\",\n              \"    # python-docx alone sees only the single paragraph that is NOT wrapped in a content control\\n    assert sum(1 for para in docx.Document(str(p)).paragraphs if para.text.strip()) == 1\")\nt.write_text(x)\nEOF\n.venv/bin/python -m pytest -q 2>&1 | grep -E \"^(FAILED|ERROR)|passed|failed\"",
+  "description": "Fix the test precondition and rerun the suite",
+  "timeout": 300000
+}
+```
+
+## Assistant  <sub>2026-09-06T11:38:49.034Z</sub>
+
+**Tool call — `mcp__Claude_Browser__preview_start`**
+
+```json
+{
+  "name": "rag-api"
+}
+```
+
+## Tool  <sub>2026-09-06T11:38:49.715Z</sub>
+
+**Tool result**
+
+```
+39 passed, 6 warnings in 1.12s
+```
+
+## Tool  <sub>2026-09-06T11:38:55.730Z</sub>
+
+**Tool result**
+
+```
+Port 8000 is in use by "ssh" (PID 95266) (not a preview server). Ask the user: does this server need port 8000 specifically (e.g. for OAuth callbacks, webhooks, or CORS)? If yes, set "autoPort": false in .claude/launch.json and free port 8000. If no, set "autoPort": true in .claude/launch.json AND check the start command for hardcoded port flags (e.g. --port, -p) — remove them so the server uses the assigned port via the PORT environment variable. Then retry.
+```
+
+## Assistant  <sub>2026-09-06T11:38:57.278Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator; for i in $(seq 1 60); do curl -sf localhost:8000/api/health >/dev/null 2>&1 && break; sleep 1; done; sleep 2\ncurl -s localhost:8000/openapi.json | .venv/bin/python -c \"import sys,json; print('api', json.load(sys.stdin)['info']['version'])\"\necho \"=== retry the content-control DOCX ===\"\ncurl -s -X POST localhost:8000/api/documents/f5672b5bd60e/retry -o /dev/null -w \"HTTP %{http_code}\\n\"\nfor i in $(seq 1 120); do st=$(curl -s localhost:8000/api/documents/f5672b5bd60e | .venv/bin/python -c \"import sys,json; print(json.load(sys.stdin)['status'])\"); case \"$st\" in QUEUED|PROCESSING) sleep 1;; *) break;; esac; done\ncurl -s localhost:8000/api/documents/f5672b5bd60e | .venv/bin/python -c \"import sys,json; d=json.load(sys.stdin); print(d['status'], '| pages', d['pages'], '| chunks', d['chunks'], '|', d['reason'])\"\necho \"=== ask it ===\"\n.venv/bin/python -m cli.rag_cli ask \"Within how many days is payment due, and what happens on late payment?\" --doc f5672b5bd60e 2>&1 | head -7\necho \"=== remaining non-COMPLETED documents in default (excluding duplicates) ===\"\ncurl -s \"localhost:8000/api/documents?collection=default&size=100\" | .venv/bin/python -c \"\nimport sys,json\nrows=[d for d in json.load(sys.stdin)['items'] if d['status'] not in ('COMPLETED','DUPLICATE')]\nprint(len(rows), 'left'); [print(' ', d['doc_id'], d['filename'][:40], d['status'], (d['reason'] or '')[:80]) for d in rows]\"\necho \"=== final ===\"; .venv/bin/python scripts/export_transcript.py --session a88920a3-6212-4085-ad05-80ba0afca34d | tail -1; git status --short | wc -l",
+  "description": "Retry the content-control DOCX after restart, verify, ask a question, list remaining failures, export transcript",
+  "timeout": 600000
+}
+```
+
+## Tool  <sub>2026-09-06T11:38:59.642Z</sub>
+
+**Tool result**
+
+```
+api 0.10.2
+=== retry the content-control DOCX ===
+HTTP 404
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+KeyError: 'status'
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+KeyError: 'status'
+=== ask it ===
+HTTP 404: document 'f5672b5bd60e' not found
+=== remaining non-COMPLETED documents in default (excluding duplicates) ===
+0 left
+=== final ===
+exported 428 messages from a88920a3-6212-4085-ad05-80ba0afca34d.jsonl -> transcripts/2026-09-06-rag-generator-build.md
+      22
+```
+
+## Assistant  <sub>2026-09-06T11:39:18.555Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "lsof -nP -iTCP:8000 -sTCP:LISTEN 2>/dev/null | head -5; echo \"---\"; ps -o pid,command -p 95266 2>/dev/null | tail -1 | cut -c1-200; echo \"--- health on :8000 ---\"; curl -s -m 5 localhost:8000/api/health | .venv/bin/python -c \"import sys,json; h=json.load(sys.stdin); print('collections', h['collections'], '| llm', h['llm_model'], '| ocr', h['ocr_available'], h.get('tesseract_cmd'), '| DATA_DIR', h['settings'].get('DATA_DIR'))\" 2>&1 | head -3",
+  "description": "Identify the process on port 8000 and the instance behind it"
+}
+```
+
+## Tool  <sub>2026-09-06T11:39:18.678Z</sub>
+
+**Tool result**
+
+```
+---
+95266 ssh: /Users/shoaib.rayeen/.colima/_lima/colima/ssh.sock [mux]                                   
+--- health on :8000 ---
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/Users/shoaib.rayeen/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/json/__init__.py", line 293, in load
+```
+
+## Assistant  <sub>2026-09-06T11:39:21.510Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > .claude/launch.json <<'EOF'\n{\n  \"version\": \"0.0.1\",\n  \"configurations\": [\n    {\n      \"name\": \"rag-api\",\n      \"runtimeExecutable\": \".venv/bin/python\",\n      \"runtimeArgs\": [\"-m\", \"uvicorn\", \"app.main:app\", \"--host\", \"127.0.0.1\", \"--port\", \"8000\"],\n      \"port\": 8000\n    },\n    {\n      \"name\": \"rag-api-8010\",\n      \"runtimeExecutable\": \".venv/bin/python\",\n      \"runtimeArgs\": [\"-m\", \"uvicorn\", \"app.main:app\", \"--host\", \"127.0.0.1\", \"--port\", \"8010\"],\n      \"port\": 8010\n    }\n  ]\n}\nEOF\necho launch-ok",
+  "description": "Add a second launch configuration on port 8010"
+}
+```
+
+## Tool  <sub>2026-09-06T11:39:21.554Z</sub>
+
+**Tool result**
+
+```
+launch-ok
+```
+
+## Assistant  <sub>2026-09-06T11:39:39.307Z</sub>
+
+**Tool call — `mcp__Claude_Browser__preview_start`**
+
+```json
+{
+  "name": "rag-api-8010"
+}
+```
+
+## Assistant  <sub>2026-09-06T11:39:41.074Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "export PATH=\"/opt/homebrew/bin:$PATH\"; which docker colima 2>/dev/null; docker version --format '{{.Server.Version}}' 2>&1 | head -1; echo \"--- containers ---\"; docker ps --format '{{.Names}}\\t{{.Image}}\\t{{.Ports}}\\t{{.Status}}' 2>&1 | head -5; echo \"--- compose projects ---\"; docker compose ls 2>&1 | head -5",
+  "description": "Check Docker availability via Colima and what is running on it",
+  "timeout": 60000
+}
+```
+
+## Tool  <sub>2026-09-06T11:39:44.212Z</sub>
+
+**Tool result**
+
+```
+{
+  "serverId": "af54d629-6947-46d4-a86b-eccc084e3a64",
+  "port": 8010,
+  "name": "rag-api-8010",
+  "reused": false,
+  "previewId": "preview-local_ed8547aa-7d57-4f03-9aba-91798b56bd6d",
+  "tabId": "tab-1"
+}
+Server started successfully on port 8010. Opened tab "tab-1" at http://localhost:8010. Use tabId "tab-1" with read_page / computer / navigate; serverId is for preview_stop and preview_logs only.
+```
+
+## Tool  <sub>2026-09-06T11:39:44.252Z</sub>
+
+**Tool result**
+
+```
+docker not found
+colima not found
+(eval):1: command not found: docker
+--- containers ---
+(eval):1: command not found: docker
+--- compose projects ---
+(eval):1: command not found: docker
+```
+
+## Assistant  <sub>2026-09-06T11:39:48.673Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator; for i in $(seq 1 60); do curl -sf localhost:8010/api/health >/dev/null 2>&1 && break; sleep 1; done; sleep 2\ncurl -s localhost:8010/api/health | .venv/bin/python -c \"import sys,json; h=json.load(sys.stdin); print('local :8010 ->', 'ocr', h['ocr_available'], h.get('tesseract_cmd'), '| collections', h['collections'])\"\necho \"=== retry the content-control DOCX locally ===\"\ncurl -s -X POST localhost:8010/api/documents/f5672b5bd60e/retry -o /dev/null -w \"HTTP %{http_code}\\n\"\nfor i in $(seq 1 180); do st=$(curl -s localhost:8010/api/documents/f5672b5bd60e | .venv/bin/python -c \"import sys,json; print(json.load(sys.stdin).get('status'))\"); case \"$st\" in QUEUED|PROCESSING) sleep 1;; *) break;; esac; done\ncurl -s localhost:8010/api/documents/f5672b5bd60e | .venv/bin/python -c \"import sys,json; d=json.load(sys.stdin); print(d['status'], '| pages', d['pages'], '| chunks', d['chunks'], '|', d['reason'])\"\necho \"=== ask it ===\"\n.venv/bin/python -m cli.rag_cli ask \"Within how many days is payment due, and what happens on late payment?\" --doc f5672b5bd60e --api http://localhost:8010 2>&1 | head -7\necho \"=== remaining non-COMPLETED (excluding duplicates) in default ===\"\ncurl -s \"localhost:8010/api/documents?collection=default&size=100\" | .venv/bin/python -c \"\nimport sys,json\nrows=[d for d in json.load(sys.stdin)['items'] if d['status'] not in ('COMPLETED','DUPLICATE')]\nprint(len(rows), 'left'); [print(' ', d['doc_id'], d['filename'][:40], d['status'], (d['reason'] or '')[:80]) for d in rows]\"",
+  "description": "On the local 8010 instance: retry the content-control DOCX, verify, ask, list remaining failures",
+  "timeout": 600000
+}
+```
+
+## Tool  <sub>2026-09-06T11:39:54.937Z</sub>
+
+**Tool result**
+
+```
+local :8010 -> ocr True /opt/homebrew/bin/tesseract | collections ['default']
+=== retry the content-control DOCX locally ===
+HTTP 202
+COMPLETED | pages 24 | chunks 98 | Indexed 24 pages into 98 chunks
+=== ask it ===
+Payment is due within thirty (30) days from the date of the issuance of the invoice, unless otherwise agreed [1][2]. In the event of late payment, any payment by the Purchaser will be initially charged to the refund of legal and extrajudicial costs, then to the interests relief, and finally to the settlement of the oldest receivables regardless of any different appropriation of payment made by the Purchaser [1][2]. Additionally, the Purchaser shall automatically be liable for payment of default interests, calculated from the day after the due date until full payment is made [3].
+
+[gpt-4o · 1887 ms · scope: 1 selected document(s) · 3 citation(s) from 6 retrieved chunks]
+  [1] client_doc_1643_401933.docx — page 20, Section 5 – Premixes and complete feeds  (doc f5672b5bd60e)
+  [2] client_doc_1643_401933.docx — page 21, Section 6 – Additives and ingredients  (doc f5672b5bd60e)
+  [3] client_doc_1643_401933.docx — page 9, Section 7 – Prices and terms of payment  (doc f5672b5bd60e)
+=== remaining non-COMPLETED (excluding duplicates) in default ===
+2 left
+  23adcf57bb96 empty.docx EMPTY_FILE The uploaded file is 0 bytes
+  cd667545b023 notes.xyz EXTRACTION_NOT_SUPPORTED Extension '.xyz' is not supported. Supported: .csv .docx .htm .html .jpeg .jpg .
+```
+
+## Assistant  <sub>2026-09-06T11:40:05.995Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator; .venv/bin/python -m compileall -q app cli evaluation scripts tests && echo compile-ok; .venv/bin/python scripts/sync_rules.py --check; .venv/bin/python scripts/build_docs.py >/dev/null && echo docs-ok; .venv/bin/python scripts/export_transcript.py --session a88920a3-6212-4085-ad05-80ba0afca34d | tail -1; git status --short | wc -l",
+  "description": "Final compile, rules, docs, transcript export, git status",
+  "timeout": 120000
 }
 ```

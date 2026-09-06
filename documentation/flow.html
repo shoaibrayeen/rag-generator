@@ -93,19 +93,19 @@
 <!-- ============================== STATUSES ============================== -->
 <section class="panel" id="statuses">
   <table>
-    <thead><tr><th>Status</th><th>Meaning</th><th>Processed?</th><th>Reason column shows</th></tr></thead>
+    <thead><tr><th>Status</th><th>Meaning</th><th>Processed?</th><th>Reason column shows</th><th>Retry?</th></tr></thead>
     <tbody>
-      <tr><td><span class="pill">QUEUED</span></td><td>Accepted and stored; waiting for the background worker.</td><td>soon</td><td>"Waiting for the background worker"</td></tr>
-      <tr><td><span class="pill warn">DUPLICATE</span></td><td>A file with the same SHA-256 already exists (QUEUED/PROCESSING/COMPLETED) in this collection.</td><td><b>no</b></td><td>Name and id of the original, with a link in the listing</td></tr>
-      <tr><td><span class="pill info">PROCESSING</span></td><td>Worker is running; <code>stage</code> is extracting → chunking → embedding.</td><td>in progress</td><td>Current stage with counts</td></tr>
-      <tr><td><span class="pill ok">COMPLETED</span></td><td>Chunks are in ChromaDB and BM25; the file is searchable.</td><td>yes</td><td>"Indexed N pages (k via OCR) into M chunks"</td></tr>
-      <tr><td><span class="pill bad">FAILED</span></td><td>Processing raised an error (corrupt file, no extractable text, embedding error…).</td><td>no</td><td>"PROCESSING FAILED: &lt;exception&gt;"</td></tr>
-      <tr><td><span class="pill bad">EMPTY_FILE</span></td><td>The upload was 0 bytes.</td><td>no</td><td>"The uploaded file is 0 bytes"</td></tr>
-      <tr><td><span class="pill bad">EXTRACTION_NOT_SUPPORTED</span></td><td>Extension is not in <code>SUPPORTED_EXTENSIONS</code>.</td><td>no</td><td>The extension and the supported list</td></tr>
-      <tr><td><span class="pill bad">UPLOAD_FAILED</span></td><td>Could not read the upload stream, file exceeds <code>MAX_UPLOAD_MB</code>, or could not write to disk.</td><td>no</td><td>"UPLOAD FAILED: &lt;cause&gt;"</td></tr>
+      <tr><td><span class="pill">QUEUED</span></td><td>Accepted and stored; waiting for the background worker.</td><td>soon</td><td>"Waiting for the background worker"</td><td>only if stalled for RETRY_STALE_SECONDS (stuck worker) → re-queued</td></tr>
+      <tr><td><span class="pill warn">DUPLICATE</span></td><td>A file with the same SHA-256 already exists (QUEUED/PROCESSING/COMPLETED) in this collection.</td><td><b>no</b></td><td>Name and id of the original, with a link in the listing</td><td>no — use the original document</td></tr>
+      <tr><td><span class="pill info">PROCESSING</span></td><td>Worker is running; <code>stage</code> is extracting → chunking → embedding.</td><td>in progress</td><td>Current stage with counts</td><td>only if stalled for RETRY_STALE_SECONDS → re-queued</td></tr>
+      <tr><td><span class="pill ok">COMPLETED</span></td><td>Chunks are in ChromaDB and BM25; the file is searchable.</td><td>yes</td><td>"Indexed N pages (k via OCR) into M chunks"</td><td>no — already indexed</td></tr>
+      <tr><td><span class="pill bad">FAILED</span></td><td>Processing raised an error (corrupt file, no extractable text, embedding error…).</td><td>no</td><td>"PROCESSING FAILED: &lt;exception&gt;"</td><td><b>yes</b> — stored file is processed again with the current extractors</td></tr>
+      <tr><td><span class="pill bad">EMPTY_FILE</span></td><td>The upload was 0 bytes.</td><td>no</td><td>"The uploaded file is 0 bytes"</td><td>no file stored → asks you to upload again (410)</td></tr>
+      <tr><td><span class="pill bad">EXTRACTION_NOT_SUPPORTED</span></td><td>Extension is not in <code>SUPPORTED_EXTENSIONS</code>.</td><td>no</td><td>The extension and the supported list</td><td><b>yes</b> — stored file is re-checked (extension + content sniffing); processed if now recognised</td></tr>
+      <tr><td><span class="pill bad">UPLOAD_FAILED</span></td><td>Could not read the upload stream, file exceeds <code>MAX_UPLOAD_MB</code>, or could not write to disk.</td><td>no</td><td>"UPLOAD FAILED: &lt;cause&gt;"</td><td>no file stored → asks you to upload again (410)</td></tr>
     </tbody>
   </table>
-  <p class="muted" style="font-size:12px">Terminal statuses (no further change): everything except QUEUED and PROCESSING. Poll <code>GET /api/jobs/{job_id}</code> until the status is terminal.</p>
+  <p class="muted" style="font-size:12px">Terminal statuses (no further change): everything except QUEUED and PROCESSING. Poll <code>GET /api/jobs/{job_id}</code> until the status is terminal. <b>Retry</b> (<code>POST /api/documents/{id}/retry</code>, the <i>retry</i> button on the home page, /documents and the show page, or <code>rag retry</code>) is offered for every document that is not COMPLETED or DUPLICATE; the server applies the rules in the last column.</p>
 </section>
 
 <script>
@@ -125,7 +125,7 @@ const FLOWS = {
     {t:'PROCESSING · embedding', d:'fastembed (BAAI/bge-small-en-v1.5, 384-d, ONNX on CPU) embeds every chunk in batches. Vectors, text and metadata are written to the ChromaDB collection; then the BM25 index for the collection is rebuilt from Chroma.',
      code:`vector_store.add_chunks(collection, ids, texts, embeddings, metadatas)\nbm25_index.rebuild(collection)`},
     {t:'COMPLETED', d:'The document becomes COMPLETED with a reason like "Indexed 5 pages into 14 chunks". Any exception on the way → FAILED with "PROCESSING FAILED: …". The job rolls these up: PROCESSING while any file runs, then COMPLETED (at least one file indexed or duplicate; "partially completed" if some failed) or FAILED (nothing indexed). Both listings reflect it.',
-     branches:[['document COMPLETED','ok','searchable now'],['document FAILED','bad','PROCESSING FAILED: <exception>'],['job COMPLETED','ok','all files terminal, ≥1 indexed/duplicate'],['job FAILED','bad','all files terminal, none indexed']]},
+     branches:[['document COMPLETED','ok','searchable now'],['document FAILED','bad','PROCESSING FAILED: <exception> → retry button re-processes the stored file'],['job COMPLETED','ok','all files terminal, ≥1 indexed/duplicate'],['job FAILED','bad','all files terminal, none indexed']]},
   ],
   ask: [
     {t:'POST /api/ask', d:'{"question": "...", "collection": "demo"} searches the whole collection. Add "doc_ids": [...] and/or "job_ids": [...] to search only those documents (a job expands to its COMPLETED documents; a duplicate id resolves to its original). Synchronous: the answer comes back in the response.',
@@ -154,10 +154,10 @@ Documents panel: Doc ID · Name · Pages · Status · Reason        (doc id → 
     {t:'/jobs — job listing', d:'A dedicated, URL-addressable listing of every upload request, 20 per page: JOB ID, collection, DOCUMENTS (total in the job, plus how many are indexed), PAGES and CHUNKS summed over the job\'s COMPLETED documents, STATUS, per-status counts and REASON. Filter by collection. Clicking a job opens /documents?job_id=… .',
      code:`GET /api/jobs?page=0&size=20&collection=default
 → {items:[{job_id, total_documents:3, total_pages:11, total_chunks:14, status:"COMPLETED", counts:{COMPLETED:2, DUPLICATE:1}, reason:"…"}], page:0, size:20, total:7, pages:1, …}`},
-    {t:'/documents — document listing', d:'Every uploaded file, 20 per page: DOC ID, NAME, type, JOB (link), PAGES (as soon as extraction ran; – before), CHUNKS, STATUS, REASON (duplicates link to their original), updated time. Filters for collection, status and job are kept in the URL (?job_id=&status=&page=) so a filtered view can be shared. Clicking a row opens the show page.',
+    {t:'/documents — document listing', d:'Every uploaded file, 20 per page: DOC ID, NAME, type, JOB (link), PAGES (as soon as extraction ran; – before), CHUNKS, STATUS, REASON (duplicates link to their original), updated time. Filters for collection, status and job are kept in the URL (?job_id=&status=&page=) so a filtered view can be shared. Every non-COMPLETED, non-DUPLICATE row has a retry button. Clicking a row opens the show page.',
      code:`GET /api/documents?page=0&size=20&job_id=7f3a…&status=COMPLETED`},
     {t:'Job → its documents', d:'From either listing, a job leads to the document listing filtered to that job (a chip shows the active filter with × to clear). This is how "what happened to my upload?" is answered: one job, all its files, each with a status and a reason.',
-     branches:[['COMPLETED','ok','indexed; pages and chunks shown; show page + chat available'],['DUPLICATE','warn','not processed; → original document link'],['FAILED','bad','reason names the cause; retry available'],['other','bad','EMPTY_FILE · EXTRACTION_NOT_SUPPORTED · UPLOAD_FAILED — recorded, never processed']]},
+     branches:[['COMPLETED','ok','indexed; pages and chunks shown; show page + chat available'],['DUPLICATE','warn','not processed; → original document link'],['FAILED','bad','reason names the cause; retry re-processes the stored file'],['EXTRACTION_NOT_SUPPORTED','bad','file stored anyway; retry re-checks it once a format is added'],['EMPTY_FILE / UPLOAD_FAILED','bad','nothing stored; retry asks you to upload again']]},
     {t:'Document → show page', d:'Clicking a document (row on /documents, or its id on the home page) opens /documents/{doc_id}: the viewer + chat page described in the next tab. For non-COMPLETED documents the page explains why a viewer is not applicable, links to the original for duplicates, and offers Retry for failures.',
      code:`/documents/a1b2c3d4e5f6`},
   ],
@@ -178,7 +178,7 @@ Citations:  [2]  "Coverage periods — Desktop and collaborative arms: 2 years. 
     {t:'Click a chip → jump + highlight', d:'Clicking a page chip switches to Text view, scrolls the viewer so the cited passage is in view, outlines the page card, and wraps every cited chunk on that page in a light-blue <mark> (the clicked page\'s passages darker). The passage is located by searching the chunk text in the page text, falling back to the stored char offsets. The first citation is focused automatically when the answer arrives.',
      branches:[['light blue','ok','cited passages on other pages'],['darker blue','ok','passages on the page you clicked'],['outlined card','ok','the target page'],['auto-focus','ok','first cited page after each answer']]},
     {t:'Not applicable states', d:'If the document is not COMPLETED the chat is disabled and a banner explains why: QUEUED/PROCESSING refresh automatically; FAILED shows the reason and a Retry button; DUPLICATE shows the original document\'s show-page URL to ask there instead; EMPTY_FILE / EXTRACTION_NOT_SUPPORTED / UPLOAD_FAILED explain that nothing was ever processed.',
-     branches:[['QUEUED / PROCESSING','warn','auto-refresh until terminal'],['FAILED','bad','reason + Retry'],['DUPLICATE','warn','→ /documents/<original id>'],['others','bad','never processed; nothing to show']]},
+     branches:[['QUEUED / PROCESSING','warn','auto-refresh; retry only if stalled'],['FAILED / EXTRACTION_NOT_SUPPORTED','bad','reason + Retry (re-processes the stored file)'],['DUPLICATE','warn','→ /documents/<original id>'],['EMPTY_FILE / UPLOAD_FAILED','bad','nothing stored; retry asks to upload again']]},
   ],
 };
 const pos = {ingest:-1, ask:-1, pages:-1, show:-1}; const timers = {};

@@ -162,6 +162,7 @@ class HealthResponse(BaseModel):
     supported_extensions: list[str]
     ocr_enabled: bool
     ocr_available: bool
+    tesseract_cmd: Optional[str] = None
     collections: list[str]
     statuses: list[str]
     settings: dict
