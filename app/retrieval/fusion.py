@@ -1,8 +1,12 @@
 """Hybrid retrieval: dense top-k + BM25 top-k, merged with Reciprocal Rank Fusion."""
 from __future__ import annotations
 
+import logging
+
 from app.config import settings
 from app.retrieval import bm25_index, embedder, vector_store
+
+log = logging.getLogger("rag.fusion")
 
 
 def rrf_merge(ranked_lists: dict[str, list[str]], k: int) -> list[tuple[str, float, dict[str, int]]]:
@@ -44,4 +48,7 @@ def hybrid_retrieve(question: str, collection: str, top_k: int | None = None,
         item["dense_rank"] = ranks.get("dense")
         item["bm25_rank"] = ranks.get("bm25")
         results.append(item)
+    both = sum(1 for r in results if r["dense_rank"] and r["bm25_rank"])
+    log.info("[fuse] dense=%d bm25=%d fused_candidates=%d kept=%d in_both=%d rrf_k=%d", len(dense), len(lexical),
+             len(fused), len(results), both, settings.RRF_K)
     return results

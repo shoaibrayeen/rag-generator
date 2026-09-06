@@ -2,6 +2,7 @@
 -> answer text + validated citations + all retrieved sources."""
 from __future__ import annotations
 
+import logging
 import re
 import time
 
@@ -10,6 +11,8 @@ from app.llm import client as llm
 from app.llm.prompts import NOT_FOUND_MARKER, build_messages
 from app.models import AskResponse, AskScope, Source
 from app.retrieval.fusion import hybrid_retrieve
+
+log = logging.getLogger("rag.answer")
 
 _CITE = re.compile(r"\[(\d+)\]")
 
@@ -39,6 +42,8 @@ def answer(question: str, collection: str | None = None, top_k: int | None = Non
            doc_ids: list[str] | None = None, job_ids: list[str] | None = None) -> AskResponse:
     collection = collection or settings.DEFAULT_COLLECTION
     t0 = time.perf_counter()
+    log.info("[ask] collection=%s scope_docs=%s jobs=%s question=%r", collection,
+             len(doc_ids) if doc_ids is not None else "all", job_ids or [], question[:120])
     hits = hybrid_retrieve(question, collection, top_k, doc_ids=doc_ids)
     if hits:
         text = llm.chat(build_messages(question, hits))
@@ -63,6 +68,9 @@ def answer(question: str, collection: str | None = None, top_k: int | None = Non
         for i, h in enumerate(hits, start=1)
     ]
     text, citations, unresolved = extract_citations(text.strip(), sources)
+    log.info("[ask] done in %d ms sources=%d citations=%s unresolved=%s not_found=%s",
+             (time.perf_counter() - t0) * 1000, len(sources), [c.n for c in citations], unresolved,
+             text.startswith(NOT_FOUND_MARKER))
     scope = AskScope(collection=collection, doc_ids=list(doc_ids or []), job_ids=list(job_ids or []),
                      restricted=doc_ids is not None)
     return AskResponse(question=question, answer=text, citations=citations, sources=sources,

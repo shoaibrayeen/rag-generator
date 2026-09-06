@@ -44,7 +44,7 @@ for a completely different set and it works unchanged — no code edits, only <c
 </tr>
 <tr>
 <td>Formats</td>
-<td>PDF (PyMuPDF), DOCX (python-docx), HTML (beautifulsoup4), TXT/MD/CSV (stdlib) → text with page metadata · <strong>Tesseract OCR as fallback</strong> when a primary extractor fails or finds no text · PNG/JPG/TIFF via OCR</td>
+<td>PDF (PyMuPDF), DOCX (python-docx), RTF (striprtf), HTML (beautifulsoup4), TXT/MD/CSV (stdlib) → text with page metadata · the <strong>real format is sniffed from the bytes</strong> (an RTF saved as <code>.docx</code> is read as RTF) · <strong>Tesseract OCR as fallback</strong> when a primary extractor fails or finds no text · PNG/JPG/TIFF via OCR</td>
 </tr>
 <tr>
 <td>Retrieval</td>
@@ -141,6 +141,10 @@ returns immediately (HTTP 202) with the job — its <code>job_id</code>, a deriv
 document record per file. A background worker indexes the files; poll <code>GET /api/jobs/{job_id}</code>
 or watch the listings. The interactive walkthrough is in
 <a href="/documentation/flow.html"><code>documentation/flow.html</code></a>.</p>
+<p>Per file the upload does, in order: validate extension and size → <strong>upload step</strong>: store the file
+and compute its SHA-256 (kept on the record) → <strong>duplicate check</strong> against live documents of the same
+collection → <code>QUEUED</code> for the background worker. A duplicate is therefore recorded after the upload
+step completes, with its hash and a link to the original.</p>
 <p>Two listings, both <strong>paginated</strong> (<code>page</code> is 0-based and defaults to <code>0</code>, <code>size</code> defaults to <code>5</code>,
 max <code>LIST_MAX_PAGE_SIZE</code>). Every listing response is an envelope:</p>
 <pre><code class="language-json">{&quot;items&quot;: [...], &quot;page&quot;: 0, &quot;size&quot;: 5, &quot;total&quot;: 12, &quot;pages&quot;: 3, &quot;has_next&quot;: true, &quot;has_prev&quot;: false}
@@ -230,14 +234,40 @@ retrieved) and <strong><code>scope</code></strong> (what was searched). Markers 
 source are removed from the text and reported in <code>unresolved_citations</code>, so a client never shows a
 citation it cannot open.</p>
 <h2 id="3-using-it">3. Using it</h2>
-<h3 id="ui-httplocalhost8000">UI (<a href="http://localhost:8000">http://localhost:8000</a>)</h3>
-<ol>
-<li><strong>Upload</strong> — drop files, optionally name a <em>collection</em> (a document set); they are submitted as one job and the job id is shown.</li>
-<li><strong>Jobs</strong> — JOB ID · FILES · STATUS · REASON, 5 per page with prev/next. Click a row to filter the documents to that job; tick a job to ask over it.</li>
-<li><strong>Documents</strong> — DOC ID · NAME · STATUS · REASON for every file, 5 per page with prev/next (job id shown under the doc id); duplicates link to their original; tick <code>COMPLETED</code> documents to ask over them; delete finished ones with ✕.</li>
-<li><strong>Ask</strong> — the scope line shows what will be searched (whole collection or the ticked jobs/documents). The answer shows <code>[n]</code> markers, then a <strong>Citations</strong> list (file, page, section, doc id); click a marker to jump to the chunk.</li>
-<li><strong>Sources</strong> — every retrieved chunk with file, page/section, doc id, whether it came from dense or BM25 (or both), its RRF score and a "cited" badge. OCR'd chunks are flagged.</li>
-</ol>
+<h3 id="ui">UI</h3>
+<p>Three pages plus a show page:</p>
+<table>
+<thead>
+<tr>
+<th>URL</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/</code></td>
+<td>workbench: upload · jobs (5 per page) · documents (5 per page) · ask · sources</td>
+</tr>
+<tr>
+<td><code>/jobs</code></td>
+<td>dedicated job listing, <strong>20 per page</strong>, filter by collection; click a job → its documents</td>
+</tr>
+<tr>
+<td><code>/documents</code></td>
+<td>dedicated document listing, <strong>20 per page</strong>, filter by collection / status / job (<code>?job_id=&amp;status=</code>); click a row → show page</td>
+</tr>
+<tr>
+<td><code>/documents/{doc_id}</code></td>
+<td><strong>show page</strong>: for <code>COMPLETED</code> documents the original file (inline for PDF, HTML, text, CSV, images; download for DOCX/RTF) side by side with the indexed content (pages → chunks). For any other status the page explains why a viewer is not applicable and shows the reason; a <code>DUPLICATE</code> links to the original document's show page; a <code>FAILED</code> document offers <em>Retry</em>.</td>
+</tr>
+</tbody>
+</table>
+<p>The workbench (<code>/</code>):
+1. <strong>Upload</strong> — drop files, optionally name a <em>collection</em> (a document set); they are submitted as one job and the job id is shown.
+2. <strong>Jobs</strong> — JOB ID · FILES · STATUS · REASON, 5 per page with prev/next. Click a row to filter the documents to that job; tick a job to ask over it.
+3. <strong>Documents</strong> — DOC ID · NAME · STATUS · REASON for every file, 5 per page with prev/next (job id shown under the doc id); duplicates link to their original; tick <code>COMPLETED</code> documents to ask over them; delete finished ones with ✕.
+4. <strong>Ask</strong> — the scope line shows what will be searched (whole collection or the ticked jobs/documents). The answer shows <code>[n]</code> markers, then a <strong>Citations</strong> list (file, page, section, doc id); click a marker to jump to the chunk.
+5. <strong>Sources</strong> — every retrieved chunk with file, page/section, doc id, whether it came from dense or BM25 (or both), its RRF score and a "cited" badge. OCR'd chunks are flagged.</p>
 <p><strong>Reset collection</strong> wipes a document set so you can load a different one.</p>
 <h3 id="cli">CLI</h3>
 <pre><code class="language-bash">rag ingest samples/*.md samples/*.pdf --collection demo   # one job; prints the job id, waits for it
@@ -249,6 +279,7 @@ rag status --job &lt;job_id&gt; --page 0 --size 5               # documents of o
 rag ask &quot;How many days of annual leave do employees get?&quot; -c demo          # whole collection
 rag ask &quot;What is the notice period?&quot; --doc &lt;doc_id&gt; --doc &lt;doc_id&gt;         # only these documents
 rag ask &quot;Summarise the warranty terms&quot; --job &lt;job_id&gt; --show-sources        # only this job's documents
+rag retry &lt;doc_id&gt;                                        # re-process a FAILED document
 rag reset -c demo --yes
 rag serve
 </code></pre>
@@ -294,6 +325,16 @@ rag serve
 <td>one document</td>
 </tr>
 <tr>
+<td><code>GET</code></td>
+<td><code>/api/documents/{doc_id}/file?download=</code></td>
+<td>the stored original file (inline for PDF/HTML/text/CSV/images, attachment otherwise)</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/documents/{doc_id}/retry</code></td>
+<td>re-queue a <code>FAILED</code> document from its stored file → <strong>202</strong></td>
+</tr>
+<tr>
 <td><code>DELETE</code></td>
 <td><code>/api/documents/{doc_id}</code></td>
 <td>remove a finished document and its chunks</td>
@@ -325,14 +366,20 @@ curl -X POST localhost:8000/api/ask -H 'content-type: application/json' \
 </code></pre>
 <h2 id="4-what-is-supported">4. What is supported</h2>
 <ul>
-<li><strong>Input formats:</strong> <code>.pdf .docx .html .htm .txt .md .csv</code> plus <code>.png .jpg .jpeg .tiff .tif</code> (OCR).</li>
-<li><strong>Two-tier extraction.</strong> Primary extractors run first: PyMuPDF (PDF), python-docx (DOCX),
+<li><strong>Input formats:</strong> <code>.pdf .docx .rtf .html .htm .txt .md .csv</code> plus <code>.png .jpg .jpeg .tiff .tif</code> (OCR).</li>
+<li><strong>Content sniffing</strong> (<code>SNIFF_CONTENT</code>): the first bytes decide the reader, not the extension. An RTF or PDF
+  mislabelled as <code>.docx</code> is read correctly and the COMPLETED reason notes it ("extension '.docx' but content is
+  RTF"). A legacy binary <code>.doc</code> (OLE2) is recognised and fails with the advice to save it as <code>.docx</code> or PDF.</li>
+<li><strong>Two-tier extraction.</strong> Primary extractors run first: PyMuPDF (PDF), python-docx (DOCX), striprtf (RTF),
   beautifulsoup4 + lxml (HTML), stdlib (TXT/MD/CSV). <strong>Tesseract is the fallback</strong>, used only when a
   primary extractor raises or yields no text: scanned/image-only PDFs are rendered page by page
   (PyMuPDF) and OCR'd; a DOCX with no body text has its embedded images OCR'd; HTML that lxml cannot
   parse falls back to stdlib tag-stripping; individual scanned pages inside a digital PDF (fewer than
   <code>OCR_MIN_CHARS_PER_PAGE</code> characters) are OCR'd in place. Image files go straight to OCR.
-  If neither tier yields text the job ends <code>FAILED</code> with the precise reason (e.g. Tesseract not installed).</li>
+  If neither tier yields text the document ends <code>FAILED</code> with a precise reason that names what the primary
+  reader hit (e.g. <code>the docx reader failed (BadZipFile: File is not a zip file)</code>) and what the fallback said.</li>
+<li><strong>Retry</strong>: a <code>FAILED</code> document can be re-processed from its stored file (<code>POST /api/documents/{id}/retry</code>,
+  UI <em>retry</em> button, <code>rag retry &lt;doc_id&gt;</code>) — useful after installing Tesseract or upgrading the extractors.</li>
 <li><strong>Page metadata:</strong> PDF = printed page · DOCX = one page per heading section · HTML = one page, <code>&lt;title&gt;</code> as section ·
   MD = one page per heading · TXT = one page · CSV = one page per <code>CSV_ROWS_PER_PAGE</code> rows (header repeated) · images = one page per frame.</li>
 <li><strong>Multiple document sets</strong> via collections (names: 3-63 chars of letters, digits, <code>. _ -</code>); reset or delete without restarting.</li>
@@ -348,7 +395,7 @@ curl -X POST localhost:8000/api/ask -H 'content-type: application/json' \
 <li>Asking across several collections in one question (a scope must live in one collection).</li>
 <li>Authentication, multi-tenancy, rate limiting — run behind your own gateway.</li>
 <li>Horizontal scaling: BM25 lives in one process's memory; run a single replica.</li>
-<li>Formats outside the list above (PPTX, XLSX, EPUB, audio…). Adding one is a small extractor — see Tuning.</li>
+<li>Formats outside the list above (legacy binary <code>.doc</code>, PPTX, XLSX, EPUB, audio…). Adding one is a small extractor — see Tuning.</li>
 <li>OCR of images embedded in HTML pages (only DOCX-embedded images and PDF pages are OCR'd).</li>
 <li>OCR languages other than English unless you install extra Tesseract language packs and set <code>OCR_LANG</code>.</li>
 <li>Real-time streaming of the answer (responses are returned whole).</li>
@@ -456,6 +503,11 @@ ask    ─► resolve scope (collection | doc_ids | job_ids) ─► embed ─►
 <td>default and maximum <code>size</code> for the job and document listings (<code>page</code> is 0-based)</td>
 </tr>
 <tr>
+<td><code>LOG_LEVEL</code> / <code>SNIFF_CONTENT</code></td>
+<td><code>INFO</code> / true</td>
+<td>log verbosity (<code>DEBUG</code> adds per-batch detail); detect the real format from file bytes</td>
+</tr>
+<tr>
 <td><code>APP_PORT</code> / <code>APP_HOST</code></td>
 <td>8000 / <code>0.0.0.0</code></td>
 <td>port the app listens on (<code>rag serve</code>) and the host port docker compose publishes (<code>${APP_PORT:-8000}</code>)</td>
@@ -517,8 +569,8 @@ python -m evaluation.run_eval --dataset evaluation/dataset.mydocs.jsonl
 </tr>
 <tr>
 <td>Extraction (primary)</td>
-<td>PyMuPDF, python-docx, beautifulsoup4 + lxml, stdlib csv/html.parser</td>
-<td>one small library per format; PyMuPDF also renders pages for OCR</td>
+<td>PyMuPDF, python-docx, striprtf, beautifulsoup4 + lxml, stdlib csv/html.parser</td>
+<td>one small library per format; PyMuPDF also renders pages for OCR; magic-byte sniffing picks the reader</td>
 </tr>
 <tr>
 <td>OCR (fallback)</td>
@@ -589,7 +641,8 @@ the binary ones with <code>pip install -r requirements-dev.txt &amp;&amp; python
 <pre><code class="language-bash">pytest   # chunker, RRF, every extractor, OCR-unavailable path, async job flow, duplicates, rejections, 502 on LLM errors
 </code></pre>
 <h2 id="11-repository-layout">11. Repository layout</h2>
-<pre><code>app/            FastAPI service (config, models, ingest/, retrieval/, llm/, rag.py, jobs.py [jobs + documents registry], main.py, static/index.html)
+<pre><code>app/            FastAPI service (config, models, ingest/, retrieval/, llm/, rag.py, jobs.py [jobs + documents registry], logging_utils.py, main.py,
+                static/ index.html (workbench) · jobs.html · documents.html · document.html (show page))
 cli/            `rag` CLI
 evaluation/     Claude-as-judge runner, dataset generator, example dataset, reports/
 documentation/  architecture.md(.html), enhancements.md(.html), flow.html (interactive), changelog.html, readme.html

@@ -104,7 +104,7 @@ def test_corrupt_pdf_reports_reason(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(extractors, "ocr_available", lambda: True)
     p = tmp_path / "bad.pdf"
     p.write_bytes(b"not a pdf")
-    with pytest.raises(extractors.ExtractionError, match="Could not read this pdf"):
+    with pytest.raises(extractors.ExtractionError, match="Could not read 'bad.pdf': the pdf reader failed"):
         extract(p)
 
 
@@ -128,3 +128,49 @@ def test_image_without_tesseract(tmp_path: Path, monkeypatch):
     Image.new("RGB", (50, 50), "white").save(p)
     with pytest.raises(extractors.ExtractionError, match="Tesseract"):
         extract(p)
+
+
+RTF = (rb"{\rtf1\ansi\deff0{\fonttbl{\f0 Times New Roman;}}\pard Master Services Agreement dated 17 December 2025.\par "
+       rb"The Supplier shall deliver the robots within 12 weeks.\par\page Schedule A: pricing is EUR 64,000 per Titan unit.\par}")
+
+
+def test_sniff_type_detects_content(tmp_path: Path):
+    (tmp_path / "a.docx").write_bytes(RTF)
+    assert extractors.sniff_type(tmp_path / "a.docx") == "rtf"
+    (tmp_path / "b.pdf").write_bytes(b"%PDF-1.4 ...")
+    assert extractors.sniff_type(tmp_path / "b.pdf") == "pdf"
+    (tmp_path / "c.docx").write_bytes(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 64)
+    assert extractors.sniff_type(tmp_path / "c.docx") == "doc"
+    (tmp_path / "d.txt").write_bytes(b"just text")
+    assert extractors.sniff_type(tmp_path / "d.txt") is None
+
+
+def test_rtf_mislabelled_as_docx_is_read_as_rtf(tmp_path: Path):
+    p = tmp_path / "contract.docx"
+    p.write_bytes(RTF)
+    pages = extract(p)
+    assert len(pages) == 2 and "Master Services Agreement" in pages[0].text and "Schedule A" in pages[1].text
+    assert pages[0].meta["format_note"].startswith("extension '.docx' but content is RTF")
+
+
+def test_rtf_extension(tmp_path: Path):
+    p = tmp_path / "memo.rtf"
+    p.write_bytes(RTF)
+    assert "12 weeks" in extract(p)[0].text
+
+
+def test_legacy_doc_gives_precise_reason(tmp_path: Path):
+    p = tmp_path / "old.docx"
+    p.write_bytes(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 512)
+    with pytest.raises(extractors.ExtractionError, match="legacy binary Word"):
+        extract(p)
+
+
+def test_broken_docx_reason_names_the_reader_failure(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(extractors, "ocr_available", lambda: False)
+    p = tmp_path / "broken.docx"
+    p.write_bytes(b"this is not a zip and not rtf")
+    with pytest.raises(extractors.ExtractionError) as ei:
+        extract(p)
+    msg = str(ei.value)
+    assert "docx reader failed" in msg and "Fallback:" in msg

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAG Generator · Documents</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c1f26; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --ok:#15803d; --bad:#b91c1c; --warn:#b45309; --info:#0369a1; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:14px 28px; background:var(--card); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:18px; } header h1 a { color:inherit; text-decoration:none; }
+  header nav { margin-left:auto; font-size:13px; } header nav a { color:var(--accent); text-decoration:none; margin-left:12px; } header nav a.on { font-weight:700; }
+  main { max-width:1300px; margin:0 auto; padding:20px 28px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:20px; }
+  .card h2 { margin:0 0 12px; font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .card h2 .hint { text-transform:none; letter-spacing:0; font-weight:400; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:8px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12px; }
+  tr.clickable { cursor:pointer; } tr.clickable:hover { background:#f8fafc; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:600; background:#eef2ff; color:var(--accent); white-space:nowrap; }
+  .pill.COMPLETED { background:#dcfce7; color:var(--ok); }
+  .pill.FAILED, .pill.UPLOAD_FAILED, .pill.EXTRACTION_NOT_SUPPORTED, .pill.EMPTY_FILE { background:#fee2e2; color:var(--bad); }
+  .pill.DUPLICATE { background:#fef3c7; color:var(--warn); } .pill.PROCESSING { background:#e0f2fe; color:var(--info); } .pill.ocr { background:#fef3c7; color:var(--warn); }
+  code.id { font:12px ui-monospace, Menlo, monospace; color:var(--muted); } a { color:var(--accent); }
+  button { padding:6px 12px; border:0; border-radius:6px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }
+  button.secondary { background:#eef2ff; color:var(--accent); } button.small { padding:3px 8px; font-size:12px; } button:disabled { opacity:.5; cursor:default; }
+  input[type=text], select { padding:7px 9px; border:1px solid var(--line); border-radius:6px; font:inherit; }
+  .toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; font-size:13px; }
+  .pager { display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-top:10px; font-size:12px; color:var(--muted); }
+  .muted { color:var(--muted); font-size:12px; } .err { color:var(--bad); font-size:13px; white-space:pre-wrap; }
+  .chip { display:inline-flex; gap:6px; align-items:center; background:#eff6ff; color:var(--accent); border-radius:999px; padding:2px 10px; font-size:12px; }
+  .chip a { text-decoration:none; }
+  .banner { border-radius:8px; padding:12px 14px; margin-bottom:14px; font-size:13px; }
+  .banner.warn { background:#fef3c7; color:#78350f; } .banner.bad { background:#fee2e2; color:#7f1d1d; } .banner.info { background:#e0f2fe; color:#0c4a6e; }
+  dl { display:grid; grid-template-columns:160px 1fr; gap:6px 12px; margin:0; font-size:13px; } dt { color:var(--muted); } dd { margin:0; word-break:break-all; }
+  iframe.viewer { width:100%; height:70vh; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  img.viewer { max-width:100%; border:1px solid var(--line); border-radius:8px; }
+  .page { border:1px solid var(--line); border-radius:8px; margin-top:10px; padding:10px 12px; }
+  .page summary { cursor:pointer; font-weight:600; } .page summary .muted { font-weight:400; margin-left:8px; }
+  .chunk { margin-top:8px; padding:8px 10px; background:#f8fafc; border:1px solid var(--line); border-radius:6px; }
+  .chunk .meta { font-size:11px; color:var(--muted); margin-bottom:4px; } .chunk pre { white-space:pre-wrap; font:12px/1.5 ui-monospace, Menlo, monospace; margin:0; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; } @media (max-width:980px) { .grid { grid-template-columns:1fr; } }
+</style></head>
+<body>
+<header>
+  <h1><a href="/">RAG Generator</a></h1>
+  <span class="muted" id="meta"></span>
+  <nav><a href="/" >Home</a><a href="/jobs" >Jobs</a><a href="/documents" class="on">Documents</a><a href="/documentation/flow.html" target="_blank">How it works</a><a href="/docs" target="_blank">API docs</a></nav>
+</header>
+<main>
+
+<div class="card">
+  <h2>Documents <span class="hint">(every uploaded file · 20 per page · click a row to open its show page)</span> <span id="chips"></span></h2>
+  <div class="toolbar">
+    <label>Collection <input type="text" id="collection" placeholder="all"></label>
+    <label>Status <select id="status"><option value="">all</option></select></label>
+    <label>Job <input type="text" id="job" placeholder="job id" style="width:140px"></label>
+    <button class="secondary small" id="apply">Apply</button>
+    <span class="muted" id="count"></span>
+  </div>
+  <div class="err" id="err"></div>
+  <table>
+    <thead><tr><th>Doc ID</th><th>Name</th><th>Type</th><th>Job</th><th>Status</th><th>Pages / chunks</th><th>Reason</th><th>Updated</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
+  </table>
+  <div class="pager" id="pager"></div>
+</div>
+
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const TERMINAL = ['DUPLICATE','COMPLETED','FAILED','EMPTY_FILE','EXTRACTION_NOT_SUPPORTED','UPLOAD_FAILED'];
+const BAD = ['FAILED','UPLOAD_FAILED','EXTRACTION_NOT_SUPPORTED','EMPTY_FILE'];
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const qs = new URLSearchParams(location.search);
+async function api(path, opts = {}) {
+  const r = await fetch(path, opts);
+  if (r.status === 204) return null;
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail || body));
+  return body;
+}
+function setQuery(changes) { for (const [k, v] of Object.entries(changes)) { if (v === null || v === '' || v === undefined) qs.delete(k); else qs.set(k, v); } history.replaceState(null, '', location.pathname + (qs.toString() ? '?' + qs : '')); }
+function pager(el, m, onPage) {
+  if (!m || m.total === 0) { el.innerHTML = ''; return; }
+  el.innerHTML = `<button class="small secondary" ${m.has_prev ? '' : 'disabled'} id="pp">‹ prev</button><span>page ${m.page + 1} / ${m.pages} · ${m.total} total · ${m.size} per page</span><button class="small secondary" ${m.has_next ? '' : 'disabled'} id="pn">next ›</button>`;
+  el.querySelector('#pp').onclick = () => onPage(m.page - 1); el.querySelector('#pn').onclick = () => onPage(m.page + 1);
+}
+
+
+const SIZE = 20;
+let page = parseInt(qs.get('page') || '0', 10) || 0;
+$('collection').value = qs.get('collection') || ''; $('job').value = qs.get('job_id') || '';
+api('/api/health').then(h => {
+  $('meta').textContent = `LLM: ${h.llm_model} · collections: ${h.collections.join(', ') || 'none'}`;
+  h.statuses.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; $('status').appendChild(o); });
+  $('status').value = qs.get('status') || '';
+}).catch(() => {});
+$('apply').onclick = () => { page = 0; setQuery({collection: $('collection').value.trim(), status: $('status').value, job_id: $('job').value.trim(), page: null}); load(); };
+['collection', 'job'].forEach(id => $(id).onkeydown = (e) => { if (e.key === 'Enter') $('apply').click(); });
+$('status').onchange = () => $('apply').click();
+function chips() {
+  const parts = [];
+  if (qs.get('job_id')) parts.push(`<span class="chip">job ${esc(qs.get('job_id'))} <a href="#" onclick="$('job').value='';$('apply').click();return false;">×</a></span>`);
+  if (qs.get('status')) parts.push(`<span class="chip">status ${esc(qs.get('status'))} <a href="#" onclick="$('status').value='';$('apply').click();return false;">×</a></span>`);
+  $('chips').innerHTML = parts.join(' ');
+}
+async function load() {
+  $('err').textContent = ''; chips();
+  const params = new URLSearchParams({page, size: SIZE});
+  for (const k of ['collection', 'status', 'job_id']) if (qs.get(k)) params.set(k, qs.get(k));
+  try {
+    const m = await api(`/api/documents?${params}`);
+    if (!m.items.length && m.page > 0) { page = Math.max(0, m.pages - 1); setQuery({page: page || null}); return load(); }
+    $('count').textContent = `${m.total} document(s)`;
+    $('rows').innerHTML = m.items.length ? m.items.map(d => `
+      <tr class="clickable" onclick="location.href='/documents/${d.doc_id}'">
+        <td><code class="id">${esc(d.doc_id)}</code></td>
+        <td>${esc(d.filename)}${d.ocr_pages ? ` <span class="pill ocr">OCR ×${d.ocr_pages}</span>` : ''}</td>
+        <td class="muted">${esc(d.file_type || '')}</td>
+        <td><a href="/documents?job_id=${d.job_id}" onclick="event.stopPropagation()"><code class="id">${esc(d.job_id)}</code></a></td>
+        <td><span class="pill ${d.status}">${d.status}</span>${d.stage ? `<div class="muted">${esc(d.stage)}…</div>` : ''}</td>
+        <td class="muted">${d.status === 'COMPLETED' ? `${d.pages} / ${d.chunks}` : '–'}</td>
+        <td class="${BAD.includes(d.status) ? 'err' : 'muted'}" style="font-size:12px">${esc(d.reason || '')}${d.duplicate_of ? ` <a href="/documents/${d.duplicate_of}" onclick="event.stopPropagation()">→ original</a>` : ''}</td>
+        <td class="muted">${esc(d.updated_at.replace('T', ' ').slice(0, 19))}</td>
+      </tr>`).join('') : '<tr><td colspan="8" class="muted">No documents match.</td></tr>';
+    pager($('pager'), m, (p) => { page = p; setQuery({page: p || null}); load(); });
+    if (m.items.some(d => !TERMINAL.includes(d.status))) setTimeout(load, 2000);
+  } catch (e) { $('err').textContent = e.message; }
+}
+load();
+
+</script>
+</body></html>

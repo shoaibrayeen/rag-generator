@@ -36,6 +36,16 @@ evaluation script.
 - **PyMuPDF replaced pypdf + pypdfium2** — one library for text and page rendering.
 - **Server-side refusal-fallback beta not used on the judge** — benign prompts, simpler script.
 
+- **Content sniffing beats extensions** (2026-09-06 incident: `2P CRA dated 17_12_2025.docx` was RTF;
+  python-docx raised PackageNotFoundError and the fallback message blamed missing OCR). `sniff_type()`
+  now routes by magic bytes; RTF is supported; legacy OLE `.doc` gets a "convert to .docx" reason.
+- **Upload order is fixed by the user**: validate → store file + compute SHA-256 → duplicate check → QUEUED.
+- **Failure reasons must name the primary reader's error** (paths stripped) before the fallback's text.
+- **Every step logs `[step] … job= doc=`** via `app/logging_utils.py`; `grep doc=<id>` tells the story of a file.
+
+- UI pages: `/` workbench keeps 5-per-page panels (user asked to keep it); `/jobs` and `/documents` are 20-per-page;
+  show page is `/documents/{doc_id}` (static HTML reads the id from the path).
+
 ## Environment gotchas
 - The dev Mac has no Docker, Homebrew or Tesseract; Python is 3.9 system-wide. Use
   `uv venv --python 3.11 .venv`. Docker image must be built/verified elsewhere.
@@ -66,4 +76,6 @@ evaluation script.
 - 2026-09-06 — v0.1.0 initial build; v0.2.0 async job model with fixed statuses, dedupe, docs set;
   v0.3.0 PyMuPDF primary + Tesseract-as-fallback tiering, transcript/rules/docs scripts;
   v0.4.0 jobs as first-class objects, job→document filter, scoped ask, validated citations, `plans/`;
-  v0.5.0 paginated listings (page 0, size 5), `documentation/enhancements.md`.
+  v0.5.0 paginated listings (page 0, size 5), `documentation/enhancements.md`;
+  v0.6.0 content sniffing + RTF, precise failure reasons, retry endpoint, store-then-hash upload order, step logging;
+  v0.7.0 `/jobs`, `/documents` (20/page) and `/documents/{id}` show page (+ `/api/documents/{id}/file`).

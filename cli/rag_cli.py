@@ -175,6 +175,24 @@ def ask(question: str, collection: Optional[str] = COL, api: Optional[str] = API
 
 
 @app.command()
+def retry(doc_id: str, api: Optional[str] = API, wait: bool = typer.Option(True, help="Wait for the result")):
+    """Re-process a FAILED document from its stored file."""
+    with _client(api) as c:
+        r = c.post(f"/api/documents/{doc_id}/retry")
+        if r.status_code >= 400:
+            _die(r)
+        d = r.json()
+        typer.echo(f"{d['status']:26} {d['filename']}  {d.get('reason') or ''}")
+        if not wait:
+            return
+        while d["status"] not in TERMINAL:
+            time.sleep(1)
+            d = c.get(f"/api/documents/{doc_id}").json()
+        typer.secho(f"{d['status']:26} {d['filename']}  {d.get('reason') or ''}",
+                    fg="green" if d["status"] == "COMPLETED" else "red")
+
+
+@app.command()
 def reset(collection: Optional[str] = COL, api: Optional[str] = API,
           yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation")):
     """Delete every document and vector in a collection."""

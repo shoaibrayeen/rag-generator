@@ -1,7 +1,7 @@
 # Claude Code transcript — session `a88920a3-6212-4085-ad05-80ba0afca34d`
 
 Project: `/Users/shoaib.rayeen/my_space/rag-generator`  
-Exported: 2026-09-06T16:04:36  
+Exported: 2026-09-06T16:22:04  
 Source log: `/Users/shoaib.rayeen/.claude/projects/-Users-shoaib-rayeen-my-space-rag-generator/a88920a3-6212-4085-ad05-80ba0afca34d.jsonl`
 
 ---
@@ -4133,4 +4133,788 @@ Tab Context:
   "description": "Final validation: compile, tests, rule sync, doc twins, settings coverage, version, transcript export, git status",
   "timeout": 300000
 }
+```
+
+## Tool  <sub>2026-09-06T10:34:36.246Z</sub>
+
+**Tool result**
+
+```
+== compile ==
+ok
+== tests ==
+26 passed, 6 warnings in 0.78s
+== rules ==
+rules in sync
+== docs twins ==
+  documentation/architecture.md -> documentation/architecture.html ok
+  documentation/enhancements.md -> documentation/enhancements.html ok
+  README.md -> documentation/readme.html ok
+== config knobs present in .env.example ==
+  MISSING in .env.example: ['BM25_TOP_K']
+== changelog version matches app ==
+version="0.5.0"
+<h2>0.5.0
+== transcript export ==
+exported 223 messages from a88920a3-6212-4085-ad05-80ba0afca34d.jsonl -> transcripts/2026-09-06-rag-generator-build.md
+    4136 transcripts/2026-09-06-rag-generator-build.md
+== git status ==
+      18
+```
+
+## Assistant  <sub>2026-09-06T10:34:48.569Z</sub>
+
+**Tool call — `mcp__Claude_Browser__javascript_tool`**
+
+```json
+{
+  "action": "javascript_exec",
+  "tabId": "seed",
+  "text": "const before = {page: paging.docs.page, meta: paging.docs.meta && paging.docs.meta.page, pagerText: document.getElementById('docsPager').innerText};\ngoPage('docs', 1);\nawait new Promise(r => setTimeout(r, 1500));\n({before, after: {page: paging.docs.page, metaPage: paging.docs.meta.page, pagerText: document.getElementById('docsPager').innerText, names: [...document.querySelectorAll('#docs tr td:nth-child(3)')].map(td => td.innerText.split('\\n')[0])}})"
+}
+```
+
+## Assistant  <sub>2026-09-06T10:34:49.392Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "grep -n \"BM25_TOP_K\\|DENSE_TOP_K\" .env.example",
+  "description": "Confirm BM25_TOP_K is present in .env.example"
+}
+```
+
+## Tool  <sub>2026-09-06T10:34:52.129Z</sub>
+
+**Tool result**
+
+```
+{
+  "after": {
+    "metaPage": 1,
+    "names": [
+      "robot_catalog.csv",
+      "release_notes.html",
+      "handbook.md",
+      "notes.xyz"
+    ],
+    "page": 1,
+    "pagerText": "‹ prev\npage 2 / 2 · 9 total · 5 per page\nnext ›"
+  },
+  "before": {
+    "meta": 0,
+    "page": 0,
+    "pagerText": "‹ prev\npage 1 / 2 · 9 total · 5 per page\nnext ›"
+  }
+}
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+```
+
+## Tool  <sub>2026-09-06T10:34:52.154Z</sub>
+
+**Tool result**
+
+```
+39:#DENSE_TOP_K=20
+40:#BM25_TOP_K=20
+```
+
+## Assistant  <sub>2026-09-06T10:35:06.598Z</sub>
+
+All done and validated.
+
+**Pagination** is live across the stack:
+- API: `GET /api/jobs` and `GET /api/documents` now return `{items, page, size, total, pages, has_next, has_prev}`. `page` is 0-based and defaults to 0, `size` defaults to 5 (`LIST_PAGE_SIZE` in `app/config.py`, max `LIST_MAX_PAGE_SIZE`). Invalid values return 422.
+- UI: prev/next pagers under the Jobs and Documents panels. Verified in the browser: 9 documents split into "page 1 / 2" and "page 2 / 2", the second page showing the remaining 4 files.
+- CLI: `rag jobs --page --size` and `rag status --page --size`, printing "page x/y · n total".
+
+**Enhancements** are documented in `documentation/enhancements.md` (28 items across retrieval, answering, ingestion, storage, operations, evaluation and UI), with its HTML twin and a README link.
+
+**Validation results**
+- Compile check clean; 26 tests pass (new pagination test covers defaults, page navigation, newest-first order, out-of-range pages, and 422s).
+- Rule copies in sync; every Markdown doc has its HTML twin; every `Settings` field is documented in `.env.example`; changelog 0.5.0 matches the app version.
+- Live server: API envelopes, CLI pages, and UI pagers all checked against the two ingested jobs.
+
+**Transcript** exported to `transcripts/2026-09-06-rag-generator-build.md` (223 messages). It ends just before this final message, so run `/export transcripts/2026-09-06-rag-generator-build.md` from the Claude Code terminal once you finish the session to capture everything. Nothing was committed, per your rule; 18 changed files are ready for your review.
+
+## User  <sub>2026-09-06T10:42:45.087Z</sub>
+
+Add logger for each steps
+
+for some doc procesisng si failed and showing
+
+{
+"job_id": "06f759f949bb",
+"doc_id": "c85e1bbaba8c",
+"filename": "2P CRA dated 17_12_2025 (1) (2).docx",
+"file_type": "docx",
+"collection": "default",
+"status": "FAILED",
+"reason": "PROCESSING FAILED: This DOCX contains no text layer and Tesseract OCR is not installed on this host, so it could not be read. OCR works in the Docker image; locally install tesseract (brew install tesseract / apt install tesseract-ocr) and upload again.",
+"stage": null,
+"sha256": "8598bcaaf552b53e996e991c5d0ff5d451f257407d8eaa5597d194cfb65619c6",
+"duplicate_of": null,
+"duplicate_of_name": null,
+"pages": 0,
+"chunks": 0,
+"ocr_pages": 0,
+"created_at": "2026-09-06T10:40:01+00:00",
+"updated_at": "2026-09-06T10:40:02+00:00"
+}
+
+fix this issue
+
+## Assistant  <sub>2026-09-06T10:42:58.269Z</sub>
+
+I'll first inspect the failing DOCX to find the real cause, then add step-level logging across the pipeline and fix the extractor.
+
+## Assistant  <sub>2026-09-06T10:43:05.410Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator; ls -la data/uploads/ | grep c85e1bbaba8c; F=$(ls data/uploads/c85e1bbaba8c_* | head -1); echo \"FILE: $F\"\n.venv/bin/python - \"$F\" <<'EOF'\nimport sys, zipfile, re, traceback\npath = sys.argv[1]\nprint(\"--- python-docx primary ---\")\ntry:\n    import docx\n    d = docx.Document(path)\n    paras = [p.text for p in d.paragraphs if p.text.strip()]\n    print(\"paragraphs with text:\", len(paras), \"tables:\", len(d.tables))\n    print(\"first paras:\", paras[:3])\nexcept Exception:\n    traceback.print_exc()\nprint(\"--- raw XML scan ---\")\nwith zipfile.ZipFile(path) as z:\n    names = z.namelist()\n    print([n for n in names if n.startswith(\"word/\")][:30])\n    xml = z.read(\"word/document.xml\").decode(\"utf8\", \"replace\")\n    texts = re.findall(r\"<w:t[^>]*>([^<]*)</w:t>\", xml)\n    print(\"w:t runs:\", len(texts), \"chars:\", sum(len(t) for t in texts))\n    print(\"sample:\", \" \".join(texts)[:300])\n    for tag in (\"w:sdt\", \"w:txbxContent\", \"mc:AlternateContent\", \"w:tbl\", \"w:p\"):\n        print(tag, xml.count(\"<\" + tag))\n    media = [n for n in names if n.startswith(\"word/media/\")]\n    print(\"media:\", media[:10])\nEOF",
+  "description": "Diagnose why the uploaded DOCX yielded no text"
+}
+```
+
+## Tool  <sub>2026-09-06T10:43:05.500Z</sub>
+
+**Tool result**
+
+```
+Exit code 1
+-rw-r--r--@  1 shoaib.rayeen  staff  437476 Sep  6 16:10 c85e1bbaba8c_2P CRA dated 17_12_2025 (1) (2).docx
+FILE: data/uploads/c85e1bbaba8c_2P CRA dated 17_12_2025 (1) (2).docx
+Traceback (most recent call last):
+  File "<stdin>", line 6, in <module>
+  File "/Users/shoaib.rayeen/my_space/rag-generator/.venv/lib/python3.11/site-packages/docx/api.py", line 27, in Document
+    document_part = cast("DocumentPart", Package.open(docx).main_document_part)
+                                         ^^^^^^^^^^^^^^^^^^
+  File "/Users/shoaib.rayeen/my_space/rag-generator/.venv/lib/python3.11/site-packages/docx/opc/package.py", line 126, in open
+    pkg_reader = PackageReader.from_file(pkg_file)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/shoaib.rayeen/my_space/rag-generator/.venv/lib/python3.11/site-packages/docx/opc/pkgreader.py", line 22, in from_file
+    phys_reader = PhysPkgReader(pkg_file)
+                  ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/shoaib.rayeen/my_space/rag-generator/.venv/lib/python3.11/site-packages/docx/opc/phys_pkg.py", line 21, in __new__
+    raise PackageNotFoundError("Package not found at '%s'" % pkg_file)
+docx.opc.exceptions.PackageNotFoundError: Package not found at 'data/uploads/c85e1bbaba8c_2P CRA dated 17_12_2025 (1) (2).docx'
+--- python-docx primary ---
+--- raw XML scan ---
+Traceback (most recent call last):
+  File "<stdin>", line 13, in <module>
+  File "/Users/shoaib.rayeen/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/zipfile.py", line 1329, in __init__
+    self._RealGetContents()
+  File "/Users/shoaib.rayeen/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/zipfile.py", line 1396, in _RealGetContents
+    raise BadZipFile("File is not a zip file")
+zipfile.BadZipFile: File is not a zip file
+```
+
+## Assistant  <sub>2026-09-06T10:43:13.086Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator; F=$(ls data/uploads/c85e1bbaba8c_* | head -1); file \"$F\"; xxd -l 64 \"$F\"; echo; strings -n 8 \"$F\" | head -20",
+  "description": "Identify the real format of the failing file"
+}
+```
+
+## Tool  <sub>2026-09-06T10:43:13.233Z</sub>
+
+**Tool result**
+
+```
+data/uploads/c85e1bbaba8c_2P CRA dated 17_12_2025 (1) (2).docx: Rich Text Format data, version 1, ANSI, code page 1252, default middle east language ID 1033
+00000000: 7b5c 7274 6631 5c61 6e73 695c 616e 7369  {\rtf1\ansi\ansi
+00000010: 6370 6731 3235 325c 7563 315c 6465 666c  cpg1252\uc1\defl
+00000020: 616e 6731 3033 335c 6164 6566 6c61 6e67  ang1033\adeflang
+00000030: 3130 3333 5c64 6566 6c61 6e67 6665 3130  1033\deflangfe10
+
+{\rtf1\ansi\ansicpg1252\uc1\deflang1033\adeflang1033\deflangfe1033\deff1\stshfloch1\stshfhich1\stshfbi1\stshfdbch1
+{\fonttbl
+{\f0\fswiss\fcharset0 Default Metrics Font;}
+{\f1\fnil\fcharset0 Times New Roman;}
+{\colortbl
+\red0\green0\blue0
+\red0\green0\blue255
+\red0\green255\blue255
+\red0\green255\blue0
+\red255\green0\blue255
+\red255\green0\blue0
+\red255\green255\blue0
+\red255\green255\blue255
+\red0\green0\blue128
+\red0\green128\blue128
+\red0\green128\blue0
+\red128\green0\blue128
+\red128\green0\blue0
+\red128\green128\blue0
+\red128\green128\blue128
+```
+
+## Assistant  <sub>2026-09-06T10:45:16.584Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "set -e; cd /Users/shoaib.rayeen/my_space/rag-generator\n# ---- dependency: striprtf (pure python)\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"requirements.in\"); s = p.read_text()\ns = s.replace(\"beautifulsoup4\\nlxml\\n\", \"beautifulsoup4\\nlxml\\nstriprtf         # RTF (also RTF files mislabelled .doc/.docx)\\n\")\np.write_text(s)\nEOF\nuv pip compile requirements.in -o requirements.txt --python .venv/bin/python -q && uv pip install -r requirements.txt --python .venv/bin/python -q && grep -E \"^striprtf==\" requirements.txt\n\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\n\n# ============================================================ config\np = Path(\"app/config.py\"); s = p.read_text()\ns = s.replace('''    APP_HOST: str = \"0.0.0.0\"\n    APP_PORT: int = 8000\n''', '''    APP_HOST: str = \"0.0.0.0\"\n    APP_PORT: int = 8000\n    LOG_LEVEL: str = \"INFO\"                  # DEBUG for per-chunk / per-batch detail\n    SNIFF_CONTENT: bool = True               # detect the real format from file bytes, not just the extension\n''')\ns = s.replace('''    \".txt\": \"text\",\n    \".md\": \"text\",\n    \".csv\": \"csv\",''', '''    \".txt\": \"text\",\n    \".md\": \"text\",\n    \".csv\": \"csv\",\n    \".rtf\": \"rtf\",''')\np.write_text(s)\n\n# ============================================================ logging helper\nPath(\"app/logging_utils.py\").write_text('''\"\"\"Step logging shared by the pipeline, extractors, retrieval and API.\n\nEvery log line carries the step name and, where known, the job/document ids, so a single\n`grep doc=<id>` shows the full story of one file. `timed()` logs start, end and elapsed ms.\n\"\"\"\nfrom __future__ import annotations\n\nimport logging\nimport time\nfrom contextlib import contextmanager\n\nfrom app.config import settings\n\n\ndef configure_logging() -> None:\n    logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),\n                        format=\"%(asctime)s %(levelname)-7s %(name)s: %(message)s\", force=True)\n    logging.getLogger(\"httpx\").setLevel(logging.WARNING)\n\n\ndef ctx(**ids) -> str:\n    \"\"\"Format ids as `job=… doc=… file=…` for log lines.\"\"\"\n    return \" \".join(f\"{k}={v}\" for k, v in ids.items() if v not in (None, \"\"))\n\n\n@contextmanager\ndef timed(log: logging.Logger, step: str, **ids):\n    \"\"\"Log `step start`, then `step done in N ms` (or `step FAILED`) around a block.\"\"\"\n    tag = ctx(**ids)\n    log.info(\"[%s] start %s\", step, tag)\n    t0 = time.perf_counter()\n    try:\n        yield\n    except Exception as exc:\n        log.warning(\"[%s] FAILED after %d ms %s: %s: %s\", step, (time.perf_counter() - t0) * 1000, tag,\n                    type(exc).__name__, exc)\n        raise\n    log.info(\"[%s] done in %d ms %s\", step, (time.perf_counter() - t0) * 1000, tag)\n''')\n\n# ============================================================ extractors: sniffing + RTF + better errors\np = Path(\"app/ingest/extractors.py\"); s = p.read_text()\ns = s.replace('''Dispatch is driven by `app.config.SUPPORTED_EXTENSIONS`; each extractor name there must exist\nin `EXTRACTORS`.''', '''Dispatch is driven by `app.config.SUPPORTED_EXTENSIONS`, but the *content* wins over the\nextension: `sniff_type()` looks at the first bytes (PK zip → docx, `{\\\\\\\\rtf` → rtf, `%PDF` → pdf,\nOLE header → legacy .doc, `<html` → html, image magic → image). A file named `.docx` that is\nreally RTF is therefore read by the RTF extractor instead of failing. Each extractor name must\nexist in `EXTRACTORS`.''')\ns = s.replace('''class ExtractionError(ValueError):\n    \"\"\"Primary and fallback extraction both failed; the message is user-facing.\"\"\"\n''', '''class ExtractionError(ValueError):\n    \"\"\"Primary and fallback extraction both failed; the message is user-facing.\"\"\"\n\n\n# ------------------------------------------------------------------- sniffing\n\n_IMAGE_MAGIC = (b\"\\\\x89PNG\", b\"\\\\xff\\\\xd8\\\\xff\", b\"II*\\\\x00\", b\"MM\\\\x00*\", b\"GIF8\", b\"BM\")\n\n\ndef sniff_type(path: Path) -> str | None:\n    \"\"\"Detect the real format from the first bytes. Returns an extractor name, \"doc\" for legacy\n    binary Word files (not supported), or None when the bytes are not conclusive.\"\"\"\n    try:\n        with open(path, \"rb\") as fh:\n            head = fh.read(2048)\n    except OSError:\n        return None\n    if head.startswith(b\"%PDF\"):\n        return \"pdf\"\n    if head.lstrip().startswith(b\"{\\\\\\\\rtf\"):\n        return \"rtf\"\n    if head.startswith(b\"\\\\xd0\\\\xcf\\\\x11\\\\xe0\\\\xa1\\\\xb1\\\\x1a\\\\xe1\"):\n        return \"doc\"  # OLE2 compound file: legacy .doc / .xls / .ppt\n    if head.startswith(b\"PK\\\\x03\\\\x04\"):\n        try:\n            with zipfile.ZipFile(path) as zf:\n                names = zf.namelist()\n            if any(n.startswith(\"word/\") for n in names):\n                return \"docx\"\n        except zipfile.BadZipFile:\n            return None\n        return None\n    if head.startswith(_IMAGE_MAGIC):\n        return \"image\"\n    low = head.lstrip().lower()\n    if low.startswith((b\"<!doctype html\", b\"<html\")):\n        return \"html\"\n    return None\n''')\n# RTF extractor + fallback\ns = s.replace('''# ------------------------------------------------------------------- TXT / MD / CSV\n''', '''# -------------------------------------------------------------------------- RTF\n\ndef extract_rtf(path: Path) -> list[Page]:\n    \"\"\"RTF via striprtf. \\\\\\\\page control words become page breaks; the first line of each page\n    is used as its section label when it looks like a heading.\"\"\"\n    from striprtf.striprtf import rtf_to_text\n\n    raw = path.read_bytes().decode(\"latin-1\", errors=\"replace\")\n    text = rtf_to_text(raw, errors=\"ignore\")\n    pages: list[Page] = []\n    for i, block in enumerate(text.split(\"\\\\f\")):  # striprtf renders \\\\page as form feed\n        block = \"\\\\n\".join(ln.rstrip() for ln in block.splitlines()).strip()\n        if block:\n            first = block.splitlines()[0].strip()\n            section = first if 0 < len(first) <= 80 and len(block.splitlines()) > 1 else None\n            pages.append(Page(text=block, page_no=i + 1, section=section))\n    return pages\n\n\ndef fallback_rtf(path: Path) -> list[Page]:\n    \"\"\"striprtf choked: crude control-word stripping with the stdlib.\"\"\"\n    import re\n\n    raw = path.read_bytes().decode(\"latin-1\", errors=\"replace\")\n    raw = re.sub(r\"\\\\\\\\'[0-9a-f]{2}\", \" \", raw)                 # hex escapes\n    raw = re.sub(r\"{\\\\\\\\\\\\*[^{}]*}\", \" \", raw)                        # destinations\n    raw = re.sub(r\"\\\\\\\\[a-zA-Z]+-?\\\\d* ?\", \" \", raw)                # control words\n    raw = re.sub(r\"[{}]\", \" \", raw)\n    text = re.sub(r\"[ \\\\t]+\", \" \", raw)\n    text = \"\\\\n\".join(ln.strip() for ln in text.splitlines() if ln.strip())\n    return [Page(text=text, page_no=1)] if len(text) > 20 else []\n\n\n# ------------------------------------------------------------------- TXT / MD / CSV\n''')\ns = s.replace('''    \"csv\": extract_csv,\n    \"image\": extract_image,\n}\n\nFALLBACKS: dict[str, Callable[[Path], list[Page]]] = {\n    \"pdf\": fallback_pdf,\n    \"docx\": fallback_docx,\n    \"html\": fallback_html,\n}''', '''    \"csv\": extract_csv,\n    \"rtf\": extract_rtf,\n    \"image\": extract_image,\n}\n\nFALLBACKS: dict[str, Callable[[Path], list[Page]]] = {\n    \"pdf\": fallback_pdf,\n    \"docx\": fallback_docx,\n    \"html\": fallback_html,\n    \"rtf\": fallback_rtf,\n}\n\n# Formats we can recognise from the bytes but cannot read, with the advice to show the user.\n_UNREADABLE = {\n    \"doc\": \"This is a legacy binary Word file (.doc / OLE2), not a DOCX package. Open it in Word or \"\n           \"LibreOffice and save as .docx (or export to PDF), then upload again.\",\n}''')\n# extract(): sniff, route, and surface primary errors\nold_start = s.index(\"def extract(path: Path) -> list[Page]:\")\ns = s[:old_start] + '''def resolve_type(path: Path) -> tuple[str, str | None]:\n    \"\"\"(extractor to use, note) — the sniffed content type overrides the extension when they differ.\"\"\"\n    by_ext = file_type_for(path.name)\n    if by_ext is None or by_ext not in EXTRACTORS:\n        raise UnsupportedFormat(\n            f\"Unsupported file type '{path.suffix}'. Supported: {sorted(SUPPORTED_EXTENSIONS)}\")\n    if not settings.SNIFF_CONTENT:\n        return by_ext, None\n    sniffed = sniff_type(path)\n    if sniffed in _UNREADABLE:\n        raise ExtractionError(f\"File '{path.name}' has extension '{path.suffix}' but its content is a legacy \"\n                              f\"binary Word document. {_UNREADABLE[sniffed]}\")\n    if sniffed and sniffed != by_ext and sniffed in EXTRACTORS:\n        note = f\"extension '{path.suffix}' but content is {sniffed.upper()}; read as {sniffed}\"\n        log.info(\"[extract] %s: %s\", path.name, note)\n        return sniffed, note\n    return by_ext, None\n\n\ndef extract(path: Path) -> list[Page]:\n    \"\"\"Primary extractor first (chosen by content, then extension); on exception or empty result,\n    the format's fallback. Raises ExtractionError with a user-facing reason when nothing works.\"\"\"\n    kind, note = resolve_type(path)\n\n    primary_error: Exception | None = None\n    pages: list[Page] = []\n    try:\n        log.info(\"[extract] primary=%s file=%s\", kind, path.name)\n        pages = EXTRACTORS[kind](path)\n        log.info(\"[extract] primary=%s file=%s pages=%d\", kind, path.name, len(pages))\n    except ExtractionError:\n        raise\n    except Exception as exc:\n        primary_error = exc\n        log.warning(\"[extract] primary=%s file=%s FAILED: %s: %s\", kind, path.name, type(exc).__name__, exc)\n    if pages:\n        if note:\n            for pg in pages:\n                pg.meta[\"format_note\"] = note\n        return pages\n\n    fallback = FALLBACKS.get(kind)\n    why = (f\"the {kind} reader failed ({type(primary_error).__name__}: {primary_error})\" if primary_error\n           else f\"the {kind} reader found no text\")\n    if fallback is None:\n        raise ExtractionError(f\"Could not read '{path.name}': {why}.\")\n\n    log.info(\"[extract] fallback=%s file=%s because %s\", kind, path.name, why)\n    try:\n        pages = fallback(path)\n    except ExtractionError as exc:\n        # keep the OCR / configuration message but say what went wrong first\n        raise ExtractionError(f\"{why[0].upper() + why[1:]}. Fallback: {exc}\") from exc\n    except Exception as exc:\n        raise ExtractionError(f\"Could not read '{path.name}': {why}; fallback also failed \"\n                              f\"({type(exc).__name__}: {exc}).\") from exc\n    if not pages:\n        raise ExtractionError(f\"Could not read '{path.name}': {why}, and the fallback extractor found no text either.\")\n    log.info(\"[extract] fallback=%s file=%s pages=%d\", kind, path.name, len(pages))\n    return pages\n'''\np.write_text(s)\n\n# ============================================================ pipeline: step logging + format note\nPath(\"app/ingest/pipeline.py\").write_text('''\"\"\"Background job: extract -> chunk -> embed -> store -> rebuild BM25.\n\nStatus goes QUEUED -> PROCESSING (stage: extracting / chunking / embedding) -> COMPLETED,\nor FAILED with a human-readable reason. Every step is logged with job/doc ids and timing\n(`grep doc=<id>` in the logs follows one file end to end).\n\"\"\"\nfrom __future__ import annotations\n\nimport logging\nfrom pathlib import Path\n\nfrom app import jobs\nfrom app.ingest.chunker import chunk_pages\nfrom app.ingest.extractors import ExtractionError, extract\nfrom app.logging_utils import ctx, timed\nfrom app.retrieval import bm25_index, embedder, vector_store\n\nlog = logging.getLogger(\"rag.pipeline\")\n\n\ndef run(doc_id: str, path: Path) -> None:\n    doc = jobs.get(doc_id)\n    if doc is None or doc.status != \"QUEUED\":\n        log.warning(\"[pipeline] skip %s: not QUEUED (%s)\", doc_id, doc.status if doc else \"missing\")\n        return\n    ids = dict(job=doc.job_id, doc=doc_id, file=doc.filename)\n    log.info(\"[pipeline] begin %s type=%s collection=%s size=%dB\", ctx(**ids), doc.file_type,\n             doc.collection, path.stat().st_size if path.exists() else -1)\n    try:\n        jobs.update(doc_id, status=\"PROCESSING\", stage=\"extracting\", reason=\"Extracting text\")\n        with timed(log, \"extract\", **ids):\n            pages = extract(path)  # raises ExtractionError with a user-facing reason\n        ocr_pages = sum(1 for p in pages if p.extraction == \"ocr\")\n        note = next((p.meta.get(\"format_note\") for p in pages if p.meta.get(\"format_note\")), None)\n        log.info(\"[extract] %s pages=%d ocr_pages=%d chars=%d%s\", ctx(**ids), len(pages), ocr_pages,\n                 sum(len(p.text) for p in pages), f\" note={note}\" if note else \"\")\n\n        jobs.update(doc_id, stage=\"chunking\", pages=len(pages), ocr_pages=ocr_pages,\n                    reason=f\"Chunking {len(pages)} pages\")\n        with timed(log, \"chunk\", **ids):\n            chunks = chunk_pages(pages, doc_id=doc_id, source=doc.filename, file_type=doc.file_type or \"\",\n                                 collection=doc.collection, job_id=doc.job_id)\n        if not chunks:\n            raise ValueError(\"Extraction produced no usable text.\")\n        log.info(\"[chunk] %s chunks=%d avg_chars=%d\", ctx(**ids), len(chunks),\n                 sum(len(c.text) for c in chunks) // len(chunks))\n\n        jobs.update(doc_id, stage=\"embedding\", chunks=len(chunks), reason=f\"Embedding {len(chunks)} chunks\")\n        with timed(log, \"embed\", **ids):\n            vectors = embedder.embed_texts([c.text for c in chunks])\n        with timed(log, \"store\", **ids):\n            vector_store.add_chunks([c.chunk_id for c in chunks], [c.text for c in chunks], vectors,\n                                    [c.metadata for c in chunks])\n        with timed(log, \"bm25-rebuild\", collection=doc.collection, **ids):\n            n = bm25_index.rebuild(doc.collection)\n        log.info(\"[bm25-rebuild] %s collection=%s indexed_chunks=%d\", ctx(**ids), doc.collection, n)\n\n        ocr_note = f\", {ocr_pages} via OCR\" if ocr_pages else \"\"\n        fmt_note = f\" ({note})\" if note else \"\"\n        jobs.update(doc_id, status=\"COMPLETED\", stage=None,\n                    reason=f\"Indexed {len(pages)} pages{ocr_note} into {len(chunks)} chunks{fmt_note}\")\n        log.info(\"[pipeline] COMPLETED %s\", ctx(**ids))\n    except ExtractionError as exc:\n        log.warning(\"[pipeline] FAILED %s: %s\", ctx(**ids), exc)\n        jobs.update(doc_id, status=\"FAILED\", stage=None, reason=f\"PROCESSING FAILED: {exc}\")\n    except Exception as exc:\n        log.exception(\"[pipeline] FAILED %s\", ctx(**ids))\n        jobs.update(doc_id, status=\"FAILED\", stage=None,\n                    reason=f\"PROCESSING FAILED: {type(exc).__name__}: {exc}\")\n''')\n\n# ============================================================ chunker / embedder / vector_store / bm25 / fusion / rag / llm: logging\np = Path(\"app/ingest/chunker.py\"); s = p.read_text()\ns = s.replace(\"import re\\nfrom dataclasses import dataclass\\n\", \"import logging\\nimport re\\nfrom dataclasses import dataclass\\n\")\ns = s.replace(\"_BOUNDARIES = (\", \"log = logging.getLogger(\\\"rag.chunker\\\")\\n\\n_BOUNDARIES = (\")\ns = s.replace('''            idx += 1\n    return chunks''', '''            idx += 1\n    log.debug(\"[chunk] doc=%s pages=%d chunks=%d size=%d overlap=%d\", doc_id, len(pages), len(chunks),\n              settings.CHUNK_SIZE_CHARS, settings.CHUNK_OVERLAP_CHARS)\n    return chunks''')\np.write_text(s)\n\np = Path(\"app/retrieval/embedder.py\"); s = p.read_text()\ns = s.replace(\"import threading\\n\", \"import logging\\nimport threading\\nimport time\\n\")\ns = s.replace(\"_model = None\\n_lock = threading.Lock()\\n\", \"log = logging.getLogger(\\\"rag.embedder\\\")\\n\\n_model = None\\n_lock = threading.Lock()\\n\")\ns = s.replace('''                from fastembed import TextEmbedding\n\n                _model = TextEmbedding(model_name=settings.EMBEDDING_MODEL)''', '''                from fastembed import TextEmbedding\n\n                t0 = time.perf_counter()\n                log.info(\"[embedder] loading model %s\", settings.EMBEDDING_MODEL)\n                _model = TextEmbedding(model_name=settings.EMBEDDING_MODEL)\n                log.info(\"[embedder] model ready in %d ms\", (time.perf_counter() - t0) * 1000)''')\ns = s.replace('''    model = get_model()\n    return [vec.tolist() for vec in model.embed(texts, batch_size=settings.EMBEDDING_BATCH_SIZE)]''',\n'''    model = get_model()\n    t0 = time.perf_counter()\n    out = [vec.tolist() for vec in model.embed(texts, batch_size=settings.EMBEDDING_BATCH_SIZE)]\n    log.info(\"[embed] texts=%d batch_size=%d dims=%d in %d ms\", len(texts), settings.EMBEDDING_BATCH_SIZE,\n             len(out[0]) if out else 0, (time.perf_counter() - t0) * 1000)\n    return out''')\np.write_text(s)\n\np = Path(\"app/retrieval/vector_store.py\"); s = p.read_text()\ns = s.replace(\"import threading\\n\\nimport chromadb\\n\", \"import logging\\nimport threading\\n\\nimport chromadb\\n\")\ns = s.replace(\"_client = None\\n_lock = threading.Lock()\\n\", \"log = logging.getLogger(\\\"rag.vector_store\\\")\\n\\n_client = None\\n_lock = threading.Lock()\\n\")\ns = s.replace('''                settings.chroma_dir.mkdir(parents=True, exist_ok=True)\n                _client = chromadb.PersistentClient(path=str(settings.chroma_dir))''',\n'''                settings.chroma_dir.mkdir(parents=True, exist_ok=True)\n                log.info(\"[vector_store] opening Chroma at %s store=%s\", settings.chroma_dir, settings.CHUNKS_STORE)\n                _client = chromadb.PersistentClient(path=str(settings.chroma_dir))''')\ns = s.replace('''    for i in range(0, len(ids), step):\n        col.add(ids=ids[i:i + step], documents=texts[i:i + step],\n                embeddings=embeddings[i:i + step], metadatas=metadatas[i:i + step])''',\n'''    for i in range(0, len(ids), step):\n        col.add(ids=ids[i:i + step], documents=texts[i:i + step],\n                embeddings=embeddings[i:i + step], metadatas=metadatas[i:i + step])\n        log.debug(\"[store] added batch %d-%d\", i, min(i + step, len(ids)))\n    log.info(\"[store] added chunks=%d doc=%s collection=%s\", len(ids), metadatas[0].get(\"doc_id\"),\n             metadatas[0].get(\"collection\"))''')\ns = s.replace('''    res = store().query(query_embeddings=[query_embedding], n_results=min(top_k, total), where=where,\n                        include=[\"documents\", \"metadatas\", \"distances\"])\n    return [''', '''    res = store().query(query_embeddings=[query_embedding], n_results=min(top_k, total), where=where,\n                        include=[\"documents\", \"metadatas\", \"distances\"])\n    log.info(\"[retrieve-dense] collection=%s scope_docs=%s candidates=%d hits=%d\", collection,\n             len(doc_ids) if doc_ids is not None else \"all\", total, len(res[\"ids\"][0]))\n    return [''')\ns = s.replace('''def delete_document(collection: str, doc_id: str) -> None:\n    store().delete(where=_where(collection, [doc_id]))''', '''def delete_document(collection: str, doc_id: str) -> None:\n    n = count(collection, [doc_id])\n    store().delete(where=_where(collection, [doc_id]))\n    log.info(\"[store] deleted chunks=%d doc=%s collection=%s\", n, doc_id, collection)''')\np.write_text(s)\n\np = Path(\"app/retrieval/bm25_index.py\"); s = p.read_text()\ns = s.replace(\"import re\\nimport threading\\n\", \"import logging\\nimport re\\nimport threading\\nimport time\\n\")\ns = s.replace(\"_WORD = re.compile(\", \"log = logging.getLogger(\\\"rag.bm25\\\")\\n\\n_WORD = re.compile(\")\ns = s.replace('''def rebuild(collection: str) -> int:\n    chunks = vector_store.get_all_chunks(collection)\n    with _lock:\n        _indexes[collection] = _Index(chunks)\n    return len(chunks)''', '''def rebuild(collection: str) -> int:\n    t0 = time.perf_counter()\n    chunks = vector_store.get_all_chunks(collection)\n    with _lock:\n        _indexes[collection] = _Index(chunks)\n    log.info(\"[bm25] rebuilt collection=%s chunks=%d in %d ms\", collection, len(chunks),\n             (time.perf_counter() - t0) * 1000)\n    return len(chunks)''')\ns = s.replace('''    return idx.search(query, top_k, doc_ids) if idx else []''', '''    hits = idx.search(query, top_k, doc_ids) if idx else []\n    log.info(\"[retrieve-bm25] collection=%s scope_docs=%s hits=%d\", collection,\n             len(doc_ids) if doc_ids is not None else \"all\", len(hits))\n    return hits''')\np.write_text(s)\n\np = Path(\"app/retrieval/fusion.py\"); s = p.read_text()\ns = s.replace(\"from app.config import settings\\n\", \"import logging\\n\\nfrom app.config import settings\\n\")\ns = s.replace(\"from app.retrieval import bm25_index, embedder, vector_store\\n\", \"from app.retrieval import bm25_index, embedder, vector_store\\n\\nlog = logging.getLogger(\\\"rag.fusion\\\")\\n\")\ns = s.replace('''        results.append(item)\n    return results''', '''        results.append(item)\n    both = sum(1 for r in results if r[\"dense_rank\"] and r[\"bm25_rank\"])\n    log.info(\"[fuse] dense=%d bm25=%d fused_candidates=%d kept=%d in_both=%d rrf_k=%d\", len(dense), len(lexical),\n             len(fused), len(results), both, settings.RRF_K)\n    return results''')\np.write_text(s)\n\np = Path(\"app/llm/client.py\"); s = p.read_text()\ns = s.replace(\"import httpx\\n\\nfrom app.config import settings\\n\", \"import logging\\nimport time\\n\\nimport httpx\\n\\nfrom app.config import settings\\n\\nlog = logging.getLogger(\\\"rag.llm\\\")\\n\")\ns = s.replace('''    headers = {\"Authorization\": f\"Bearer {settings.LLM_API_KEY}\", \"Content-Type\": \"application/json\"}\n    try:''', '''    headers = {\"Authorization\": f\"Bearer {settings.LLM_API_KEY}\", \"Content-Type\": \"application/json\"}\n    prompt_chars = sum(len(m.get(\"content\", \"\")) for m in messages)\n    log.info(\"[llm] request model=%s url=%s messages=%d prompt_chars=%d\", settings.LLM_MODEL,\n             settings.chat_completions_url, len(messages), prompt_chars)\n    t0 = time.perf_counter()\n    try:''')\ns = s.replace('''    try:\n        data = resp.json()\n        return data[\"choices\"][0][\"message\"][\"content\"] or \"\"''', '''    try:\n        data = resp.json()\n        text = data[\"choices\"][0][\"message\"][\"content\"] or \"\"\n        usage = data.get(\"usage\") or {}\n        log.info(\"[llm] response in %d ms chars=%d tokens=%s\", (time.perf_counter() - t0) * 1000, len(text),\n                 usage.get(\"total_tokens\", \"n/a\"))\n        return text''')\np.write_text(s)\n\np = Path(\"app/rag.py\"); s = p.read_text()\ns = s.replace(\"import re\\nimport time\\n\", \"import logging\\nimport re\\nimport time\\n\")\ns = s.replace(\"_CITE = re.compile(\", \"log = logging.getLogger(\\\"rag.answer\\\")\\n\\n_CITE = re.compile(\")\ns = s.replace('''    collection = collection or settings.DEFAULT_COLLECTION\n    t0 = time.perf_counter()\n    hits = hybrid_retrieve(question, collection, top_k, doc_ids=doc_ids)''', '''    collection = collection or settings.DEFAULT_COLLECTION\n    t0 = time.perf_counter()\n    log.info(\"[ask] collection=%s scope_docs=%s jobs=%s question=%r\", collection,\n             len(doc_ids) if doc_ids is not None else \"all\", job_ids or [], question[:120])\n    hits = hybrid_retrieve(question, collection, top_k, doc_ids=doc_ids)''')\ns = s.replace('''    text, citations, unresolved = extract_citations(text.strip(), sources)''', '''    text, citations, unresolved = extract_citations(text.strip(), sources)\n    log.info(\"[ask] done in %d ms sources=%d citations=%s unresolved=%s not_found=%s\",\n             (time.perf_counter() - t0) * 1000, len(sources), [c.n for c in citations], unresolved,\n             text.startswith(NOT_FOUND_MARKER))''')\np.write_text(s)\n\n# ============================================================ main.py: logging setup, upload decisions, retry endpoint\np = Path(\"app/main.py\"); s = p.read_text()\ns = s.replace('''logging.basicConfig(level=logging.INFO, format=\"%(asctime)s %(levelname)s %(name)s: %(message)s\")\nlog = logging.getLogger(\"rag\")''', '''from app.logging_utils import configure_logging, ctx\n\nconfigure_logging()\nlog = logging.getLogger(\"rag.api\")''')\ns = s.replace('''    def record(doc_id: str, name: str, status: str, **kw) -> DocumentInfo:\n        return jobs.create(doc_id, name, col, status, job_id=job_id, **kw)\n''', '''    log.info(\"[upload] job=%s collection=%s files=%d\", job_id, col, len(files))\n\n    def record(doc_id: str, name: str, status: str, **kw) -> DocumentInfo:\n        log.info(\"[upload] %s -> %s%s\", ctx(job=job_id, doc=doc_id, file=name), status,\n                 f\" ({kw['reason']})\" if status != \"QUEUED\" and kw.get(\"reason\") else \"\")\n        return jobs.create(doc_id, name, col, status, job_id=job_id, **kw)\n''')\ns = s.replace('''@app.delete(\"/api/documents/{doc_id}\", status_code=204)\ndef delete_document(doc_id: str):''', '''@app.post(\"/api/documents/{doc_id}/retry\", response_model=DocumentInfo, status_code=202)\ndef retry_document(doc_id: str, background: BackgroundTasks):\n    \"\"\"Re-queue a FAILED document (the stored file is processed again with the current code).\"\"\"\n    doc = jobs.get(doc_id)\n    if doc is None:\n        raise HTTPException(404, \"document not found\")\n    if doc.status != \"FAILED\":\n        raise HTTPException(409, f\"only FAILED documents can be retried; this one is {doc.status}\")\n    path = next(iter(settings.uploads_dir.glob(f\"{doc_id}_*\")), None)\n    if path is None:\n        raise HTTPException(410, \"the uploaded file is no longer stored; upload it again\")\n    log.info(\"[retry] %s\", ctx(job=doc.job_id, doc=doc_id, file=doc.filename))\n    doc = jobs.update(doc_id, status=\"QUEUED\", stage=None, pages=0, chunks=0, ocr_pages=0,\n                      reason=\"Retry requested; waiting for the background worker\")\n    background.add_task(pipeline.run, doc_id, path)\n    return doc\n\n\n@app.delete(\"/api/documents/{doc_id}\", status_code=204)\ndef delete_document(doc_id: str):''')\ns = s.replace('''    for p in settings.uploads_dir.glob(f\"{doc_id}_*\"):\n        p.unlink(missing_ok=True)\n    jobs.delete(doc_id)\n\n\n@app.delete(\"/api/collections/{name}\", status_code=204)\ndef reset_collection(name: str):\n    col = _collection(name)''', '''    for p in settings.uploads_dir.glob(f\"{doc_id}_*\"):\n        p.unlink(missing_ok=True)\n    jobs.delete(doc_id)\n    log.info(\"[delete] %s\", ctx(job=doc.job_id, doc=doc_id, file=doc.filename))\n\n\n@app.delete(\"/api/collections/{name}\", status_code=204)\ndef reset_collection(name: str):\n    col = _collection(name)\n    log.info(\"[reset] collection=%s\", col)''')\ns = s.replace('version=\"0.5.0\"', 'version=\"0.6.0\"')\np.write_text(s)\nprint(\"code updated\")\nEOF\n.venv/bin/python -m compileall -q app cli evaluation scripts tests && echo compile-ok",
+  "description": "Add striprtf, content sniffing, RTF extractor, richer failure reasons, retry endpoint, and step logging everywhere",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T10:45:18.050Z</sub>
+
+**Tool result**
+
+```
+striprtf==0.0.33
+code updated
+compile-ok
+```
+
+## Assistant  <sub>2026-09-06T10:46:16.204Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "set -e; cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\n\n# ---------------- main.py: upload order = validate -> store -> hash -> duplicate check\np = Path(\"app/main.py\"); s = p.read_text()\nold_start = s.index(\"        if kind is None:\\n            record(doc_id, name, \\\"EXTRACTION_NOT_SUPPORTED\\\",\")\nold_end = s.index(\"    return jobs.get_job(job_id)\")\nnew = '''        sha = hashlib.sha256(data).hexdigest() if data else None  # computed at upload time, kept on every record\n\n        if kind is None:\n            record(doc_id, name, \"EXTRACTION_NOT_SUPPORTED\", sha256=sha,\n                   reason=f\"Extension '{Path(name).suffix or '(none)'}' is not supported. \"\n                          f\"Supported: {' '.join(sorted(SUPPORTED_EXTENSIONS))}\")\n            continue\n        if not data:\n            record(doc_id, name, \"EMPTY_FILE\", file_type=kind, reason=\"The uploaded file is 0 bytes\")\n            continue\n        if len(data) > limit:\n            record(doc_id, name, \"UPLOAD_FAILED\", file_type=kind, sha256=sha,\n                   reason=f\"UPLOAD FAILED: file is larger than {settings.MAX_UPLOAD_MB} MB\")\n            continue\n\n        # 1. upload step: store the file\n        path = settings.uploads_dir / f\"{doc_id}_{name}\"\n        try:\n            path.write_bytes(data)\n        except OSError as exc:\n            record(doc_id, name, \"UPLOAD_FAILED\", file_type=kind, sha256=sha,\n                   reason=f\"UPLOAD FAILED: could not store file ({exc})\")\n            continue\n        log.debug(\"[upload] stored %s bytes=%d sha256=%s\", ctx(job=job_id, doc=doc_id, file=name), len(data), sha)\n\n        # 2. duplicate check on the stored file's hash (same collection, live original)\n        original = jobs.find_by_hash(col, sha)\n        if original is not None:\n            record(doc_id, name, \"DUPLICATE\", file_type=kind, sha256=sha, duplicate_of=original,\n                   reason=f\"Same content as '{original.filename}' ({original.doc_id}); not processed again\")\n            continue\n\n        # 3. queue for processing\n        record(doc_id, name, \"QUEUED\", file_type=kind, sha256=sha, reason=\"Waiting for the background worker\")\n        background.add_task(pipeline.run, doc_id, path)\n'''\ns = s[:old_start] + new + s[old_end:]\ns = s.replace('''    \"\"\"Accept files as ONE job; return the job (with a record per file) immediately.\n\n    Indexing happens in the background. Every file gets a document record, even rejected\n    ones, so the listing explains what happened: EXTRACTION_NOT_SUPPORTED, EMPTY_FILE,\n    UPLOAD_FAILED, DUPLICATE, or QUEUED. Poll GET /api/jobs/{job_id}.\n    \"\"\"''', '''    \"\"\"Accept files as ONE job; return the job (with a record per file) immediately.\n\n    Per file: validate (extension, size) -> upload step: store the file and compute its SHA-256\n    -> duplicate check against live documents of the same collection -> QUEUED. Every file gets a\n    document record, even rejected ones (EXTRACTION_NOT_SUPPORTED, EMPTY_FILE, UPLOAD_FAILED,\n    DUPLICATE), so the listing explains what happened. Poll GET /api/jobs/{job_id}.\n    \"\"\"''')\np.write_text(s)\n\n# ---------------- UI: retry button for FAILED docs\np = Path(\"app/static/index.html\"); s = p.read_text()\ns = s.replace('''      <td>${TERMINAL.includes(d.status) ? `<button class=\"del\" title=\"Delete\" onclick=\"deleteDoc('${d.doc_id}')\">✕</button>` : ''}</td>''',\n'''      <td style=\"white-space:nowrap\">${d.status === 'FAILED' ? `<button class=\"small secondary\" title=\"Process the stored file again\" onclick=\"retryDoc('${d.doc_id}')\">retry</button> ` : ''}${TERMINAL.includes(d.status) ? `<button class=\"del\" title=\"Delete\" onclick=\"deleteDoc('${d.doc_id}')\">✕</button>` : ''}</td>''')\ns = s.replace('''async function deleteDoc(id) {''', '''async function retryDoc(id) {\n  try { await api(`/api/documents/${id}/retry`, { method: 'POST' }); await refresh(); }\n  catch (e) { $('uploadErr').textContent = e.message; }\n}\n\nasync function deleteDoc(id) {''')\np.write_text(s)\n\n# ---------------- CLI: retry\np = Path(\"cli/rag_cli.py\"); s = p.read_text()\ns = s.replace('''@app.command()\ndef reset(''', '''@app.command()\ndef retry(doc_id: str, api: Optional[str] = API, wait: bool = typer.Option(True, help=\"Wait for the result\")):\n    \"\"\"Re-process a FAILED document from its stored file.\"\"\"\n    with _client(api) as c:\n        r = c.post(f\"/api/documents/{doc_id}/retry\")\n        if r.status_code >= 400:\n            _die(r)\n        d = r.json()\n        typer.echo(f\"{d['status']:26} {d['filename']}  {d.get('reason') or ''}\")\n        if not wait:\n            return\n        while d[\"status\"] not in TERMINAL:\n            time.sleep(1)\n            d = c.get(f\"/api/documents/{doc_id}\").json()\n        typer.secho(f\"{d['status']:26} {d['filename']}  {d.get('reason') or ''}\",\n                    fg=\"green\" if d[\"status\"] == \"COMPLETED\" else \"red\")\n\n\n@app.command()\ndef reset(''')\np.write_text(s)\n\n# ---------------- tests\np = Path(\"tests/test_extractors.py\"); s = p.read_text()\ns += '''\n\nRTF = (rb\"{\\\\\\\\rtf1\\\\\\\\ansi\\\\\\\\deff0{\\\\\\\\fonttbl{\\\\\\\\f0 Times New Roman;}}\\\\\\\\pard Master Services Agreement dated 17 December 2025.\\\\\\\\par \"\n       rb\"The Supplier shall deliver the robots within 12 weeks.\\\\\\\\par\\\\\\\\page Schedule A: pricing is EUR 64,000 per Titan unit.\\\\\\\\par}\")\n\n\ndef test_sniff_type_detects_content(tmp_path: Path):\n    (tmp_path / \"a.docx\").write_bytes(RTF)\n    assert extractors.sniff_type(tmp_path / \"a.docx\") == \"rtf\"\n    (tmp_path / \"b.pdf\").write_bytes(b\"%PDF-1.4 ...\")\n    assert extractors.sniff_type(tmp_path / \"b.pdf\") == \"pdf\"\n    (tmp_path / \"c.docx\").write_bytes(b\"\\\\xd0\\\\xcf\\\\x11\\\\xe0\\\\xa1\\\\xb1\\\\x1a\\\\xe1\" + b\"\\\\x00\" * 64)\n    assert extractors.sniff_type(tmp_path / \"c.docx\") == \"doc\"\n    (tmp_path / \"d.txt\").write_bytes(b\"just text\")\n    assert extractors.sniff_type(tmp_path / \"d.txt\") is None\n\n\ndef test_rtf_mislabelled_as_docx_is_read_as_rtf(tmp_path: Path):\n    p = tmp_path / \"contract.docx\"\n    p.write_bytes(RTF)\n    pages = extract(p)\n    assert len(pages) == 2 and \"Master Services Agreement\" in pages[0].text and \"Schedule A\" in pages[1].text\n    assert pages[0].meta[\"format_note\"].startswith(\"extension '.docx' but content is RTF\")\n\n\ndef test_rtf_extension(tmp_path: Path):\n    p = tmp_path / \"memo.rtf\"\n    p.write_bytes(RTF)\n    assert \"12 weeks\" in extract(p)[0].text\n\n\ndef test_legacy_doc_gives_precise_reason(tmp_path: Path):\n    p = tmp_path / \"old.docx\"\n    p.write_bytes(b\"\\\\xd0\\\\xcf\\\\x11\\\\xe0\\\\xa1\\\\xb1\\\\x1a\\\\xe1\" + b\"\\\\x00\" * 512)\n    with pytest.raises(extractors.ExtractionError, match=\"legacy binary Word\"):\n        extract(p)\n\n\ndef test_broken_docx_reason_names_the_reader_failure(tmp_path: Path, monkeypatch):\n    monkeypatch.setattr(extractors, \"ocr_available\", lambda: False)\n    p = tmp_path / \"broken.docx\"\n    p.write_bytes(b\"this is not a zip and not rtf\")\n    with pytest.raises(extractors.ExtractionError) as ei:\n        extract(p)\n    msg = str(ei.value)\n    assert \"docx reader failed\" in msg and \"Fallback:\" in msg\n'''\np.write_text(s)\n\np = Path(\"tests/test_api.py\"); s = p.read_text()\ns = s.replace('''    # duplicate in a second job -> job COMPLETED (nothing new indexed), doc DUPLICATE linking original''',\n'''    # hash is computed at upload time and kept on every record with content\n    assert all(d[\"sha256\"] for d in docs if d[\"status\"] != \"EMPTY_FILE\")\n\n    # duplicate in a second job -> job COMPLETED (nothing new indexed), doc DUPLICATE linking original''')\ns = s.replace('''    assert dup[\"status\"] == \"DUPLICATE\" and dup[\"duplicate_of\"] == original[\"doc_id\"]\n    assert done2[\"status\"] == \"COMPLETED\" and done2[\"counts\"] == {\"DUPLICATE\": 1}''',\n'''    assert dup[\"status\"] == \"DUPLICATE\" and dup[\"duplicate_of\"] == original[\"doc_id\"]\n    assert dup[\"sha256\"] == original[\"sha256\"]\n    assert done2[\"status\"] == \"COMPLETED\" and done2[\"counts\"] == {\"DUPLICATE\": 1}''')\ns += '''\n\nRTF_BYTES = (rb\"{\\\\\\\\rtf1\\\\\\\\ansi\\\\\\\\deff0{\\\\\\\\fonttbl{\\\\\\\\f0 Arial;}}\\\\\\\\pard Credit Risk Assessment dated 17 December 2025.\"\n             rb\"\\\\\\\\par The borrower rating is BBB and the exposure limit is EUR 2 million.\\\\\\\\par}\")\n\n\ndef test_rtf_in_docx_clothing_is_indexed_and_retry_works(client, monkeypatch):\n    job = _upload(client, [(\"2P CRA dated 17_12_2025.docx\", RTF_BYTES)], \"rtf\")\n    done = _wait_job(client, job[\"job_id\"])\n    doc = done[\"documents\"][0]\n    assert doc[\"status\"] == \"COMPLETED\", doc\n    assert \"content is RTF\" in doc[\"reason\"] and doc[\"pages\"] == 1\n\n    # retry: only FAILED documents; simulate a failure then retry from the stored file\n    r = client.post(f\"/api/documents/{doc['doc_id']}/retry\")\n    assert r.status_code == 409\n    job2 = _upload(client, [(\"old.docx\", b\"\\\\xd0\\\\xcf\\\\x11\\\\xe0\\\\xa1\\\\xb1\\\\x1a\\\\xe1\" + b\"\\\\x00\" * 600)], \"rtf\")\n    failed = _wait_job(client, job2[\"job_id\"])[\"documents\"][0]\n    assert failed[\"status\"] == \"FAILED\" and \"legacy binary Word\" in failed[\"reason\"]\n    r = client.post(f\"/api/documents/{failed['doc_id']}/retry\")\n    assert r.status_code == 202 and r.json()[\"status\"] == \"QUEUED\"\n    again = _wait_job(client, job2[\"job_id\"])[\"documents\"][0]\n    assert again[\"status\"] == \"FAILED\"  # same file, same outcome, but processed again\n    assert client.post(\"/api/documents/nope/retry\").status_code == 404\n    client.delete(\"/api/collections/rtf\")\n'''\np.write_text(s)\nprint(\"updated\")\nEOF\n.venv/bin/python -m compileall -q app cli evaluation scripts tests && .venv/bin/python -m pytest -q 2>&1 | grep -E \"passed|failed|Error\" | head",
+  "description": "Reorder upload to store-then-hash-then-dedupe, add retry to UI/CLI, add sniffing/RTF/retry tests, run suite",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T10:46:17.372Z</sub>
+
+**Tool result**
+
+```
+updated
+E        +    where <built-in method startswith of str object at 0x118bf8c70> = "PROCESSING FAILED: Could not read '0e4fc8f7abf6_broken.pdf': the pdf reader failed (FileDataError: Failed to open fil... to open file '/Users/shoaib.rayeen/my_space/rag-generator/tests/_data/uploads/0e4fc8f7abf6_broken.pdf' as type pdf.).".startswith
+tests/test_api.py:100: AssertionError
+2026-09-06 16:16:16,926 WARNING app.ingest.extractors: [extract] primary=pdf file=0e4fc8f7abf6_broken.pdf FAILED: FileDataError: Failed to open file '/Users/shoaib.rayeen/my_space/rag-generator/tests/_data/uploads/0e4fc8f7abf6_broken.pdf' as type pdf.
+2026-09-06 16:16:16,926 INFO    app.ingest.extractors: [extract] fallback=pdf file=0e4fc8f7abf6_broken.pdf because the pdf reader failed (FileDataError: Failed to open file '/Users/shoaib.rayeen/my_space/rag-generator/tests/_data/uploads/0e4fc8f7abf6_broken.pdf' as type pdf.)
+2026-09-06 16:16:16,926 WARNING rag.pipeline: [extract] FAILED after 27 ms job=8ef3e7c02bd1 doc=0e4fc8f7abf6 file=broken.pdf: ExtractionError: Could not read '0e4fc8f7abf6_broken.pdf': the pdf reader failed (FileDataError: Failed to open file '/Users/shoaib.rayeen/my_space/rag-generator/tests/_data/uploads/0e4fc8f7abf6_broken.pdf' as type pdf.); fallback also failed (FileDataError: Failed to open file '/Users/shoaib.rayeen/my_space/rag-generator/tests/_data/uploads/0e4fc8f7abf6_broken.pdf' as type pdf.).
+2026-09-06 16:16:16,926 WARNING rag.pipeline: [pipeline] FAILED job=8ef3e7c02bd1 doc=0e4fc8f7abf6 file=broken.pdf: Could not read '0e4fc8f7abf6_broken.pdf': the pdf reader failed (FileDataError: Failed to open file '/Users/shoaib.rayeen/my_space/rag-generator/tests/_data/uploads/0e4fc8f7abf6_broken.pdf' as type pdf.); fallback also failed (FileDataError: Failed to open file '/Users/shoaib.rayeen/my_space/rag-generator/tests/_data/uploads/0e4fc8f7abf6_broken.pdf' as type pdf.).
+WARNING  app.ingest.extractors:extractors.py:427 [extract] primary=pdf file=0e4fc8f7abf6_broken.pdf FAILED: FileDataError: Failed to open file '/Users/shoaib.rayeen/my_space/rag-generator/tests/_data/uploads/0e4fc8f7abf6_broken.pdf' as type pdf.
+INFO     app.ingest.extractors:extractors.py:440 [extract] fallback=pdf file=0e4fc8f7abf6_broken.pdf because the pdf reader failed (FileDataError: Failed to open file '/Users/shoaib.rayeen/my_space/rag-generator/tests/_data/uploads/0e4fc8f7abf6_broken.pdf' as type pdf.)
+WARNING  rag.pipeline:logging_utils.py:35 [extract] FAILED after 27 ms job=8ef3e7c02bd1 doc=0e4fc8f7abf6 file=broken.pdf: ExtractionError: Could not read '0e4fc8f7abf6_broken.pdf': the pdf reader failed (FileDataError: Failed to open file '/Users/shoaib.rayeen/my_space/rag-generator/tests/_data/uploads/0e4fc8f7abf6_broken.pdf' as type pdf.); fallback also failed (FileDataError: Failed to open file '/Users/shoaib.rayeen/my_space/rag-generator/tests/_data/uploads/0e4fc8f7abf6_broken.pdf' as type pdf.).
+WARNING  rag.pipeline:pipeline.py:64 [pipeline] FAILED job=8ef3e7c02bd1 doc=0e4fc8f7abf6 file=broken.pdf: Could not read '0e4fc8f7abf6_broken.pdf': the pdf reader failed (FileDataError: Failed to open file '/Users/shoaib.rayeen/my_space/rag-generator/tests/_data/uploads/0e4fc8f7abf6_broken.pdf' as type pdf.); fallback also failed (FileDataError: Failed to open file '/Users/shoaib.rayeen/my_space/rag-generator/tests/_data/uploads/0e4fc8f7abf6_broken.pdf' as type pdf.).
+```
+
+## Assistant  <sub>2026-09-06T10:46:46.343Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "set -e; cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"app/ingest/extractors.py\"); s = p.read_text()\ns = s.replace('''def extract(path: Path) -> list[Page]:\n    \"\"\"Primary extractor first (chosen by content, then extension); on exception or empty result,\n    the format's fallback. Raises ExtractionError with a user-facing reason when nothing works.\"\"\"\n    kind, note = resolve_type(path)\n''', '''def _brief(exc: BaseException, path: Path, limit: int = 160) -> str:\n    \"\"\"`TypeName: message` with absolute paths replaced by the file name and the length capped.\"\"\"\n    msg = str(exc).replace(str(path.resolve()), path.name).replace(str(path), path.name).strip()\n    msg = \" \".join(msg.split())\n    if len(msg) > limit:\n        msg = msg[:limit].rstrip() + \"…\"\n    return f\"{type(exc).__name__}: {msg}\" if msg else type(exc).__name__\n\n\ndef _display_name(path: Path) -> str:\n    \"\"\"Uploaded files are stored as <doc_id>_<original name>; show the original name.\"\"\"\n    stem, sep, rest = path.name.partition(\"_\")\n    return rest if sep and len(stem) == 12 and all(c in \"0123456789abcdef\" for c in stem) else path.name\n\n\ndef extract(path: Path) -> list[Page]:\n    \"\"\"Primary extractor first (chosen by content, then extension); on exception or empty result,\n    the format's fallback. Raises ExtractionError with a user-facing reason when nothing works.\"\"\"\n    kind, note = resolve_type(path)\n    shown = _display_name(path)\n''')\ns = s.replace('''    fallback = FALLBACKS.get(kind)\n    why = (f\"the {kind} reader failed ({type(primary_error).__name__}: {primary_error})\" if primary_error\n           else f\"the {kind} reader found no text\")\n    if fallback is None:\n        raise ExtractionError(f\"Could not read '{path.name}': {why}.\")\n''', '''    fallback = FALLBACKS.get(kind)\n    why = (f\"the {kind} reader failed ({_brief(primary_error, path)})\" if primary_error\n           else f\"the {kind} reader found no text\")\n    if fallback is None:\n        raise ExtractionError(f\"Could not read '{shown}': {why}.\")\n''')\ns = s.replace('''    except Exception as exc:\n        raise ExtractionError(f\"Could not read '{path.name}': {why}; fallback also failed \"\n                              f\"({type(exc).__name__}: {exc}).\") from exc\n    if not pages:\n        raise ExtractionError(f\"Could not read '{path.name}': {why}, and the fallback extractor found no text either.\")''',\n'''    except Exception as exc:\n        same = primary_error is not None and str(exc) == str(primary_error)\n        tail = \"the fallback could not open the file either\" if same else f\"fallback also failed ({_brief(exc, path)})\"\n        raise ExtractionError(f\"Could not read '{shown}': {why}; {tail}.\") from exc\n    if not pages:\n        raise ExtractionError(f\"Could not read '{shown}': {why}, and the fallback extractor found no text either.\")''')\ns = s.replace('''        raise ExtractionError(f\"File '{path.name}' has extension '{path.suffix}' but its content is a legacy \"''',\n              '''        raise ExtractionError(f\"File '{_display_name(path)}' has extension '{path.suffix}' but its content is a legacy \"''')\np.write_text(s)\n\nt = Path(\"tests/test_api.py\"); x = t.read_text()\nx = x.replace('''    assert done3[\"documents\"][0][\"reason\"].startswith(\"PROCESSING FAILED: Could not read this pdf\")''',\n'''    reason = done3[\"documents\"][0][\"reason\"]\n    assert reason.startswith(\"PROCESSING FAILED: Could not read 'broken.pdf': the pdf reader failed (FileDataError\")\n    assert \"/Users\" not in reason and \"tests/_data\" not in reason  # no absolute paths leak into the reason''')\nt.write_text(x)\nt = Path(\"tests/test_extractors.py\"); x = t.read_text()\nx = x.replace('''    with pytest.raises(extractors.ExtractionError, match=\"Could not read this pdf\"):\n        extract(p)''', '''    with pytest.raises(extractors.ExtractionError, match=\"Could not read 'bad.pdf': the pdf reader failed\"):\n        extract(p)''')\nt.write_text(x)\nprint(\"messages tightened\")\nEOF\n.venv/bin/python -m compileall -q app cli evaluation scripts tests && .venv/bin/python -m pytest -q 2>&1 | grep -E \"^(FAILED|ERROR)|passed|failed\" | head",
+  "description": "Shorten extraction failure reasons, hide paths, update test expectations, run suite",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T10:46:47.501Z</sub>
+
+**Tool result**
+
+```
+messages tightened
+2026-09-06 16:16:47,239 INFO    app.ingest.extractors: [extract] fallback=docx file=9091a7009fc8_2P CRA dated 17_12_2025.docx because the docx reader failed (PackageNotFoundError: Package not found at '9091a7009fc8_2P CRA dated 17_12_2025.docx')
+2026-09-06 16:16:47,239 WARNING rag.pipeline: [extract] FAILED after 15 ms job=2c451644fa22 doc=9091a7009fc8 file=2P CRA dated 17_12_2025.docx: ExtractionError: The docx reader failed (PackageNotFoundError: Package not found at '9091a7009fc8_2P CRA dated 17_12_2025.docx'). Fallback: This DOCX contains no text layer and Tesseract OCR is not installed on this host, so it could not be read. OCR works in the Docker image; locally install tesseract (brew install tesseract / apt install tesseract-ocr) and upload again.
+2026-09-06 16:16:47,239 WARNING rag.pipeline: [pipeline] FAILED job=2c451644fa22 doc=9091a7009fc8 file=2P CRA dated 17_12_2025.docx: The docx reader failed (PackageNotFoundError: Package not found at '9091a7009fc8_2P CRA dated 17_12_2025.docx'). Fallback: This DOCX contains no text layer and Tesseract OCR is not installed on this host, so it could not be read. OCR works in the Docker image; locally install tesseract (brew install tesseract / apt install tesseract-ocr) and upload again.
+INFO     app.ingest.extractors:extractors.py:456 [extract] fallback=docx file=9091a7009fc8_2P CRA dated 17_12_2025.docx because the docx reader failed (PackageNotFoundError: Package not found at '9091a7009fc8_2P CRA dated 17_12_2025.docx')
+WARNING  rag.pipeline:logging_utils.py:35 [extract] FAILED after 15 ms job=2c451644fa22 doc=9091a7009fc8 file=2P CRA dated 17_12_2025.docx: ExtractionError: The docx reader failed (PackageNotFoundError: Package not found at '9091a7009fc8_2P CRA dated 17_12_2025.docx'). Fallback: This DOCX contains no text layer and Tesseract OCR is not installed on this host, so it could not be read. OCR works in the Docker image; locally install tesseract (brew install tesseract / apt install tesseract-ocr) and upload again.
+WARNING  rag.pipeline:pipeline.py:64 [pipeline] FAILED job=2c451644fa22 doc=9091a7009fc8 file=2P CRA dated 17_12_2025.docx: The docx reader failed (PackageNotFoundError: Package not found at '9091a7009fc8_2P CRA dated 17_12_2025.docx'). Fallback: This DOCX contains no text layer and Tesseract OCR is not installed on this host, so it could not be read. OCR works in the Docker image; locally install tesseract (brew install tesseract / apt install tesseract-ocr) and upload again.
+        why = (f"the {kind} reader failed ({_brief(primary_error, path)})" if primary_error
+        why = (f"the {kind} reader failed ({_brief(primary_error, path)})" if primary_error
+E           app.ingest.extractors.ExtractionError: The docx reader failed (PackageNotFoundError: Package not found at 'contract.docx'). Fallback: This DOCX contains no text layer and Tesseract OCR is not installed on this host, so it could not be read. OCR works in the Docker image; locally install tesseract (brew install tesseract / apt install tesseract-ocr) and upload again.
+2026-09-06 16:16:47,335 INFO    app.ingest.extractors: [extract] fallback=docx file=contract.docx because the docx reader failed (PackageNotFoundError: Package not found at 'contract.docx')
+```
+
+## Assistant  <sub>2026-09-06T10:47:54.071Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\n\n# ---------------- .env.example\np = Path(\".env.example\"); s = p.read_text()\ns = s.replace(\"#APP_HOST=0.0.0.0\\n#APP_PORT=8000\\n\", \"#APP_HOST=0.0.0.0\\n#APP_PORT=8000\\n#LOG_LEVEL=INFO            # DEBUG logs per-batch / per-chunk detail; every step is logged with job=/doc= ids\\n#SNIFF_CONTENT=true        # detect the real format from the file bytes (e.g. RTF saved as .docx)\\n\")\np.write_text(s)\n\n# ---------------- README\np = Path(\"README.md\"); s = p.read_text()\ns = s.replace(\"| Formats | PDF (PyMuPDF), DOCX (python-docx), HTML (beautifulsoup4), TXT/MD/CSV (stdlib) → text with page metadata · **Tesseract OCR as fallback** when a primary extractor fails or finds no text · PNG/JPG/TIFF via OCR |\",\n              \"| Formats | PDF (PyMuPDF), DOCX (python-docx), RTF (striprtf), HTML (beautifulsoup4), TXT/MD/CSV (stdlib) → text with page metadata · the **real format is sniffed from the bytes** (an RTF saved as `.docx` is read as RTF) · **Tesseract OCR as fallback** when a primary extractor fails or finds no text · PNG/JPG/TIFF via OCR |\")\ns = s.replace(\"- **Input formats:** `.pdf .docx .html .htm .txt .md .csv` plus `.png .jpg .jpeg .tiff .tif` (OCR).\",\n              \"- **Input formats:** `.pdf .docx .rtf .html .htm .txt .md .csv` plus `.png .jpg .jpeg .tiff .tif` (OCR).\\n- **Content sniffing** (`SNIFF_CONTENT`): the first bytes decide the reader, not the extension. An RTF or PDF\\n  mislabelled as `.docx` is read correctly and the COMPLETED reason notes it (\\\"extension '.docx' but content is\\n  RTF\\\"). A legacy binary `.doc` (OLE2) is recognised and fails with the advice to save it as `.docx` or PDF.\")\ns = s.replace(\"- **Two-tier extraction.** Primary extractors run first: PyMuPDF (PDF), python-docx (DOCX),\\n  beautifulsoup4 + lxml (HTML), stdlib (TXT/MD/CSV).\",\n              \"- **Two-tier extraction.** Primary extractors run first: PyMuPDF (PDF), python-docx (DOCX), striprtf (RTF),\\n  beautifulsoup4 + lxml (HTML), stdlib (TXT/MD/CSV).\")\ns = s.replace(\"  If neither tier yields text the job ends `FAILED` with the precise reason (e.g. Tesseract not installed).\",\n              \"  If neither tier yields text the document ends `FAILED` with a precise reason that names what the primary\\n  reader hit (e.g. `the docx reader failed (BadZipFile: File is not a zip file)`) and what the fallback said.\\n- **Retry**: a `FAILED` document can be re-processed from its stored file (`POST /api/documents/{id}/retry`,\\n  UI *retry* button, `rag retry <doc_id>`) — useful after installing Tesseract or upgrading the extractors.\")\ns = s.replace(\"- Formats outside the list above (PPTX, XLSX, EPUB, audio…). Adding one is a small extractor — see Tuning.\",\n              \"- Formats outside the list above (legacy binary `.doc`, PPTX, XLSX, EPUB, audio…). Adding one is a small extractor — see Tuning.\")\ns = s.replace(\"\"\"Two listings, both **paginated**\"\"\", \"\"\"Per file the upload does, in order: validate extension and size → **upload step**: store the file\nand compute its SHA-256 (kept on the record) → **duplicate check** against live documents of the same\ncollection → `QUEUED` for the background worker. A duplicate is therefore recorded after the upload\nstep completes, with its hash and a link to the original.\n\nTwo listings, both **paginated**\"\"\")\ns = s.replace(\"| `DELETE` | `/api/documents/{doc_id}` | remove a finished document and its chunks |\",\n              \"| `POST` | `/api/documents/{doc_id}/retry` | re-queue a `FAILED` document from its stored file → **202** |\\n| `DELETE` | `/api/documents/{doc_id}` | remove a finished document and its chunks |\")\ns = s.replace(\"rag reset -c demo --yes\\nrag serve```\", \"rag retry <doc_id>                                        # re-process a FAILED document\\nrag reset -c demo --yes\\nrag serve```\")\ns = s.replace(\"rag reset -c demo --yes\\nrag serve\\n```\", \"rag retry <doc_id>                                        # re-process a FAILED document\\nrag reset -c demo --yes\\nrag serve\\n```\")\ns = s.replace(\"| `LIST_PAGE_SIZE` / `LIST_MAX_PAGE_SIZE` | 5 / 200 | default and maximum `size` for the job and document listings (`page` is 0-based) |\",\n              \"| `LIST_PAGE_SIZE` / `LIST_MAX_PAGE_SIZE` | 5 / 200 | default and maximum `size` for the job and document listings (`page` is 0-based) |\\n| `LOG_LEVEL` / `SNIFF_CONTENT` | `INFO` / true | log verbosity (`DEBUG` adds per-batch detail); detect the real format from file bytes |\")\ns = s.replace(\"| Extraction (primary) | PyMuPDF, python-docx, beautifulsoup4 + lxml, stdlib csv/html.parser | one small library per format; PyMuPDF also renders pages for OCR |\",\n              \"| Extraction (primary) | PyMuPDF, python-docx, striprtf, beautifulsoup4 + lxml, stdlib csv/html.parser | one small library per format; PyMuPDF also renders pages for OCR; magic-byte sniffing picks the reader |\")\ns = s.replace(\"## 10. Known limitations\\n\", \"\"\"## 9b. Logging\n\nEvery step logs one line with the step name in brackets and the ids it concerns, so\n`grep \"doc=<doc_id>\"` on the server log follows one file end to end:\n\n```\n[upload] job=7f3a… doc=a1… file=contract.docx -> QUEUED\n[pipeline] begin job=7f3a… doc=a1… file=contract.docx type=docx collection=default size=437476B\n[extract] contract.docx: extension '.docx' but content is RTF; read as rtf\n[extract] primary=rtf file=… pages=2          [extract] done in 41 ms job=… doc=…\n[chunk] … chunks=9 avg_chars=1010              [embed] texts=9 batch_size=64 dims=384 in 210 ms\n[store] added chunks=9 …                        [bm25] rebuilt collection=default chunks=58 in 12 ms\n[pipeline] COMPLETED job=… doc=…\n[ask] collection=default scope_docs=all question='…'   [retrieve-dense] … hits=20   [retrieve-bm25] … hits=20\n[fuse] dense=20 bm25=20 fused_candidates=31 kept=6 in_both=9   [llm] request … / response in 812 ms\n[ask] done in 950 ms sources=6 citations=[1, 3] unresolved=[] not_found=False\n```\n\n`LOG_LEVEL=DEBUG` adds per-batch store writes and chunker parameters. In Docker: `docker compose logs -f app`.\n\n## 10. Known limitations\n\"\"\")\np.write_text(s)\n\n# ---------------- architecture.md\np = Path(\"documentation/architecture.md\"); s = p.read_text()\ns = s.replace(\"\"\"                                                        │ per file (each becomes a document of that job):\n                                                        │  read bytes ──fail──► UPLOAD_FAILED\n                                                        │  extension ∉ SUPPORTED_EXTENSIONS ──► EXTRACTION_NOT_SUPPORTED\n                                                        │  0 bytes ──► EMPTY_FILE\n                                                        │  > MAX_UPLOAD_MB ──► UPLOAD_FAILED\n                                                        │  sha256 already live in collection ──► DUPLICATE (links original)\n                                                        │  store to data/uploads/<doc_id>_<name> ──fail──► UPLOAD_FAILED\n                                                        │  else ──► QUEUED + background task\"\"\",\n\"\"\"                                                        │ per file (each becomes a document of that job):\n                                                        │  read bytes ──fail──► UPLOAD_FAILED\n                                                        │  sha256 computed at upload time, kept on the record\n                                                        │  extension ∉ SUPPORTED_EXTENSIONS ──► EXTRACTION_NOT_SUPPORTED\n                                                        │  0 bytes ──► EMPTY_FILE\n                                                        │  > MAX_UPLOAD_MB ──► UPLOAD_FAILED\n                                                        │  upload step: store to data/uploads/<doc_id>_<name> ──fail──► UPLOAD_FAILED\n                                                        │  duplicate check: sha256 already live in collection ──► DUPLICATE (links original)\n                                                        │  else ──► QUEUED + background task\"\"\")\ns = s.replace(\"\"\"`extract()` runs the format's **primary** extractor. If it raises or returns no pages, the\nformat's **fallback** runs.\"\"\", \"\"\"`extract()` first decides the reader: `sniff_type()` inspects the leading bytes (PK zip with\n`word/` → docx, `{\\\\rtf` → rtf, `%PDF` → pdf, OLE2 header → legacy `.doc` (unsupported, precise\nreason), `<html` → html, image magic → image) and overrides the extension when they disagree\n(`SNIFF_CONTENT`). Then it runs the format's **primary** extractor. If it raises or returns no\npages, the format's **fallback** runs.\"\"\")\ns = s.replace(\"| HTML | beautifulsoup4 + lxml | stdlib `html.parser` tag stripping | 1 | `<title>` |\",\n              \"| RTF | striprtf | stdlib control-word stripping | one page per `\\\\page` | first line when heading-like |\\n| HTML | beautifulsoup4 + lxml | stdlib `html.parser` tag stripping | 1 | `<title>` |\")\ns = s.replace(\"Tesseract is therefore never the first choice for a document that has a text layer; it is\\nthe safety net for scanned, image-only or otherwise unreadable content.\",\n              \"Tesseract is therefore never the first choice for a document that has a text layer; it is\\nthe safety net for scanned, image-only or otherwise unreadable content. Failure reasons name the\\nprimary reader's error (paths stripped, capped length) and what the fallback said.\\n\\n`POST /api/documents/{doc_id}/retry` re-queues a FAILED document from its stored file.\\n\\n### Logging\\n\\n`app/logging_utils.py` configures the root logger (`LOG_LEVEL`) and provides `timed()` /\\n`ctx()`. Each step logs `[step] … job=… doc=… file=…` with elapsed ms: upload decisions, extract\\n(primary/fallback/sniff), chunk, embed, store, bm25-rebuild, pipeline outcome, and on the ask side\\nretrieve-dense, retrieve-bm25, fuse, llm request/response and the final ask summary.\")\np.write_text(s)\n\n# ---------------- flow.html\np = Path(\"documentation/flow.html\"); s = p.read_text()\ns = s.replace(\"\"\"    {t:'Validate & hash', d:'Per file: read bytes → check extension against SUPPORTED_EXTENSIONS → reject empty or oversize → compute SHA-256 → look for a live document with the same hash in this collection.',\n     branches:[['EXTRACTION_NOT_SUPPORTED','bad','extension not supported'],['EMPTY_FILE','bad','0 bytes'],['UPLOAD_FAILED','bad','oversize / unreadable / disk error'],['DUPLICATE','warn','same hash already live → links to original, stops here']]},\"\"\",\n\"\"\"    {t:'Validate, store, hash, dedupe', d:'Per file, in order: read bytes and compute the SHA-256 (kept on the record) → check the extension against SUPPORTED_EXTENSIONS → reject empty or oversize → UPLOAD STEP: store the file under data/uploads → DUPLICATE CHECK: look for a live document with the same hash in this collection. Only then is the file queued.',\n     branches:[['EXTRACTION_NOT_SUPPORTED','bad','extension not supported'],['EMPTY_FILE','bad','0 bytes'],['UPLOAD_FAILED','bad','oversize / unreadable / disk error while storing'],['DUPLICATE','warn','after the upload step: same hash already live → links to original, not processed']]},\"\"\")\ns = s.replace(\"\"\"    {t:'PROCESSING · extracting', d:'Two tiers. The PRIMARY extractor for the format runs first: PyMuPDF (PDF), python-docx (DOCX), BeautifulSoup + lxml (HTML), stdlib (TXT/MD/CSV).\"\"\",\n\"\"\"    {t:'PROCESSING · extracting', d:'First the real format is sniffed from the file bytes (an RTF saved as .docx is read as RTF; a legacy binary .doc fails with advice to convert). Then two tiers. The PRIMARY extractor for the format runs first: PyMuPDF (PDF), python-docx (DOCX), striprtf (RTF), BeautifulSoup + lxml (HTML), stdlib (TXT/MD/CSV).\"\"\")\ns = s.replace(\"['FAILED','bad','neither tier produced text → precise reason (e.g. \\\"Tesseract OCR is not installed\\\")']]},\",\n              \"['FAILED','bad','neither tier produced text → precise reason naming the reader error and the fallback outcome; fix and use retry']]},\")\np.write_text(s)\n\n# ---------------- changelog\np = Path(\"documentation/changelog.html\"); s = p.read_text()\nentry = \"\"\"<section class=\"rel\">\n  <h2>0.6.0 <time>2026-09-06</time></h2>\n  <p><span class=\"tag fixed\">Fixed</span> A DOCX that was really an RTF file failed with a misleading OCR message. Files are now read by their real content, failures explain the actual cause, and every step is logged.</p>\n  <ul>\n    <li><span class=\"tag added\">Added</span> Content sniffing (<code>sniff_type</code>, <code>SNIFF_CONTENT</code>): PK/<code>word/</code> → docx, <code>{\\\\rtf</code> → rtf, <code>%PDF</code> → pdf, OLE2 → legacy .doc (precise \"convert to .docx\" reason), <code>&lt;html</code>, image magic. The reader follows the content; the COMPLETED reason notes a mismatch.</li>\n    <li><span class=\"tag added\">Added</span> RTF support (<code>.rtf</code> via striprtf, stdlib fallback), so RTF files mislabelled <code>.docx</code> index normally.</li>\n    <li><span class=\"tag changed\">Changed</span> Failure reasons name the primary reader's error (paths stripped, length capped) before the fallback's message, e.g. <code>the docx reader failed (BadZipFile: …). Fallback: …</code>.</li>\n    <li><span class=\"tag added\">Added</span> <code>POST /api/documents/{id}/retry</code>, UI <b>retry</b> button and <code>rag retry</code> to re-process a FAILED document from its stored file.</li>\n    <li><span class=\"tag changed\">Changed</span> Upload order per file: validate → <b>store the file and compute SHA-256</b> (kept on every record) → duplicate check → QUEUED. Duplicates are marked after the upload step.</li>\n    <li><span class=\"tag added\">Added</span> Step logging everywhere (<code>app/logging_utils.py</code>, <code>LOG_LEVEL</code>): upload decisions, extract (sniff/primary/fallback), chunk, embed, store, bm25-rebuild, pipeline outcome, retrieve-dense, retrieve-bm25, fuse, llm, ask — each tagged with <code>job=</code>/<code>doc=</code> and timings.</li>\n  </ul>\n</section>\n\n<section class=\"rel\">\n  <h2>0.5.0 <time>2026-09-06</time></h2>\"\"\"\ns = s.replace('<section class=\"rel\">\\n  <h2>0.5.0 <time>2026-09-06</time></h2>', entry, 1)\np.write_text(s)\n\n# ---------------- memory.md + plan\np = Path(\"memory.md\"); s = p.read_text()\ns = s.replace(\"## Environment gotchas\", \"\"\"- **Content sniffing beats extensions** (2026-09-06 incident: `2P CRA dated 17_12_2025.docx` was RTF;\n  python-docx raised PackageNotFoundError and the fallback message blamed missing OCR). `sniff_type()`\n  now routes by magic bytes; RTF is supported; legacy OLE `.doc` gets a \"convert to .docx\" reason.\n- **Upload order is fixed by the user**: validate → store file + compute SHA-256 → duplicate check → QUEUED.\n- **Failure reasons must name the primary reader's error** (paths stripped) before the fallback's text.\n- **Every step logs `[step] … job= doc=`** via `app/logging_utils.py`; `grep doc=<id>` tells the story of a file.\n\n## Environment gotchas\"\"\")\ns = s.replace(\"  v0.5.0 paginated listings (page 0, size 5), `documentation/enhancements.md`.\",\n              \"  v0.5.0 paginated listings (page 0, size 5), `documentation/enhancements.md`;\\n  v0.6.0 content sniffing + RTF, precise failure reasons, retry endpoint, store-then-hash upload order, step logging.\")\np.write_text(s)\np = Path(\"plans/2026-09-06-rag-generator-plan.md\"); s = p.read_text()\ns = s.replace(\"| 10 | **Pagination**\", \"| 11 | **Step logging** on every stage; **content sniffing** (RTF-as-.docx incident) with RTF support and precise failure reasons; **retry** for FAILED documents; upload order store → hash → duplicate check | `app/logging_utils.py`, `app/ingest/extractors.py`, `app/main.py` |\\n| 10 | **Pagination**\")\np.write_text(s)\nprint(\"docs updated\")\nEOF\n.venv/bin/python scripts/build_docs.py >/dev/null && .venv/bin/python scripts/sync_rules.py --check",
+  "description": "Document sniffing, RTF, retry, upload order, and logging; rebuild docs"
+}
+```
+
+## Tool  <sub>2026-09-06T10:47:54.186Z</sub>
+
+**Tool result**
+
+```
+docs updated
+rules in sync
+```
+
+## Assistant  <sub>2026-09-06T10:47:54.779Z</sub>
+
+**Tool call — `mcp__Claude_Browser__preview_stop`**
+
+```json
+{
+  "serverId": "88b591bd-e76e-4d70-9b34-9bab3e472e9d"
+}
+```
+
+## Tool  <sub>2026-09-06T10:47:56.952Z</sub>
+
+**Tool result**
+
+```
+Server 88b591bd-e76e-4d70-9b34-9bab3e472e9d stopped
+```
+
+## Assistant  <sub>2026-09-06T10:48:32.276Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator\ngrep -n 'rtf' app/ingest/extractors.py | grep -n \"startswith\\|split\\|re.sub\" | head; echo ---; grep -n 'RTF = \\|RTF_BYTES = ' tests/*.py\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\nfor f in (\"tests/test_extractors.py\", \"tests/test_api.py\"):\n    p = Path(f); s = p.read_text()\n    s = s.replace('rb\"{\\\\\\\\rtf1', 'rb\"{\\\\rtf1').replace('\\\\\\\\fonttbl', '\\\\fonttbl').replace('\\\\\\\\f0', '\\\\f0').replace('\\\\\\\\pard', '\\\\pard').replace('\\\\\\\\par', '\\\\par').replace('\\\\\\\\page', '\\\\page').replace('\\\\\\\\deff0', '\\\\deff0').replace('\\\\\\\\ansi', '\\\\ansi')\n    p.write_text(s)\nprint(Path(\"tests/test_extractors.py\").read_text().split(\"RTF = \")[1][:160])\nEOF\n.venv/bin/python -m pytest -q 2>&1 | grep -E \"^(FAILED|ERROR)|passed|failed\" | head",
+  "description": "Fix RTF test fixtures and rerun the suite",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T10:48:33.377Z</sub>
+
+**Tool result**
+
+```
+2:74:    if head.lstrip().startswith(b"{\\rtf"):
+8:286:    for i, block in enumerate(text.split("\f")):  # striprtf renders \page as form feed
+---
+tests/test_api.py:229:RTF_BYTES = (rb"{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}\\pard Credit Risk Assessment dated 17 December 2025."
+tests/test_extractors.py:133:RTF = (rb"{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Times New Roman;}}\\pard Master Services Agreement dated 17 December 2025.\\par "
+(rb"{\rtf1\ansi\deff0{\fonttbl{\f0 Times New Roman;}}\pard Master Services Agreement dated 17 December 2025.\par "
+       rb"The Supplier shall deliver the robo
+FAILED tests/test_extractors.py::test_rtf_mislabelled_as_docx_is_read_as_rtf
+1 failed, 31 passed, 6 warnings in 0.83s
+```
+
+## Assistant  <sub>2026-09-06T10:48:39.956Z</sub>
+
+Fixing the last failing test (page split on `\page` in RTF), then building the dedicated listing and show pages.
+
+## Assistant  <sub>2026-09-06T10:48:42.618Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator; .venv/bin/python -m pytest -q tests/test_extractors.py::test_rtf_mislabelled_as_docx_is_read_as_rtf 2>&1 | grep -E \"assert|Error\" | head -5; .venv/bin/python - <<'EOF'\nfrom striprtf.striprtf import rtf_to_text\nt = rtf_to_text(r\"{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}\\pard First page.\\par\\page Second page.\\par}\")\nprint(repr(t))\nEOF",
+  "description": "Inspect how striprtf renders page breaks"
+}
+```
+
+## Tool  <sub>2026-09-06T10:48:42.819Z</sub>
+
+**Tool result**
+
+```
+>       assert len(pages) == 2 and "Master Services Agreement" in pages[0].text and "Schedule A" in pages[1].text
+E       assert (1 == 2)
+tests/test_extractors.py:152: AssertionError
+'First page.\n\n\nSecond page.\n'
+```
+
+## Assistant  <sub>2026-09-06T10:50:45.284Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "set -e; cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\n\n# ---------------- RTF page breaks\np = Path(\"app/ingest/extractors.py\"); s = p.read_text()\ns = s.replace('''    from striprtf.striprtf import rtf_to_text\n\n    raw = path.read_bytes().decode(\"latin-1\", errors=\"replace\")\n    text = rtf_to_text(raw, errors=\"ignore\")\n    pages: list[Page] = []\n    for i, block in enumerate(text.split(\"\\\\f\")):  # striprtf renders \\\\page as form feed''',\n'''    import re\n\n    from striprtf.striprtf import rtf_to_text\n\n    raw = path.read_bytes().decode(\"latin-1\", errors=\"replace\")\n    # striprtf drops \\\\page silently; turn it into a text marker first so we can split on it.\n    marker = \"RAGPAGEBREAK7F3A\"\n    raw = re.sub(r\"\\\\\\\\page\\\\b\", f\"\\\\\\\\par {marker}\\\\\\\\par \", raw)\n    text = rtf_to_text(raw, errors=\"ignore\")\n    pages: list[Page] = []\n    for i, block in enumerate(text.split(marker)):''')\np.write_text(s)\n\n# ---------------- main.py: pages + file endpoint\np = Path(\"app/main.py\"); s = p.read_text()\ns = s.replace('''@app.get(\"/\", include_in_schema=False)\ndef index():\n    return FileResponse(STATIC_DIR / \"index.html\")\n''', '''@app.get(\"/\", include_in_schema=False)\ndef index():\n    return FileResponse(STATIC_DIR / \"index.html\")\n\n\n@app.get(\"/jobs\", include_in_schema=False)\ndef jobs_page():\n    \"\"\"Dedicated job listing page (20 per page).\"\"\"\n    return FileResponse(STATIC_DIR / \"jobs.html\")\n\n\n@app.get(\"/documents\", include_in_schema=False)\ndef documents_page():\n    \"\"\"Dedicated document listing page (20 per page, filter by ?job_id=&status=&collection=).\"\"\"\n    return FileResponse(STATIC_DIR / \"documents.html\")\n\n\n@app.get(\"/documents/{doc_id}\", include_in_schema=False)\ndef document_show_page(doc_id: str):\n    \"\"\"Show page for one document: viewer for COMPLETED, explanation otherwise.\"\"\"\n    return FileResponse(STATIC_DIR / \"document.html\")\n''')\ns = s.replace('''@app.post(\"/api/documents/{doc_id}/retry\", response_model=DocumentInfo, status_code=202)''',\n'''_INLINE_TYPES = {\"pdf\": \"application/pdf\", \"html\": \"text/html; charset=utf-8\", \"text\": \"text/plain; charset=utf-8\",\n                 \"csv\": \"text/csv; charset=utf-8\"}\n\n\n@app.get(\"/api/documents/{doc_id}/file\")\ndef document_file(doc_id: str, download: bool = Query(default=False)):\n    \"\"\"The stored original file. PDFs, HTML, text, CSV and images render inline in the browser;\n    other types (DOCX, RTF) are served as downloads.\"\"\"\n    doc = jobs.get(doc_id)\n    if doc is None:\n        raise HTTPException(404, \"document not found\")\n    path = next(iter(settings.uploads_dir.glob(f\"{doc_id}_*\")), None)\n    if path is None:\n        raise HTTPException(410, \"the uploaded file is no longer stored\")\n    if doc.file_type == \"image\":\n        import mimetypes\n        media = mimetypes.guess_type(doc.filename)[0] or \"application/octet-stream\"\n    else:\n        media = _INLINE_TYPES.get(doc.file_type or \"\", \"application/octet-stream\")\n    disposition = \"attachment\" if download or media == \"application/octet-stream\" else \"inline\"\n    return FileResponse(path, media_type=media, filename=doc.filename if disposition == \"attachment\" else None,\n                        headers={\"Content-Disposition\": f'{disposition}; filename=\"{doc.filename}\"'})\n\n\n@app.post(\"/api/documents/{doc_id}/retry\", response_model=DocumentInfo, status_code=202)''')\ns = s.replace('version=\"0.6.0\"', 'version=\"0.7.0\"')\np.write_text(s)\n\n# ---------------- shared page chrome\nCSS = \"\"\"\n  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c1f26; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --ok:#15803d; --bad:#b91c1c; --warn:#b45309; --info:#0369a1; }\n  * { box-sizing:border-box; }\n  body { margin:0; font:14px/1.5 -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif; background:var(--bg); color:var(--ink); }\n  header { padding:14px 28px; background:var(--card); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:16px; flex-wrap:wrap; }\n  header h1 { margin:0; font-size:18px; } header h1 a { color:inherit; text-decoration:none; }\n  header nav { margin-left:auto; font-size:13px; } header nav a { color:var(--accent); text-decoration:none; margin-left:12px; } header nav a.on { font-weight:700; }\n  main { max-width:1300px; margin:0 auto; padding:20px 28px; }\n  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:20px; }\n  .card h2 { margin:0 0 12px; font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }\n  .card h2 .hint { text-transform:none; letter-spacing:0; font-weight:400; }\n  table { width:100%; border-collapse:collapse; font-size:13px; }\n  th, td { text-align:left; padding:8px 8px; border-bottom:1px solid var(--line); vertical-align:top; }\n  th { color:var(--muted); font-weight:600; font-size:12px; }\n  tr.clickable { cursor:pointer; } tr.clickable:hover { background:#f8fafc; }\n  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:600; background:#eef2ff; color:var(--accent); white-space:nowrap; }\n  .pill.COMPLETED { background:#dcfce7; color:var(--ok); }\n  .pill.FAILED, .pill.UPLOAD_FAILED, .pill.EXTRACTION_NOT_SUPPORTED, .pill.EMPTY_FILE { background:#fee2e2; color:var(--bad); }\n  .pill.DUPLICATE { background:#fef3c7; color:var(--warn); } .pill.PROCESSING { background:#e0f2fe; color:var(--info); } .pill.ocr { background:#fef3c7; color:var(--warn); }\n  code.id { font:12px ui-monospace, Menlo, monospace; color:var(--muted); } a { color:var(--accent); }\n  button { padding:6px 12px; border:0; border-radius:6px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }\n  button.secondary { background:#eef2ff; color:var(--accent); } button.small { padding:3px 8px; font-size:12px; } button:disabled { opacity:.5; cursor:default; }\n  input[type=text], select { padding:7px 9px; border:1px solid var(--line); border-radius:6px; font:inherit; }\n  .toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; font-size:13px; }\n  .pager { display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-top:10px; font-size:12px; color:var(--muted); }\n  .muted { color:var(--muted); font-size:12px; } .err { color:var(--bad); font-size:13px; white-space:pre-wrap; }\n  .chip { display:inline-flex; gap:6px; align-items:center; background:#eff6ff; color:var(--accent); border-radius:999px; padding:2px 10px; font-size:12px; }\n  .chip a { text-decoration:none; }\n  .banner { border-radius:8px; padding:12px 14px; margin-bottom:14px; font-size:13px; }\n  .banner.warn { background:#fef3c7; color:#78350f; } .banner.bad { background:#fee2e2; color:#7f1d1d; } .banner.info { background:#e0f2fe; color:#0c4a6e; }\n  dl { display:grid; grid-template-columns:160px 1fr; gap:6px 12px; margin:0; font-size:13px; } dt { color:var(--muted); } dd { margin:0; word-break:break-all; }\n  iframe.viewer { width:100%; height:70vh; border:1px solid var(--line); border-radius:8px; background:#fff; }\n  img.viewer { max-width:100%; border:1px solid var(--line); border-radius:8px; }\n  .page { border:1px solid var(--line); border-radius:8px; margin-top:10px; padding:10px 12px; }\n  .page summary { cursor:pointer; font-weight:600; } .page summary .muted { font-weight:400; margin-left:8px; }\n  .chunk { margin-top:8px; padding:8px 10px; background:#f8fafc; border:1px solid var(--line); border-radius:6px; }\n  .chunk .meta { font-size:11px; color:var(--muted); margin-bottom:4px; } .chunk pre { white-space:pre-wrap; font:12px/1.5 ui-monospace, Menlo, monospace; margin:0; }\n  .grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; } @media (max-width:980px) { .grid { grid-template-columns:1fr; } }\n\"\"\"\nHEADER = \"\"\"<header>\n  <h1><a href=\"/\">RAG Generator</a></h1>\n  <span class=\"muted\" id=\"meta\"></span>\n  <nav><a href=\"/\" {home}>Home</a><a href=\"/jobs\" {jobs}>Jobs</a><a href=\"/documents\" {docs}>Documents</a><a href=\"/documentation/flow.html\" target=\"_blank\">How it works</a><a href=\"/docs\" target=\"_blank\">API docs</a></nav>\n</header>\"\"\"\nCOMMON_JS = \"\"\"\nconst $ = (id) => document.getElementById(id);\nconst TERMINAL = ['DUPLICATE','COMPLETED','FAILED','EMPTY_FILE','EXTRACTION_NOT_SUPPORTED','UPLOAD_FAILED'];\nconst BAD = ['FAILED','UPLOAD_FAILED','EXTRACTION_NOT_SUPPORTED','EMPTY_FILE'];\nconst esc = (s) => String(s ?? '').replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));\nconst qs = new URLSearchParams(location.search);\nasync function api(path, opts = {}) {\n  const r = await fetch(path, opts);\n  if (r.status === 204) return null;\n  const body = await r.json().catch(() => ({}));\n  if (!r.ok) throw new Error(typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail || body));\n  return body;\n}\nfunction setQuery(changes) { for (const [k, v] of Object.entries(changes)) { if (v === null || v === '' || v === undefined) qs.delete(k); else qs.set(k, v); } history.replaceState(null, '', location.pathname + (qs.toString() ? '?' + qs : '')); }\nfunction pager(el, m, onPage) {\n  if (!m || m.total === 0) { el.innerHTML = ''; return; }\n  el.innerHTML = `<button class=\"small secondary\" ${m.has_prev ? '' : 'disabled'} id=\"pp\">‹ prev</button><span>page ${m.page + 1} / ${m.pages} · ${m.total} total · ${m.size} per page</span><button class=\"small secondary\" ${m.has_next ? '' : 'disabled'} id=\"pn\">next ›</button>`;\n  el.querySelector('#pp').onclick = () => onPage(m.page - 1); el.querySelector('#pn').onclick = () => onPage(m.page + 1);\n}\n\"\"\"\n\ndef page(title, active, body, js):\n    h = HEADER.format(home='class=\"on\"' if active == \"home\" else \"\", jobs='class=\"on\"' if active == \"jobs\" else \"\", docs='class=\"on\"' if active == \"docs\" else \"\")\n    return f\"\"\"<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>{title}</title>\n<style>{CSS}</style></head>\n<body>\n{h}\n<main>\n{body}\n</main>\n<script>{COMMON_JS}\n{js}\n</script>\n</body></html>\n\"\"\"\n\n# ---------------- /jobs\njobs_body = \"\"\"\n<div class=\"card\">\n  <h2>Jobs <span class=\"hint\">(one upload request = one job · 20 per page · click a job to see its documents)</span></h2>\n  <div class=\"toolbar\">\n    <label>Collection <input type=\"text\" id=\"collection\" placeholder=\"all\"></label>\n    <button class=\"secondary small\" id=\"apply\">Apply</button>\n    <span class=\"muted\" id=\"count\"></span>\n  </div>\n  <div class=\"err\" id=\"err\"></div>\n  <table>\n    <thead><tr><th>Job ID</th><th>Collection</th><th>Files</th><th>Status</th><th>Per status</th><th>Reason</th><th>Created</th></tr></thead>\n    <tbody id=\"rows\"><tr><td colspan=\"7\" class=\"muted\">Loading…</td></tr></tbody>\n  </table>\n  <div class=\"pager\" id=\"pager\"></div>\n</div>\n\"\"\"\njobs_js = \"\"\"\nconst SIZE = 20;\nlet page = parseInt(qs.get('page') || '0', 10) || 0;\n$('collection').value = qs.get('collection') || '';\n$('apply').onclick = () => { page = 0; setQuery({collection: $('collection').value.trim(), page: null}); load(); };\n$('collection').onkeydown = (e) => { if (e.key === 'Enter') $('apply').click(); };\nasync function load() {\n  $('err').textContent = '';\n  const col = $('collection').value.trim();\n  try {\n    const m = await api(`/api/jobs?page=${page}&size=${SIZE}${col ? `&collection=${encodeURIComponent(col)}` : ''}`);\n    if (!m.items.length && m.page > 0) { page = Math.max(0, m.pages - 1); setQuery({page: page || null}); return load(); }\n    $('count').textContent = `${m.total} job(s)`;\n    $('rows').innerHTML = m.items.length ? m.items.map(j => `\n      <tr class=\"clickable\" onclick=\"location.href='/documents?job_id=${j.job_id}'\">\n        <td><code class=\"id\">${esc(j.job_id)}</code></td>\n        <td>${esc(j.collection)}</td>\n        <td>${j.files}</td>\n        <td><span class=\"pill ${j.status}\">${j.status}</span></td>\n        <td>${Object.entries(j.counts).map(([k, v]) => `<span class=\"pill ${k}\" title=\"${k}\">${v} ${k.toLowerCase().replace(/_/g, ' ')}</span>`).join(' ')}</td>\n        <td class=\"muted\">${esc(j.reason)}</td>\n        <td class=\"muted\">${esc(j.created_at.replace('T', ' ').slice(0, 19))}</td>\n      </tr>`).join('') : '<tr><td colspan=\"7\" class=\"muted\">No jobs.</td></tr>';\n    pager($('pager'), m, (p) => { page = p; setQuery({page: p || null}); load(); });\n    const busy = m.items.some(j => !['COMPLETED', 'FAILED'].includes(j.status));\n    if (busy) setTimeout(load, 2000);\n  } catch (e) { $('err').textContent = e.message; }\n}\napi('/api/health').then(h => $('meta').textContent = `LLM: ${h.llm_model} · collections: ${h.collections.join(', ') || 'none'}`).catch(() => {});\nload();\n\"\"\"\nPath(\"app/static/jobs.html\").write_text(page(\"RAG Generator · Jobs\", \"jobs\", jobs_body, jobs_js))\n\n# ---------------- /documents\ndocs_body = \"\"\"\n<div class=\"card\">\n  <h2>Documents <span class=\"hint\">(every uploaded file · 20 per page · click a row to open its show page)</span> <span id=\"chips\"></span></h2>\n  <div class=\"toolbar\">\n    <label>Collection <input type=\"text\" id=\"collection\" placeholder=\"all\"></label>\n    <label>Status <select id=\"status\"><option value=\"\">all</option></select></label>\n    <label>Job <input type=\"text\" id=\"job\" placeholder=\"job id\" style=\"width:140px\"></label>\n    <button class=\"secondary small\" id=\"apply\">Apply</button>\n    <span class=\"muted\" id=\"count\"></span>\n  </div>\n  <div class=\"err\" id=\"err\"></div>\n  <table>\n    <thead><tr><th>Doc ID</th><th>Name</th><th>Type</th><th>Job</th><th>Status</th><th>Pages / chunks</th><th>Reason</th><th>Updated</th></tr></thead>\n    <tbody id=\"rows\"><tr><td colspan=\"8\" class=\"muted\">Loading…</td></tr></tbody>\n  </table>\n  <div class=\"pager\" id=\"pager\"></div>\n</div>\n\"\"\"\ndocs_js = \"\"\"\nconst SIZE = 20;\nlet page = parseInt(qs.get('page') || '0', 10) || 0;\n$('collection').value = qs.get('collection') || ''; $('job').value = qs.get('job_id') || '';\napi('/api/health').then(h => {\n  $('meta').textContent = `LLM: ${h.llm_model} · collections: ${h.collections.join(', ') || 'none'}`;\n  h.statuses.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; $('status').appendChild(o); });\n  $('status').value = qs.get('status') || '';\n}).catch(() => {});\n$('apply').onclick = () => { page = 0; setQuery({collection: $('collection').value.trim(), status: $('status').value, job_id: $('job').value.trim(), page: null}); load(); };\n['collection', 'job'].forEach(id => $(id).onkeydown = (e) => { if (e.key === 'Enter') $('apply').click(); });\n$('status').onchange = () => $('apply').click();\nfunction chips() {\n  const parts = [];\n  if (qs.get('job_id')) parts.push(`<span class=\"chip\">job ${esc(qs.get('job_id'))} <a href=\"#\" onclick=\"$('job').value='';$('apply').click();return false;\">×</a></span>`);\n  if (qs.get('status')) parts.push(`<span class=\"chip\">status ${esc(qs.get('status'))} <a href=\"#\" onclick=\"$('status').value='';$('apply').click();return false;\">×</a></span>`);\n  $('chips').innerHTML = parts.join(' ');\n}\nasync function load() {\n  $('err').textContent = ''; chips();\n  const params = new URLSearchParams({page, size: SIZE});\n  for (const k of ['collection', 'status', 'job_id']) if (qs.get(k)) params.set(k, qs.get(k));\n  try {\n    const m = await api(`/api/documents?${params}`);\n    if (!m.items.length && m.page > 0) { page = Math.max(0, m.pages - 1); setQuery({page: page || null}); return load(); }\n    $('count').textContent = `${m.total} document(s)`;\n    $('rows').innerHTML = m.items.length ? m.items.map(d => `\n      <tr class=\"clickable\" onclick=\"location.href='/documents/${d.doc_id}'\">\n        <td><code class=\"id\">${esc(d.doc_id)}</code></td>\n        <td>${esc(d.filename)}${d.ocr_pages ? ` <span class=\"pill ocr\">OCR ×${d.ocr_pages}</span>` : ''}</td>\n        <td class=\"muted\">${esc(d.file_type || '')}</td>\n        <td><a href=\"/documents?job_id=${d.job_id}\" onclick=\"event.stopPropagation()\"><code class=\"id\">${esc(d.job_id)}</code></a></td>\n        <td><span class=\"pill ${d.status}\">${d.status}</span>${d.stage ? `<div class=\"muted\">${esc(d.stage)}…</div>` : ''}</td>\n        <td class=\"muted\">${d.status === 'COMPLETED' ? `${d.pages} / ${d.chunks}` : '–'}</td>\n        <td class=\"${BAD.includes(d.status) ? 'err' : 'muted'}\" style=\"font-size:12px\">${esc(d.reason || '')}${d.duplicate_of ? ` <a href=\"/documents/${d.duplicate_of}\" onclick=\"event.stopPropagation()\">→ original</a>` : ''}</td>\n        <td class=\"muted\">${esc(d.updated_at.replace('T', ' ').slice(0, 19))}</td>\n      </tr>`).join('') : '<tr><td colspan=\"8\" class=\"muted\">No documents match.</td></tr>';\n    pager($('pager'), m, (p) => { page = p; setQuery({page: p || null}); load(); });\n    if (m.items.some(d => !TERMINAL.includes(d.status))) setTimeout(load, 2000);\n  } catch (e) { $('err').textContent = e.message; }\n}\nload();\n\"\"\"\nPath(\"app/static/documents.html\").write_text(page(\"RAG Generator · Documents\", \"docs\", docs_body, docs_js))\n\n# ---------------- /documents/{id}\nshow_body = \"\"\"\n<div class=\"card\">\n  <h2>Document <span class=\"hint\" id=\"crumb\"></span></h2>\n  <div id=\"banner\"></div>\n  <div class=\"err\" id=\"err\"></div>\n  <dl id=\"meta-list\"></dl>\n  <div class=\"toolbar\" id=\"actions\" style=\"margin-top:12px\"></div>\n</div>\n<div id=\"viewer\"></div>\n\"\"\"\nshow_js = \"\"\"\nconst docId = location.pathname.split('/').filter(Boolean).pop();\nconst NOT_APPLICABLE = {\n  QUEUED: 'The document is waiting for the background worker; nothing has been indexed yet. This page refreshes automatically.',\n  PROCESSING: 'The document is being processed; the viewer becomes available when it is COMPLETED. This page refreshes automatically.',\n  FAILED: 'Processing failed, so there is no indexed content to show. Fix the cause described below, then retry.',\n  DUPLICATE: 'This file has the same content as an already indexed document, so it was not processed. Use the original document\\\\'s show page instead.',\n  EMPTY_FILE: 'The uploaded file was empty; there is nothing to show.',\n  EXTRACTION_NOT_SUPPORTED: 'This file type is not supported, so it was never processed. See the supported extensions on the home page.',\n  UPLOAD_FAILED: 'The upload itself failed; the file was not stored or processed.',\n};\nconst INLINE = ['pdf', 'html', 'text', 'csv', 'image'];\nlet timer = null;\n\nasync function load() {\n  clearTimeout(timer);\n  $('err').textContent = '';\n  let d;\n  try { d = await api(`/api/documents/${docId}`); }\n  catch (e) { $('banner').innerHTML = `<div class=\"banner bad\">Document <code>${esc(docId)}</code> not found. ${esc(e.message)}</div>`; return; }\n  document.title = `RAG Generator · ${d.filename}`;\n  $('crumb').innerHTML = `<a href=\"/documents\">Documents</a> › <a href=\"/documents?job_id=${d.job_id}\">job ${esc(d.job_id)}</a> › ${esc(d.filename)}`;\n  $('meta-list').innerHTML = [\n    ['Doc ID', `<code class=\"id\">${esc(d.doc_id)}</code>`], ['File', esc(d.filename)], ['Type', esc(d.file_type || '–')],\n    ['Collection', esc(d.collection)], ['Job', `<a href=\"/documents?job_id=${d.job_id}\"><code class=\"id\">${esc(d.job_id)}</code></a>`],\n    ['Status', `<span class=\"pill ${d.status}\">${d.status}</span>${d.stage ? ` <span class=\"muted\">${esc(d.stage)}…</span>` : ''}`],\n    ['Reason', esc(d.reason || '–')], ['SHA-256', `<code class=\"id\">${esc(d.sha256 || '–')}</code>`],\n    ['Pages / chunks', d.status === 'COMPLETED' ? `${d.pages} pages${d.ocr_pages ? ` (${d.ocr_pages} via OCR)` : ''} · ${d.chunks} chunks` : '–'],\n    ['Created / updated', `${esc(d.created_at)} · ${esc(d.updated_at)}`],\n  ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');\n\n  const actions = [];\n  if (d.status === 'FAILED') actions.push(`<button id=\"retry\">Retry processing</button>`);\n  if (['COMPLETED', 'FAILED', 'DUPLICATE'].includes(d.status)) actions.push(`<a href=\"/api/documents/${d.doc_id}/file?download=true\"><button class=\"secondary\">Download original</button></a>`);\n  if (d.status === 'COMPLETED') actions.push(`<a href=\"/?collection=${encodeURIComponent(d.collection)}\"><button class=\"secondary\">Ask over this collection</button></a>`);\n  $('actions').innerHTML = actions.join(' ');\n  if (d.status === 'FAILED') $('retry').onclick = async () => { try { await api(`/api/documents/${d.doc_id}/retry`, {method: 'POST'}); load(); } catch (e) { $('err').textContent = e.message; } };\n\n  if (d.status !== 'COMPLETED') {\n    const cls = d.status === 'DUPLICATE' ? 'warn' : (BAD.includes(d.status) ? 'bad' : 'info');\n    let extra = '';\n    if (d.status === 'DUPLICATE' && d.duplicate_of) extra = ` <br><b>Original document:</b> <a href=\"/documents/${d.duplicate_of}\">${location.origin}/documents/${esc(d.duplicate_of)}</a> (${esc(d.duplicate_of_name || '')})`;\n    $('banner').innerHTML = `<div class=\"banner ${cls}\"><b>Show page not applicable — status ${d.status}.</b> ${esc(NOT_APPLICABLE[d.status] || '')}${extra}</div>`;\n    $('viewer').innerHTML = '';\n    if (!TERMINAL.includes(d.status)) timer = setTimeout(load, 2000);\n    return;\n  }\n\n  $('banner').innerHTML = '';\n  let chunks = [];\n  try { chunks = await api(`/api/chunks?collection=${encodeURIComponent(d.collection)}&doc_id=${d.doc_id}&limit=1000`); }\n  catch (e) { $('err').textContent = e.message; }\n  const byPage = new Map();\n  chunks.forEach(c => { if (!byPage.has(c.page)) byPage.set(c.page, []); byPage.get(c.page).push(c); });\n  const fileUrl = `/api/documents/${d.doc_id}/file`;\n  const original = d.file_type === 'image'\n    ? `<img class=\"viewer\" src=\"${fileUrl}\" alt=\"${esc(d.filename)}\">`\n    : INLINE.includes(d.file_type) ? `<iframe class=\"viewer\" src=\"${fileUrl}\" title=\"${esc(d.filename)}\"></iframe>`\n    : `<div class=\"banner info\">Browsers cannot render <b>${esc(d.file_type)}</b> files inline. <a href=\"${fileUrl}?download=true\">Download the original</a> or read the indexed content on the right.</div>`;\n  $('viewer').innerHTML = `<div class=\"grid\">\n    <div class=\"card\"><h2>Original file <span class=\"hint\">${esc(d.filename)}</span></h2>${original}</div>\n    <div class=\"card\"><h2>Indexed content <span class=\"hint\">${chunks.length} chunks over ${byPage.size} pages — exactly what retrieval searches</span></h2>\n      ${[...byPage.entries()].sort((a, b) => a[0] - b[0]).map(([p, cs]) => `\n        <details class=\"page\" ${byPage.size <= 3 ? 'open' : ''}><summary>Page ${p}${cs[0].section ? `<span class=\"muted\">${esc(cs[0].section)}</span>` : ''}<span class=\"muted\">${cs.length} chunk(s)</span></summary>\n          ${cs.map(c => `<div class=\"chunk\"><div class=\"meta\">${esc(c.chunk_id)}</div><pre>${esc(c.text)}</pre></div>`).join('')}\n        </details>`).join('') || '<span class=\"muted\">No chunks found for this document.</span>'}\n    </div></div>`;\n}\napi('/api/health').then(h => $('meta').textContent = `LLM: ${h.llm_model}`).catch(() => {});\nload();\n\"\"\"\nPath(\"app/static/document.html\").write_text(page(\"RAG Generator · Document\", \"docs\", show_body, show_js))\n\n# ---------------- index.html: nav links + doc/job links\np = Path(\"app/static/index.html\"); s = p.read_text()\ns = s.replace('''  <span class=\"meta\" style=\"margin-left:auto\"><a href=\"/documentation/flow.html\" target=\"_blank\">How it works</a> · <a href=\"/documentation/architecture.html\" target=\"_blank\">Architecture</a> · <a href=\"/documentation/changelog.html\" target=\"_blank\">Changelog</a> · <a href=\"/docs\" target=\"_blank\">API docs</a></span>''',\n'''  <span class=\"meta\" style=\"margin-left:auto\"><a href=\"/jobs\">All jobs</a> · <a href=\"/documents\">All documents</a> · <a href=\"/documentation/flow.html\" target=\"_blank\">How it works</a> · <a href=\"/documentation/architecture.html\" target=\"_blank\">Architecture</a> · <a href=\"/documentation/changelog.html\" target=\"_blank\">Changelog</a> · <a href=\"/docs\" target=\"_blank\">API docs</a></span>''')\ns = s.replace('''      <td><code class=\"id\">${esc(d.doc_id)}</code><br><span class=\"muted\" title=\"job\">job ${esc(d.job_id)}</span></td>''',\n'''      <td><a href=\"/documents/${d.doc_id}\" title=\"Open show page\"><code class=\"id\">${esc(d.doc_id)}</code></a><br><span class=\"muted\" title=\"job\">job ${esc(d.job_id)}</span></td>''')\ns = s.replace('''      <h2>2 · Jobs <span class=\"hint\">(one upload request = one job · click a row to see its documents · tick to ask over it)</span></h2>''',\n'''      <h2>2 · Jobs <span class=\"hint\">(one upload request = one job · click a row to see its documents · tick to ask over it · <a href=\"/jobs\">full list</a>)</span></h2>''')\ns = s.replace('''      <h2>3 · Documents <span class=\"hint\">(tick COMPLETED documents to ask over them · poll <code>/api/jobs/{id}</code>)</span>''',\n'''      <h2>3 · Documents <span class=\"hint\">(tick COMPLETED documents to ask over them · click an id for its show page · <a href=\"/documents\">full list</a>)</span>''')\n# support ?collection= on the home page\ns = s.replace(\"loadHealth(); refresh();\\n</script>\", \"const initCol = new URLSearchParams(location.search).get('collection'); if (initCol) $('collection').value = initCol;\\nloadHealth(); refresh();\\n</script>\")\np.write_text(s)\n\n# ---------------- tests\np = Path(\"tests/test_api.py\"); s = p.read_text()\ns += '''\n\ndef test_dedicated_pages_and_file_endpoint(client):\n    for path in (\"/\", \"/jobs\", \"/documents\", \"/documents/anything\"):\n        r = client.get(path)\n        assert r.status_code == 200 and \"text/html\" in r.headers[\"content-type\"], path\n    assert \"20\" in client.get(\"/documents\").text  # 20 per page on the dedicated listing\n    job = _upload(client, [(\"notes.txt\", b\"Plain text to view inline.\"), (\"x.exe\", b\"MZ\")], \"pages\")\n    _wait_job(client, job[\"job_id\"])\n    ok = next(d for d in job[\"documents\"] if d[\"filename\"] == \"notes.txt\")\n    r = client.get(f\"/api/documents/{ok['doc_id']}/file\")\n    assert r.status_code == 200 and r.headers[\"content-type\"].startswith(\"text/plain\") and b\"inline\" in r.content\n    assert \"inline\" in r.headers[\"content-disposition\"]\n    r = client.get(f\"/api/documents/{ok['doc_id']}/file\", params={\"download\": \"true\"})\n    assert \"attachment\" in r.headers[\"content-disposition\"]\n    rejected = next(d for d in job[\"documents\"] if d[\"filename\"] == \"x.exe\")\n    assert client.get(f\"/api/documents/{rejected['doc_id']}/file\").status_code == 410  # never stored\n    assert client.get(\"/api/documents/nope/file\").status_code == 404\n    client.delete(\"/api/collections/pages\")\n'''\np.write_text(s)\nprint(\"pages written\")\nEOF\n.venv/bin/python -m compileall -q app cli evaluation scripts tests && .venv/bin/python -m pytest -q 2>&1 | grep -E \"^(FAILED|ERROR)|passed|failed\" | head",
+  "description": "Fix RTF page breaks; add /jobs, /documents, /documents/{id} pages and file endpoint; link from index; add tests; run suite",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T10:50:46.555Z</sub>
+
+**Tool result**
+
+```
+pages written
+2026-09-06 16:20:46,217 INFO    app.ingest.extractors: [extract] fallback=rtf file=31598cc84e20_2P CRA dated 17_12_2025.docx because the rtf reader failed (error: bad escape \p at position 0)
+INFO     app.ingest.extractors:extractors.py:461 [extract] fallback=rtf file=31598cc84e20_2P CRA dated 17_12_2025.docx because the rtf reader failed (error: bad escape \p at position 0)
+2026-09-06 16:20:46,359 INFO    app.ingest.extractors: [extract] fallback=rtf file=contract.docx because the rtf reader failed (error: bad escape \p at position 0)
+INFO     app.ingest.extractors:extractors.py:461 [extract] fallback=rtf file=contract.docx because the rtf reader failed (error: bad escape \p at position 0)
+FAILED tests/test_api.py::test_rtf_in_docx_clothing_is_indexed_and_retry_works
+FAILED tests/test_extractors.py::test_rtf_mislabelled_as_docx_is_read_as_rtf
+2 failed, 31 passed, 6 warnings in 0.92s
+```
+
+## Assistant  <sub>2026-09-06T10:51:07.919Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\n\n# README\np = Path(\"README.md\"); s = p.read_text()\ns = s.replace(\"\"\"### UI (<http://localhost:8000>)\n1. **Upload**\"\"\", \"\"\"### UI\n\nThree pages plus a show page:\n\n| URL | Purpose |\n|---|---|\n| `/` | workbench: upload · jobs (5 per page) · documents (5 per page) · ask · sources |\n| `/jobs` | dedicated job listing, **20 per page**, filter by collection; click a job → its documents |\n| `/documents` | dedicated document listing, **20 per page**, filter by collection / status / job (`?job_id=&status=`); click a row → show page |\n| `/documents/{doc_id}` | **show page**: for `COMPLETED` documents the original file (inline for PDF, HTML, text, CSV, images; download for DOCX/RTF) side by side with the indexed content (pages → chunks). For any other status the page explains why a viewer is not applicable and shows the reason; a `DUPLICATE` links to the original document's show page; a `FAILED` document offers *Retry*. |\n\nThe workbench (`/`):\n1. **Upload**\"\"\")\ns = s.replace(\"| `POST` | `/api/documents/{doc_id}/retry` | re-queue a `FAILED` document from its stored file → **202** |\",\n              \"| `GET` | `/api/documents/{doc_id}/file?download=` | the stored original file (inline for PDF/HTML/text/CSV/images, attachment otherwise) |\\n| `POST` | `/api/documents/{doc_id}/retry` | re-queue a `FAILED` document from its stored file → **202** |\")\ns = s.replace(\"app/            FastAPI service (config, models, ingest/, retrieval/, llm/, rag.py, jobs.py [jobs + documents registry], main.py, static/index.html)\",\n              \"app/            FastAPI service (config, models, ingest/, retrieval/, llm/, rag.py, jobs.py [jobs + documents registry], logging_utils.py, main.py,\\n                static/ index.html (workbench) · jobs.html · documents.html · document.html (show page))\")\np.write_text(s)\n\n# architecture\np = Path(\"documentation/architecture.md\"); s = p.read_text()\ns = s.replace(\"| UI | `app/static/index.html` | upload · listing · ask · sources |\",\n              \"| UI | `app/static/index.html`, `jobs.html`, `documents.html`, `document.html` | workbench (upload · jobs · documents · ask · sources); dedicated listings (20/page); document show page (original file + indexed chunks, or the reason a viewer is not applicable) |\")\ns = s.replace(\"`POST /api/documents/{doc_id}/retry` re-queues a FAILED document from its stored file.\",\n              \"`POST /api/documents/{doc_id}/retry` re-queues a FAILED document from its stored file.\\n`GET /api/documents/{doc_id}/file` serves the stored original (inline where browsers can render it) for the show page.\")\np.write_text(s)\n\n# changelog\np = Path(\"documentation/changelog.html\"); s = p.read_text()\nentry = \"\"\"<section class=\"rel\">\n  <h2>0.7.0 <time>2026-09-06</time></h2>\n  <p><span class=\"tag added\">Added</span> Dedicated listing pages and a document show page.</p>\n  <ul>\n    <li><span class=\"tag added\">Added</span> <code>/jobs</code> and <code>/documents</code>: full listings, 20 per page with prev/next, filters (collection; status and job for documents), URL-addressable (<code>/documents?job_id=…&amp;status=…&amp;page=…</code>). The workbench at <code>/</code> keeps its 5-per-page panels.</li>\n    <li><span class=\"tag added\">Added</span> <code>/documents/{doc_id}</code> show page: metadata, original file viewer (inline PDF/HTML/text/CSV/images via <code>GET /api/documents/{id}/file</code>, download for DOCX/RTF) and the indexed content grouped by page → chunks. Non-COMPLETED documents get an explanation of why the viewer is not applicable; DUPLICATE shows the original's show-page URL; FAILED offers Retry; QUEUED/PROCESSING auto-refresh.</li>\n    <li><span class=\"tag changed\">Changed</span> Workbench doc ids link to their show page; header links to the full listings.</li>\n  </ul>\n</section>\n\n<section class=\"rel\">\n  <h2>0.6.0 <time>2026-09-06</time></h2>\"\"\"\ns = s.replace('<section class=\"rel\">\\n  <h2>0.6.0 <time>2026-09-06</time></h2>', entry, 1)\np.write_text(s)\n\n# memory + plan\np = Path(\"memory.md\"); s = p.read_text()\ns = s.replace(\"  v0.6.0 content sniffing + RTF, precise failure reasons, retry endpoint, store-then-hash upload order, step logging.\",\n              \"  v0.6.0 content sniffing + RTF, precise failure reasons, retry endpoint, store-then-hash upload order, step logging;\\n  v0.7.0 `/jobs`, `/documents` (20/page) and `/documents/{id}` show page (+ `/api/documents/{id}/file`).\")\ns = s.replace(\"## Environment gotchas\", \"- UI pages: `/` workbench keeps 5-per-page panels (user asked to keep it); `/jobs` and `/documents` are 20-per-page;\\n  show page is `/documents/{doc_id}` (static HTML reads the id from the path).\\n\\n## Environment gotchas\")\np.write_text(s)\np = Path(\"plans/2026-09-06-rag-generator-plan.md\"); s = p.read_text()\ns = s.replace(\"| 10 | **Pagination**\", \"| 12 | Dedicated `/jobs` and `/documents` pages (20 per page) and `/documents/{id}` show page with viewer / not-applicable explanation / duplicate link | `app/static/jobs.html`, `documents.html`, `document.html`, `app/main.py` |\\n| 10 | **Pagination**\")\np.write_text(s)\nprint(\"docs ok\")\nEOF\n.venv/bin/python scripts/build_docs.py >/dev/null && .venv/bin/python scripts/sync_rules.py --check",
+  "description": "Document the new pages, changelog 0.7.0, memory and plan; rebuild docs"
+}
+```
+
+## Tool  <sub>2026-09-06T10:51:08.047Z</sub>
+
+**Tool result**
+
+```
+docs ok
+rules in sync
+```
+
+## Assistant  <sub>2026-09-06T10:51:20.316Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator\ngrep -n 'marker' app/ingest/extractors.py | head -4\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"app/ingest/extractors.py\"); s = p.read_text()\nimport re\nline = next(l for l in s.splitlines() if \"re.sub(\" in l and \"marker\" in l)\nnew = '    raw = re.sub(r\"\\\\\\\\page\\\\b\", lambda m: \"\\\\\\\\par \" + marker + \"\\\\\\\\par \", raw)  # lambda: no re-escaping of \\\\p'\ns = s.replace(line, new)\np.write_text(s)\nprint(next(l for l in s.splitlines() if \"lambda m:\" in l))\nEOF\n.venv/bin/python -m pytest -q 2>&1 | grep -E \"^(FAILED|ERROR)|passed|failed\" | head",
+  "description": "Use a lambda replacement for the RTF page-break marker and rerun tests",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T10:51:21.478Z</sub>
+
+**Tool result**
+
+```
+286:    # striprtf drops \page silently; turn it into a text marker first so we can split on it.
+287:    marker = "RAGPAGEBREAK7F3A"
+288:    raw = re.sub(r"\\page\b", f"\\par {marker}\\par ", raw)
+291:    for i, block in enumerate(text.split(marker)):
+    raw = re.sub(r"\\page\b", lambda m: "\\par " + marker + "\\par ", raw)  # lambda: no re-escaping of \p
+33 passed, 6 warnings in 0.86s
+```
+
+## Assistant  <sub>2026-09-06T10:51:30.007Z</sub>
+
+**Tool call — `mcp__Claude_Browser__preview_start`**
+
+```json
+{
+  "name": "rag-api"
+}
+```
+
+## Tool  <sub>2026-09-06T10:51:34.720Z</sub>
+
+**Tool result**
+
+```
+{
+  "serverId": "a665fb24-5a8b-4eac-9a26-411f7293de47",
+  "port": 8000,
+  "name": "rag-api",
+  "reused": false,
+  "previewId": "preview-local_ed8547aa-7d57-4f03-9aba-91798b56bd6d",
+  "tabId": "seed"
+}
+Server started successfully on port 8000. Opened tab "seed" at http://localhost:8000. Use tabId "seed" with read_page / computer / navigate; serverId is for preview_stop and preview_logs only.
+```
+
+## Assistant  <sub>2026-09-06T10:51:36.798Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator; for i in $(seq 1 30); do curl -sf localhost:8000/api/health >/dev/null && break; sleep 1; done\necho \"=== retry the user's failed document (RTF saved as .docx) ===\"\n.venv/bin/python -m cli.rag_cli retry c85e1bbaba8c 2>&1\necho; echo \"=== its record ===\"\ncurl -s localhost:8000/api/documents/c85e1bbaba8c | .venv/bin/python -c \"import sys,json; d=json.load(sys.stdin); print({k:d[k] for k in ('status','reason','pages','chunks','sha256')})\"\necho; echo \"=== ask scoped to that document ===\"\n.venv/bin/python -m cli.rag_cli ask \"What is this document about?\" --doc c85e1bbaba8c 2>&1 | head -8\necho; echo \"=== pages ===\"\nfor p in / /jobs /documents /documents/c85e1bbaba8c; do printf \"%-28s %s\\n\" \"$p\" \"$(curl -s -o /dev/null -w '%{http_code} %{content_type}' localhost:8000$p)\"; done\nprintf \"%-28s %s\\n\" \"/api/documents/<id>/file\" \"$(curl -s -o /dev/null -w '%{http_code} %{content_type}' localhost:8000/api/documents/c85e1bbaba8c/file)\"\necho; echo \"=== server log: one file end to end ===\"; true",
+  "description": "Retry the failed RTF-as-DOCX document, verify it indexes, check new pages respond",
+  "timeout": 180000
+}
+```
+
+## Tool  <sub>2026-09-06T10:51:39.697Z</sub>
+
+**Tool result**
+
+```
+=== retry the user's failed document (RTF saved as .docx) ===
+QUEUED                     2P CRA dated 17_12_2025 (1) (2).docx  Retry requested; waiting for the background worker
+COMPLETED                  2P CRA dated 17_12_2025 (1) (2).docx  Indexed 3 pages into 30 chunks (extension '.docx' but content is RTF; read as rtf)
+
+=== its record ===
+{'status': 'COMPLETED', 'reason': "Indexed 3 pages into 30 chunks (extension '.docx' but content is RTF; read as rtf)", 'pages': 3, 'chunks': 30, 'sha256': '8598bcaaf552b53e996e991c5d0ff5d451f257407d8eaa5597d194cfb65619c6'}
+
+=== ask scoped to that document ===
+The document is a Client Relationship Agreement for Services (CRA) between a local IBM company and a client. It outlines the terms under which the client may order services, referred to as "IBM Products," and third-party services, referred to as "Non-IBM Products." The agreement includes details about transaction documents, content and data protection, warranties, and ownership of deliverables. It also specifies the conditions for service termination and the rights and licenses granted to the client and IBM regarding project materials and existing works [1][3][4][6].
+
+[gpt-4o · 1477 ms · scope: 1 selected document(s) · 4 citation(s) from 6 retrieved chunks]
+  [1] 2P CRA dated 17_12_2025 (1) (2).docx — page 1, Client Relationship Agreement for Services  (doc c85e1bbaba8c)
+  [3] 2P CRA dated 17_12_2025 (1) (2).docx — page 1, Client Relationship Agreement for Services  (doc c85e1bbaba8c)
+  [4] 2P CRA dated 17_12_2025 (1) (2).docx — page 1, Client Relationship Agreement for Services  (doc c85e1bbaba8c)
+  [6] 2P CRA dated 17_12_2025 (1) (2).docx — page 1, Client Relationship Agreement for Services  (doc c85e1bbaba8c)
+
+=== pages ===
+/                            200 text/html; charset=utf-8
+/jobs                        200 text/html; charset=utf-8
+/documents                   200 text/html; charset=utf-8
+/documents/c85e1bbaba8c      200 text/html; charset=utf-8
+/api/documents/<id>/file     200 application/octet-stream
+
+=== server log: one file end to end ===
+```
+
+## Assistant  <sub>2026-09-06T10:51:53.011Z</sub>
+
+**Tool call — `mcp__Claude_Browser__browser_batch`**
+
+```json
+{
+  "actions": [
+    {
+      "name": "navigate",
+      "input": {
+        "url": "http://localhost:8000/documents/c85e1bbaba8c",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "wait",
+        "duration": 2,
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "get_page_text",
+      "input": {
+        "tabId": "seed",
+        "max_chars": 1500
+      }
+    },
+    {
+      "name": "navigate",
+      "input": {
+        "url": "http://localhost:8000/documents?page=0",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "wait",
+        "duration": 2,
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "find",
+      "input": {
+        "query": "per page",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "navigate",
+      "input": {
+        "url": "http://localhost:8000/documents/21234342ba73",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "wait",
+        "duration": 2,
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "find",
+      "input": {
+        "query": "Original document",
+        "tabId": "seed"
+      }
+    }
+  ]
+}
+```
+
+## Assistant  <sub>2026-09-06T10:51:55.415Z</sub>
+
+**Tool call — `mcp__Claude_Browser__preview_logs`**
+
+```json
+{
+  "serverId": "a665fb24-5a8b-4eac-9a26-411f7293de47",
+  "search": "doc=c85e1bbaba8c",
+  "lines": 20
+}
+```
+
+## Assistant  <sub>2026-09-06T10:52:00.036Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cd /Users/shoaib.rayeen/my_space/rag-generator\n.venv/bin/python -m compileall -q app cli evaluation scripts tests && echo compile-ok\n.venv/bin/python -m pytest -q 2>&1 | grep -E \"passed|failed\"\n.venv/bin/python scripts/sync_rules.py --check && .venv/bin/python scripts/build_docs.py >/dev/null && echo docs-ok\ngrep -o 'version=\"[0-9.]*\"' app/main.py; grep -o '<h2>0\\.[0-9]\\.[0-9]' documentation/changelog.html | head -1\n.venv/bin/python scripts/export_transcript.py --session a88920a3-6212-4085-ad05-80ba0afca34d && wc -l transcripts/2026-09-06-rag-generator-build.md\ngit status --short | wc -l; git status --short | grep \"^??\" | head",
+  "description": "Final validation, docs rebuild, transcript export, git status",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T10:52:01.686Z</sub>
+
+**Tool result**
+
+```
+[navigate] navigated to http://localhost:8000
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · Document" (http://localhost:8000)
+[computer:wait] waited 2s
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · 2P CRA dated 17_12_2025 (1) (2).docx" (http://localhost:8000)
+[get_page_text] Title: RAG Generator · 2P CRA dated 17_12_2025 (1) (2).docx
+URL: http://localhost:8000
+Source element: <main>
+---
+DOCUMENT
+Documents › job 06f759f949bb › 2P CRA dated 17_12_2025 (1) (2).docx
+Doc ID
+c85e1bbaba8c
+File
+2P CRA dated 17_12_2025 (1) (2).docx
+Type
+docx
+Collection
+default
+Job
+06f759f949bb
+Status
+COMPLETED
+Reason
+Indexed 3 pages into 30 chunks (extension '.docx' but content is RTF; read as rtf)
+SHA-256
+8598bcaaf552b53e996e991c5d0ff5d451f257407d8eaa5597d194cfb65619c6
+Pages / chunks
+3 pages · 30 chunks
+Created / updated
+2026-09-06T10:40:01+00:00 · 2026-09-06T10:51:37+00:00
+Download original
+Ask over this collection
+ORIGINAL FILE
+2P CRA dated 17_12_2025 (1) (2).docx
+Browsers cannot render docx files inline. Download the original or read the indexed content on the right.
+INDEXED CONTENT
+30 chunks over 3 pages — exactly what retrieval searches
+Page 1Client Relationship Agreement for Services20 chunk(s)
+c85e1bbaba8c:0
+Client Relationship Agreement for Services
+{Local Country IBM Company Name, Address}
+This Client Relationship Agreement for Services (CRA) and applicable Attachments and Transaction Documents are the complete agreement regarding each transaction under this CRA (together, the "Agreement") under which Client may order Services (also referred to as "IBM Products" herein) and third party services (also referred to as "Non-IBM Products" herein).
+Transaction Documents (TDs) provide the specifics of transactions such as charges and a description of and information about the Product. Examples of TDs include statements of work, service descriptions, ordering documents, or invoices
+
+[truncated to 1500 chars]
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · 2P CRA dated 17_12_2025 (1) (2).docx" (http://localhost:8000)
+[navigate] navigated to http://localhost:8000
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · Documents" (http://localhost:8000)
+[computer:wait] waited 2s
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · Documents" (http://localhost:8000)
+[find] Found 3 match(es) for "per page":
+- heading "Documents (every uploaded file · 20 per page · click a row to open its show page)" [ref_12]
+- generic "(every uploaded file · 20 per page · click a row to open its show page)" [ref_13]
+- generic "page 1 / 1 · 15 total · 20 per page" [ref_186]
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · Documents" (http://localhost:8000)
+[navigate] navigated to http://localhost:8000
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · Document" (http://localhost:8000)
+[computer:wait] waited 2s
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · handbook.md" (http://localhost:8000)
+[find] Found 1 match(es) for "Original document":
+- generic "Original document:" [ref_18]
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator · handbook.md" (http://localhost:8000)
+```
+
+## Tool  <sub>2026-09-06T10:52:03.740Z</sub>
+
+**Tool result**
+
+```
+2026-09-06 16:21:36,964 INFO    rag.api: [retry] job=06f759f949bb doc=c85e1bbaba8c file=2P CRA dated 17_12_2025 (1) (2).docx
+2026-09-06 16:21:36,965 INFO    rag.pipeline: [pipeline] begin job=06f759f949bb doc=c85e1bbaba8c file=2P CRA dated 17_12_2025 (1) (2).docx type=docx collection=default size=437476B
+2026-09-06 16:21:36,966 INFO    rag.pipeline: [extract] start job=06f759f949bb doc=c85e1bbaba8c file=2P CRA dated 17_12_2025 (1) (2).docx
+2026-09-06 16:21:37,007 INFO    app.ingest.extractors: [extract] primary=rtf file=c85e1bbaba8c_2P CRA dated 17_12_2025 (1) (2).docx pages=3
+2026-09-06 16:21:37,008 INFO    rag.pipeline: [extract] done in 41 ms job=06f759f949bb doc=c85e1bbaba8c file=2P CRA dated 17_12_2025 (1) (2).docx
+2026-09-06 16:21:37,008 INFO    rag.pipeline: [extract] job=06f759f949bb doc=c85e1bbaba8c file=2P CRA dated 17_12_2025 (1) (2).docx pages=3 ocr_pages=0 chars=25168 note=extension '.docx' but content is RTF; read as rtf
+2026-09-06 16:21:37,008 INFO    rag.pipeline: [chunk] start job=06f759f949bb doc=c85e1bbaba8c file=2P CRA dated 17_12_2025 (1) (2).docx
+2026-09-06 16:21:37,009 INFO    rag.pipeline: [chunk] done in 0 ms job=06f759f949bb doc=c85e1bbaba8c file=2P CRA dated 17_12_2025 (1) (2).docx
+2026-09-06 16:21:37,009 INFO    rag.pipeline: [chunk] job=06f759f949bb doc=c85e1bbaba8c file=2P CRA dated 17_12_2025 (1) (2).docx chunks=30 avg_chars=1017
+2026-09-06 16:21:37,009 INFO    rag.pipeline: [embed] start job=06f759f949bb doc=c85e1bbaba8c file=2P CRA dated 17_12_2025 (1) (2).docx
+2026-09-06 16:21:37,573 INFO    rag.embedder: [embed] texts=30 batch_size=64 dims=384 in 563 ms
+2026-09-06 16:21:37,573 INFO    rag.pipeline: [embed] done in 563 ms job=06f759f949bb doc=c85e1bbaba8c file=2P CRA dated 17_12_2025 (1) (2).docx
+2026-09-06 16:21:37,573 INFO    rag.pipeline: [store] start job=06f759f949bb doc=c85e1bbaba8c file=2P CRA dated 17_12_2025 (1) (2).docx
+2026-09-06 16:21:37,594 INFO    rag.vector_store: [store] added chunks=30 doc=c85e1bbaba8c collection=default
+2026-09-06 16:21:37,594 INFO    rag.pipeline: [store] done in 21 ms job=06f759f949bb doc=c85e1bbaba8c file=2P CRA dated 17_12_2025 (1) (2).docx
+2026-09-06 16:21:37,594 INFO    rag.pipeline: [bm25-rebuild] start collection=default job=06f759f949bb doc=c85e1bbaba8c file=2P CRA dated 17_12_2025 (1) (2).docx
+2026-09-06 16:21:37,606 INFO    rag.pipeline: [bm25-rebuild] done in 12 ms collection=default job=06f759f949bb doc=c85e1bbaba8c file=2P CRA dated 17_12_2025 (1) (2).docx
+2026-09-06 16:21:37,606 INFO    rag.pipeline: [bm25-rebuild] job=06f759f949bb doc=c85e1bbaba8c file=2P CRA dated 17_12_2025 (1) (2).docx collection=default indexed_chunks=247
+2026-09-06 16:21:37,607 INFO    rag.pipeline: [pipeline] COMPLETED job=06f759f949bb doc=c85e1bbaba8c file=2P CRA dated 17_12_2025 (1) (2).docx
+
 ```

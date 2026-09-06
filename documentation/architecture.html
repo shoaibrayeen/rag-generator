@@ -90,8 +90,8 @@ service at runtime. There are two flows: <strong>ingest</strong> (asynchronous) 
 </tr>
 <tr>
 <td>UI</td>
-<td><code>app/static/index.html</code></td>
-<td>upload · listing · ask · sources</td>
+<td><code>app/static/index.html</code>, <code>jobs.html</code>, <code>documents.html</code>, <code>document.html</code></td>
+<td>workbench (upload · jobs · documents · ask · sources); dedicated listings (20/page); document show page (original file + indexed chunks, or the reason a viewer is not applicable)</td>
 </tr>
 <tr>
 <td>CLI</td>
@@ -114,11 +114,12 @@ service at runtime. There are two flows: <strong>ingest</strong> (asynchronous) 
 <pre><code>client ──POST /api/documents (multipart, collection)──► API creates ONE job (job_id)
                                                         │ per file (each becomes a document of that job):
                                                         │  read bytes ──fail──► UPLOAD_FAILED
+                                                        │  sha256 computed at upload time, kept on the record
                                                         │  extension ∉ SUPPORTED_EXTENSIONS ──► EXTRACTION_NOT_SUPPORTED
                                                         │  0 bytes ──► EMPTY_FILE
                                                         │  &gt; MAX_UPLOAD_MB ──► UPLOAD_FAILED
-                                                        │  sha256 already live in collection ──► DUPLICATE (links original)
-                                                        │  store to data/uploads/&lt;doc_id&gt;_&lt;name&gt; ──fail──► UPLOAD_FAILED
+                                                        │  upload step: store to data/uploads/&lt;doc_id&gt;_&lt;name&gt; ──fail──► UPLOAD_FAILED
+                                                        │  duplicate check: sha256 already live in collection ──► DUPLICATE (links original)
                                                         │  else ──► QUEUED + background task
                                                         ▼
 client ◄── 202 {job_id, status, reason, counts, documents:[{doc_id, status, reason, …}]} ──┘
@@ -142,8 +143,11 @@ all are queued, <code>COMPLETED</code> if all are terminal and at least one is <
 what the worker has done. Jobs that were mid-flight during a restart are marked <code>FAILED</code>
 on load with an explanatory reason.</p>
 <h3 id="extraction-primary-tier-then-fallback-tier">Extraction: primary tier, then fallback tier</h3>
-<p><code>extract()</code> runs the format's <strong>primary</strong> extractor. If it raises or returns no pages, the
-format's <strong>fallback</strong> runs. If that also yields nothing, an <code>ExtractionError</code> with a precise,
+<p><code>extract()</code> first decides the reader: <code>sniff_type()</code> inspects the leading bytes (PK zip with
+<code>word/</code> → docx, <code>{\rtf</code> → rtf, <code>%PDF</code> → pdf, OLE2 header → legacy <code>.doc</code> (unsupported, precise
+reason), <code>&lt;html</code> → html, image magic → image) and overrides the extension when they disagree
+(<code>SNIFF_CONTENT</code>). Then it runs the format's <strong>primary</strong> extractor. If it raises or returns no
+pages, the format's <strong>fallback</strong> runs. If that also yields nothing, an <code>ExtractionError</code> with a precise,
 user-facing reason becomes the job's <code>FAILED</code> reason.</p>
 <table>
 <thead>
@@ -169,6 +173,13 @@ user-facing reason becomes the job's <code>FAILED</code> reason.</p>
 <td>OCR of embedded images (<code>word/media/*</code>) → Tesseract</td>
 <td>one page per heading block</td>
 <td>heading text</td>
+</tr>
+<tr>
+<td>RTF</td>
+<td>striprtf</td>
+<td>stdlib control-word stripping</td>
+<td>one page per <code>\page</code></td>
+<td>first line when heading-like</td>
 </tr>
 <tr>
 <td>HTML</td>
@@ -208,7 +219,15 @@ user-facing reason becomes the job's <code>FAILED</code> reason.</p>
 </tbody>
 </table>
 <p>Tesseract is therefore never the first choice for a document that has a text layer; it is
-the safety net for scanned, image-only or otherwise unreadable content.</p>
+the safety net for scanned, image-only or otherwise unreadable content. Failure reasons name the
+primary reader's error (paths stripped, capped length) and what the fallback said.</p>
+<p><code>POST /api/documents/{doc_id}/retry</code> re-queues a FAILED document from its stored file.
+<code>GET /api/documents/{doc_id}/file</code> serves the stored original (inline where browsers can render it) for the show page.</p>
+<h3 id="logging">Logging</h3>
+<p><code>app/logging_utils.py</code> configures the root logger (<code>LOG_LEVEL</code>) and provides <code>timed()</code> /
+<code>ctx()</code>. Each step logs <code>[step] … job=… doc=… file=…</code> with elapsed ms: upload decisions, extract
+(primary/fallback/sniff), chunk, embed, store, bm25-rebuild, pipeline outcome, and on the ask side
+retrieve-dense, retrieve-bm25, fuse, llm request/response and the final ask summary.</p>
 <p>Each chunk records: <code>doc_id, source, file_type, collection, page, section, extraction
 (text|ocr), chunk_index, char_start, char_end</code>.</p>
 <h3 id="chunking">Chunking</h3>

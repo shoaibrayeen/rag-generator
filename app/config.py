@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     LIST_MAX_PAGE_SIZE: int = 200
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
+    LOG_LEVEL: str = "INFO"                  # DEBUG for per-chunk / per-batch detail
+    SNIFF_CONTENT: bool = True               # detect the real format from file bytes, not just the extension
 
     # --- Evaluation (Claude as judge) ---
     ANTHROPIC_API_KEY: str = ""
@@ -99,6 +101,7 @@ SUPPORTED_EXTENSIONS: dict[str, str] = {
     ".txt": "text",
     ".md": "text",
     ".csv": "csv",
+    ".rtf": "rtf",
     # Image inputs go through Tesseract OCR
     ".png": "image",
     ".jpg": "image",

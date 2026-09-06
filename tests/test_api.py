@@ -81,19 +81,25 @@ def test_job_lifecycle_listing_and_filter(client):
     assert empty["items"] == [] and empty["total"] == 0 and empty["pages"] == 0
     assert client.get("/api/jobs/nope").status_code == 404
 
+    # hash is computed at upload time and kept on every record with content
+    assert all(d["sha256"] for d in docs if d["status"] != "EMPTY_FILE")
+
     # duplicate in a second job -> job COMPLETED (nothing new indexed), doc DUPLICATE linking original
     job2 = _upload(client, [("policy-copy.md", POLICY)], "col1")
     done2 = _wait_job(client, job2["job_id"])
     dup = done2["documents"][0]
     original = next(d for d in docs if d["filename"] == "policy.md")
     assert dup["status"] == "DUPLICATE" and dup["duplicate_of"] == original["doc_id"]
+    assert dup["sha256"] == original["sha256"]
     assert done2["status"] == "COMPLETED" and done2["counts"] == {"DUPLICATE": 1}
 
     # a job whose only file fails -> FAILED
     job3 = _upload(client, [("broken.pdf", b"not a pdf")], "col1")
     done3 = _wait_job(client, job3["job_id"])
     assert done3["status"] == "FAILED" and done3["reason"].startswith("no file could be indexed")
-    assert done3["documents"][0]["reason"].startswith("PROCESSING FAILED: Could not read this pdf")
+    reason = done3["documents"][0]["reason"]
+    assert reason.startswith("PROCESSING FAILED: Could not read 'broken.pdf': the pdf reader failed (FileDataError")
+    assert "/Users" not in reason and "tests/_data" not in reason  # no absolute paths leak into the reason
 
 
 def test_ask_scoped_by_docs_and_jobs_with_citations(client, monkeypatch):
@@ -218,3 +224,47 @@ def test_pagination_defaults_and_navigation(client):
     assert client.get("/api/documents", params={"collection": "pag", "size": 0}).status_code == 422
     assert client.get("/api/documents", params={"collection": "pag", "page": -1}).status_code == 422
     client.delete("/api/collections/pag")
+
+
+RTF_BYTES = (rb"{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard Credit Risk Assessment dated 17 December 2025."
+             rb"\par The borrower rating is BBB and the exposure limit is EUR 2 million.\par}")
+
+
+def test_rtf_in_docx_clothing_is_indexed_and_retry_works(client, monkeypatch):
+    job = _upload(client, [("2P CRA dated 17_12_2025.docx", RTF_BYTES)], "rtf")
+    done = _wait_job(client, job["job_id"])
+    doc = done["documents"][0]
+    assert doc["status"] == "COMPLETED", doc
+    assert "content is RTF" in doc["reason"] and doc["pages"] == 1
+
+    # retry: only FAILED documents; simulate a failure then retry from the stored file
+    r = client.post(f"/api/documents/{doc['doc_id']}/retry")
+    assert r.status_code == 409
+    job2 = _upload(client, [("old.docx", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 600)], "rtf")
+    failed = _wait_job(client, job2["job_id"])["documents"][0]
+    assert failed["status"] == "FAILED" and "legacy binary Word" in failed["reason"]
+    r = client.post(f"/api/documents/{failed['doc_id']}/retry")
+    assert r.status_code == 202 and r.json()["status"] == "QUEUED"
+    again = _wait_job(client, job2["job_id"])["documents"][0]
+    assert again["status"] == "FAILED"  # same file, same outcome, but processed again
+    assert client.post("/api/documents/nope/retry").status_code == 404
+    client.delete("/api/collections/rtf")
+
+
+def test_dedicated_pages_and_file_endpoint(client):
+    for path in ("/", "/jobs", "/documents", "/documents/anything"):
+        r = client.get(path)
+        assert r.status_code == 200 and "text/html" in r.headers["content-type"], path
+    assert "20" in client.get("/documents").text  # 20 per page on the dedicated listing
+    job = _upload(client, [("notes.txt", b"Plain text to view inline."), ("x.exe", b"MZ")], "pages")
+    _wait_job(client, job["job_id"])
+    ok = next(d for d in job["documents"] if d["filename"] == "notes.txt")
+    r = client.get(f"/api/documents/{ok['doc_id']}/file")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/plain") and b"inline" in r.content
+    assert "inline" in r.headers["content-disposition"]
+    r = client.get(f"/api/documents/{ok['doc_id']}/file", params={"download": "true"})
+    assert "attachment" in r.headers["content-disposition"]
+    rejected = next(d for d in job["documents"] if d["filename"] == "x.exe")
+    assert client.get(f"/api/documents/{rejected['doc_id']}/file").status_code == 410  # never stored
+    assert client.get("/api/documents/nope/file").status_code == 404
+    client.delete("/api/collections/pages")

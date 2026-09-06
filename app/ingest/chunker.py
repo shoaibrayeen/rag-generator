@@ -7,11 +7,14 @@ read naturally. Every chunk carries the metadata needed to cite it later.
 """
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 
 from app.config import settings
 from app.ingest.extractors import Page
+
+log = logging.getLogger("rag.chunker")
 
 _BOUNDARIES = ("\n\n", "\n", ". ", "? ", "! ", "; ", ", ", " ")
 
@@ -88,4 +91,6 @@ def chunk_pages(pages: list[Page], *, doc_id: str, source: str, file_type: str,
                 )
             )
             idx += 1
+    log.debug("[chunk] doc=%s pages=%d chunks=%d size=%d overlap=%d", doc_id, len(pages), len(chunks),
+              settings.CHUNK_SIZE_CHARS, settings.CHUNK_OVERLAP_CHARS)
     return chunks

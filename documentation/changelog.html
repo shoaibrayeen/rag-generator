@@ -20,6 +20,29 @@
 <div class="sub">All notable changes to RAG Generator. Versions follow <code>app/main.py</code>'s FastAPI version.</div>
 
 <section class="rel">
+  <h2>0.7.0 <time>2026-09-06</time></h2>
+  <p><span class="tag added">Added</span> Dedicated listing pages and a document show page.</p>
+  <ul>
+    <li><span class="tag added">Added</span> <code>/jobs</code> and <code>/documents</code>: full listings, 20 per page with prev/next, filters (collection; status and job for documents), URL-addressable (<code>/documents?job_id=…&amp;status=…&amp;page=…</code>). The workbench at <code>/</code> keeps its 5-per-page panels.</li>
+    <li><span class="tag added">Added</span> <code>/documents/{doc_id}</code> show page: metadata, original file viewer (inline PDF/HTML/text/CSV/images via <code>GET /api/documents/{id}/file</code>, download for DOCX/RTF) and the indexed content grouped by page → chunks. Non-COMPLETED documents get an explanation of why the viewer is not applicable; DUPLICATE shows the original's show-page URL; FAILED offers Retry; QUEUED/PROCESSING auto-refresh.</li>
+    <li><span class="tag changed">Changed</span> Workbench doc ids link to their show page; header links to the full listings.</li>
+  </ul>
+</section>
+
+<section class="rel">
+  <h2>0.6.0 <time>2026-09-06</time></h2>
+  <p><span class="tag fixed">Fixed</span> A DOCX that was really an RTF file failed with a misleading OCR message. Files are now read by their real content, failures explain the actual cause, and every step is logged.</p>
+  <ul>
+    <li><span class="tag added">Added</span> Content sniffing (<code>sniff_type</code>, <code>SNIFF_CONTENT</code>): PK/<code>word/</code> → docx, <code>{\rtf</code> → rtf, <code>%PDF</code> → pdf, OLE2 → legacy .doc (precise "convert to .docx" reason), <code>&lt;html</code>, image magic. The reader follows the content; the COMPLETED reason notes a mismatch.</li>
+    <li><span class="tag added">Added</span> RTF support (<code>.rtf</code> via striprtf, stdlib fallback), so RTF files mislabelled <code>.docx</code> index normally.</li>
+    <li><span class="tag changed">Changed</span> Failure reasons name the primary reader's error (paths stripped, length capped) before the fallback's message, e.g. <code>the docx reader failed (BadZipFile: …). Fallback: …</code>.</li>
+    <li><span class="tag added">Added</span> <code>POST /api/documents/{id}/retry</code>, UI <b>retry</b> button and <code>rag retry</code> to re-process a FAILED document from its stored file.</li>
+    <li><span class="tag changed">Changed</span> Upload order per file: validate → <b>store the file and compute SHA-256</b> (kept on every record) → duplicate check → QUEUED. Duplicates are marked after the upload step.</li>
+    <li><span class="tag added">Added</span> Step logging everywhere (<code>app/logging_utils.py</code>, <code>LOG_LEVEL</code>): upload decisions, extract (sniff/primary/fallback), chunk, embed, store, bm25-rebuild, pipeline outcome, retrieve-dense, retrieve-bm25, fuse, llm, ask — each tagged with <code>job=</code>/<code>doc=</code> and timings.</li>
+  </ul>
+</section>
+
+<section class="rel">
   <h2>0.5.0 <time>2026-09-06</time></h2>
   <p><span class="tag added">Added</span> Pagination for the job and document listings.</p>
   <ul>

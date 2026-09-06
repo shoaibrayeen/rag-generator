@@ -19,7 +19,7 @@ service at runtime. There are two flows: **ingest** (asynchronous) and **ask** (
 | LLM client | `app/llm/client.py` | OpenAI-compatible `chat/completions` over httpx |
 | Prompts | `app/llm/prompts.py` | grounded-answer system prompt, `[n]` context formatting |
 | Orchestrator | `app/rag.py` | `answer()` = retrieve → prompt → LLM → answer + sources |
-| UI | `app/static/index.html` | upload · listing · ask · sources |
+| UI | `app/static/index.html`, `jobs.html`, `documents.html`, `document.html` | workbench (upload · jobs · documents · ask · sources); dedicated listings (20/page); document show page (original file + indexed chunks, or the reason a viewer is not applicable) |
 | CLI | `cli/rag_cli.py` | `rag ingest/status/job/ask/reset/serve` over HTTP |
 | Evaluation | `evaluation/` | Claude-as-judge scoring, dataset generation |
 | Config | `app/config.py` | every tunable, overridable from `.env` |
@@ -30,11 +30,12 @@ service at runtime. There are two flows: **ingest** (asynchronous) and **ask** (
 client ──POST /api/documents (multipart, collection)──► API creates ONE job (job_id)
                                                         │ per file (each becomes a document of that job):
                                                         │  read bytes ──fail──► UPLOAD_FAILED
+                                                        │  sha256 computed at upload time, kept on the record
                                                         │  extension ∉ SUPPORTED_EXTENSIONS ──► EXTRACTION_NOT_SUPPORTED
                                                         │  0 bytes ──► EMPTY_FILE
                                                         │  > MAX_UPLOAD_MB ──► UPLOAD_FAILED
-                                                        │  sha256 already live in collection ──► DUPLICATE (links original)
-                                                        │  store to data/uploads/<doc_id>_<name> ──fail──► UPLOAD_FAILED
+                                                        │  upload step: store to data/uploads/<doc_id>_<name> ──fail──► UPLOAD_FAILED
+                                                        │  duplicate check: sha256 already live in collection ──► DUPLICATE (links original)
                                                         │  else ──► QUEUED + background task
                                                         ▼
 client ◄── 202 {job_id, status, reason, counts, documents:[{doc_id, status, reason, …}]} ──┘
@@ -63,14 +64,18 @@ on load with an explanatory reason.
 
 ### Extraction: primary tier, then fallback tier
 
-`extract()` runs the format's **primary** extractor. If it raises or returns no pages, the
-format's **fallback** runs. If that also yields nothing, an `ExtractionError` with a precise,
+`extract()` first decides the reader: `sniff_type()` inspects the leading bytes (PK zip with
+`word/` → docx, `{\rtf` → rtf, `%PDF` → pdf, OLE2 header → legacy `.doc` (unsupported, precise
+reason), `<html` → html, image magic → image) and overrides the extension when they disagree
+(`SNIFF_CONTENT`). Then it runs the format's **primary** extractor. If it raises or returns no
+pages, the format's **fallback** runs. If that also yields nothing, an `ExtractionError` with a precise,
 user-facing reason becomes the job's `FAILED` reason.
 
 | Format | Primary | Fallback (only when primary fails / finds no text) | "page" means | Section metadata |
 |---|---|---|---|---|
 | PDF | PyMuPDF `get_text` per page; a page with < `OCR_MIN_CHARS_PER_PAGE` chars is OCR'd in place | render every page with PyMuPDF → Tesseract | printed page | – |
 | DOCX | python-docx paragraphs + tables | OCR of embedded images (`word/media/*`) → Tesseract | one page per heading block | heading text |
+| RTF | striprtf | stdlib control-word stripping | one page per `\page` | first line when heading-like |
 | HTML | beautifulsoup4 + lxml | stdlib `html.parser` tag stripping | 1 | `<title>` |
 | MD | stdlib (multi-encoding decode) | – | one page per heading | heading text |
 | TXT | stdlib (multi-encoding decode) | – | 1 | – |
@@ -78,7 +83,18 @@ user-facing reason becomes the job's `FAILED` reason.
 | PNG/JPG/TIFF | Tesseract (there is no text layer) | – | one page per frame | – |
 
 Tesseract is therefore never the first choice for a document that has a text layer; it is
-the safety net for scanned, image-only or otherwise unreadable content.
+the safety net for scanned, image-only or otherwise unreadable content. Failure reasons name the
+primary reader's error (paths stripped, capped length) and what the fallback said.
+
+`POST /api/documents/{doc_id}/retry` re-queues a FAILED document from its stored file.
+`GET /api/documents/{doc_id}/file` serves the stored original (inline where browsers can render it) for the show page.
+
+### Logging
+
+`app/logging_utils.py` configures the root logger (`LOG_LEVEL`) and provides `timed()` /
+`ctx()`. Each step logs `[step] … job=… doc=… file=…` with elapsed ms: upload decisions, extract
+(primary/fallback/sniff), chunk, embed, store, bm25-rebuild, pipeline outcome, and on the ask side
+retrieve-dense, retrieve-bm25, fuse, llm request/response and the final ask summary.
 
 Each chunk records: `doc_id, source, file_type, collection, page, section, extraction
 (text|ocr), chunk_index, char_start, char_end`.

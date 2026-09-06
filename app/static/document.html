@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAG Generator · Document</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c1f26; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --ok:#15803d; --bad:#b91c1c; --warn:#b45309; --info:#0369a1; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:14px 28px; background:var(--card); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:18px; } header h1 a { color:inherit; text-decoration:none; }
+  header nav { margin-left:auto; font-size:13px; } header nav a { color:var(--accent); text-decoration:none; margin-left:12px; } header nav a.on { font-weight:700; }
+  main { max-width:1300px; margin:0 auto; padding:20px 28px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:20px; }
+  .card h2 { margin:0 0 12px; font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .card h2 .hint { text-transform:none; letter-spacing:0; font-weight:400; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:8px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12px; }
+  tr.clickable { cursor:pointer; } tr.clickable:hover { background:#f8fafc; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:600; background:#eef2ff; color:var(--accent); white-space:nowrap; }
+  .pill.COMPLETED { background:#dcfce7; color:var(--ok); }
+  .pill.FAILED, .pill.UPLOAD_FAILED, .pill.EXTRACTION_NOT_SUPPORTED, .pill.EMPTY_FILE { background:#fee2e2; color:var(--bad); }
+  .pill.DUPLICATE { background:#fef3c7; color:var(--warn); } .pill.PROCESSING { background:#e0f2fe; color:var(--info); } .pill.ocr { background:#fef3c7; color:var(--warn); }
+  code.id { font:12px ui-monospace, Menlo, monospace; color:var(--muted); } a { color:var(--accent); }
+  button { padding:6px 12px; border:0; border-radius:6px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }
+  button.secondary { background:#eef2ff; color:var(--accent); } button.small { padding:3px 8px; font-size:12px; } button:disabled { opacity:.5; cursor:default; }
+  input[type=text], select { padding:7px 9px; border:1px solid var(--line); border-radius:6px; font:inherit; }
+  .toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; font-size:13px; }
+  .pager { display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-top:10px; font-size:12px; color:var(--muted); }
+  .muted { color:var(--muted); font-size:12px; } .err { color:var(--bad); font-size:13px; white-space:pre-wrap; }
+  .chip { display:inline-flex; gap:6px; align-items:center; background:#eff6ff; color:var(--accent); border-radius:999px; padding:2px 10px; font-size:12px; }
+  .chip a { text-decoration:none; }
+  .banner { border-radius:8px; padding:12px 14px; margin-bottom:14px; font-size:13px; }
+  .banner.warn { background:#fef3c7; color:#78350f; } .banner.bad { background:#fee2e2; color:#7f1d1d; } .banner.info { background:#e0f2fe; color:#0c4a6e; }
+  dl { display:grid; grid-template-columns:160px 1fr; gap:6px 12px; margin:0; font-size:13px; } dt { color:var(--muted); } dd { margin:0; word-break:break-all; }
+  iframe.viewer { width:100%; height:70vh; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  img.viewer { max-width:100%; border:1px solid var(--line); border-radius:8px; }
+  .page { border:1px solid var(--line); border-radius:8px; margin-top:10px; padding:10px 12px; }
+  .page summary { cursor:pointer; font-weight:600; } .page summary .muted { font-weight:400; margin-left:8px; }
+  .chunk { margin-top:8px; padding:8px 10px; background:#f8fafc; border:1px solid var(--line); border-radius:6px; }
+  .chunk .meta { font-size:11px; color:var(--muted); margin-bottom:4px; } .chunk pre { white-space:pre-wrap; font:12px/1.5 ui-monospace, Menlo, monospace; margin:0; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; } @media (max-width:980px) { .grid { grid-template-columns:1fr; } }
+</style></head>
+<body>
+<header>
+  <h1><a href="/">RAG Generator</a></h1>
+  <span class="muted" id="meta"></span>
+  <nav><a href="/" >Home</a><a href="/jobs" >Jobs</a><a href="/documents" class="on">Documents</a><a href="/documentation/flow.html" target="_blank">How it works</a><a href="/docs" target="_blank">API docs</a></nav>
+</header>
+<main>
+
+<div class="card">
+  <h2>Document <span class="hint" id="crumb"></span></h2>
+  <div id="banner"></div>
+  <div class="err" id="err"></div>
+  <dl id="meta-list"></dl>
+  <div class="toolbar" id="actions" style="margin-top:12px"></div>
+</div>
+<div id="viewer"></div>
+
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const TERMINAL = ['DUPLICATE','COMPLETED','FAILED','EMPTY_FILE','EXTRACTION_NOT_SUPPORTED','UPLOAD_FAILED'];
+const BAD = ['FAILED','UPLOAD_FAILED','EXTRACTION_NOT_SUPPORTED','EMPTY_FILE'];
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const qs = new URLSearchParams(location.search);
+async function api(path, opts = {}) {
+  const r = await fetch(path, opts);
+  if (r.status === 204) return null;
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail || body));
+  return body;
+}
+function setQuery(changes) { for (const [k, v] of Object.entries(changes)) { if (v === null || v === '' || v === undefined) qs.delete(k); else qs.set(k, v); } history.replaceState(null, '', location.pathname + (qs.toString() ? '?' + qs : '')); }
+function pager(el, m, onPage) {
+  if (!m || m.total === 0) { el.innerHTML = ''; return; }
+  el.innerHTML = `<button class="small secondary" ${m.has_prev ? '' : 'disabled'} id="pp">‹ prev</button><span>page ${m.page + 1} / ${m.pages} · ${m.total} total · ${m.size} per page</span><button class="small secondary" ${m.has_next ? '' : 'disabled'} id="pn">next ›</button>`;
+  el.querySelector('#pp').onclick = () => onPage(m.page - 1); el.querySelector('#pn').onclick = () => onPage(m.page + 1);
+}
+
+
+const docId = location.pathname.split('/').filter(Boolean).pop();
+const NOT_APPLICABLE = {
+  QUEUED: 'The document is waiting for the background worker; nothing has been indexed yet. This page refreshes automatically.',
+  PROCESSING: 'The document is being processed; the viewer becomes available when it is COMPLETED. This page refreshes automatically.',
+  FAILED: 'Processing failed, so there is no indexed content to show. Fix the cause described below, then retry.',
+  DUPLICATE: 'This file has the same content as an already indexed document, so it was not processed. Use the original document\'s show page instead.',
+  EMPTY_FILE: 'The uploaded file was empty; there is nothing to show.',
+  EXTRACTION_NOT_SUPPORTED: 'This file type is not supported, so it was never processed. See the supported extensions on the home page.',
+  UPLOAD_FAILED: 'The upload itself failed; the file was not stored or processed.',
+};
+const INLINE = ['pdf', 'html', 'text', 'csv', 'image'];
+let timer = null;
+
+async function load() {
+  clearTimeout(timer);
+  $('err').textContent = '';
+  let d;
+  try { d = await api(`/api/documents/${docId}`); }
+  catch (e) { $('banner').innerHTML = `<div class="banner bad">Document <code>${esc(docId)}</code> not found. ${esc(e.message)}</div>`; return; }
+  document.title = `RAG Generator · ${d.filename}`;
+  $('crumb').innerHTML = `<a href="/documents">Documents</a> › <a href="/documents?job_id=${d.job_id}">job ${esc(d.job_id)}</a> › ${esc(d.filename)}`;
+  $('meta-list').innerHTML = [
+    ['Doc ID', `<code class="id">${esc(d.doc_id)}</code>`], ['File', esc(d.filename)], ['Type', esc(d.file_type || '–')],
+    ['Collection', esc(d.collection)], ['Job', `<a href="/documents?job_id=${d.job_id}"><code class="id">${esc(d.job_id)}</code></a>`],
+    ['Status', `<span class="pill ${d.status}">${d.status}</span>${d.stage ? ` <span class="muted">${esc(d.stage)}…</span>` : ''}`],
+    ['Reason', esc(d.reason || '–')], ['SHA-256', `<code class="id">${esc(d.sha256 || '–')}</code>`],
+    ['Pages / chunks', d.status === 'COMPLETED' ? `${d.pages} pages${d.ocr_pages ? ` (${d.ocr_pages} via OCR)` : ''} · ${d.chunks} chunks` : '–'],
+    ['Created / updated', `${esc(d.created_at)} · ${esc(d.updated_at)}`],
+  ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+
+  const actions = [];
+  if (d.status === 'FAILED') actions.push(`<button id="retry">Retry processing</button>`);
+  if (['COMPLETED', 'FAILED', 'DUPLICATE'].includes(d.status)) actions.push(`<a href="/api/documents/${d.doc_id}/file?download=true"><button class="secondary">Download original</button></a>`);
+  if (d.status === 'COMPLETED') actions.push(`<a href="/?collection=${encodeURIComponent(d.collection)}"><button class="secondary">Ask over this collection</button></a>`);
+  $('actions').innerHTML = actions.join(' ');
+  if (d.status === 'FAILED') $('retry').onclick = async () => { try { await api(`/api/documents/${d.doc_id}/retry`, {method: 'POST'}); load(); } catch (e) { $('err').textContent = e.message; } };
+
+  if (d.status !== 'COMPLETED') {
+    const cls = d.status === 'DUPLICATE' ? 'warn' : (BAD.includes(d.status) ? 'bad' : 'info');
+    let extra = '';
+    if (d.status === 'DUPLICATE' && d.duplicate_of) extra = ` <br><b>Original document:</b> <a href="/documents/${d.duplicate_of}">${location.origin}/documents/${esc(d.duplicate_of)}</a> (${esc(d.duplicate_of_name || '')})`;
+    $('banner').innerHTML = `<div class="banner ${cls}"><b>Show page not applicable — status ${d.status}.</b> ${esc(NOT_APPLICABLE[d.status] || '')}${extra}</div>`;
+    $('viewer').innerHTML = '';
+    if (!TERMINAL.includes(d.status)) timer = setTimeout(load, 2000);
+    return;
+  }
+
+  $('banner').innerHTML = '';
+  let chunks = [];
+  try { chunks = await api(`/api/chunks?collection=${encodeURIComponent(d.collection)}&doc_id=${d.doc_id}&limit=1000`); }
+  catch (e) { $('err').textContent = e.message; }
+  const byPage = new Map();
+  chunks.forEach(c => { if (!byPage.has(c.page)) byPage.set(c.page, []); byPage.get(c.page).push(c); });
+  const fileUrl = `/api/documents/${d.doc_id}/file`;
+  const original = d.file_type === 'image'
+    ? `<img class="viewer" src="${fileUrl}" alt="${esc(d.filename)}">`
+    : INLINE.includes(d.file_type) ? `<iframe class="viewer" src="${fileUrl}" title="${esc(d.filename)}"></iframe>`
+    : `<div class="banner info">Browsers cannot render <b>${esc(d.file_type)}</b> files inline. <a href="${fileUrl}?download=true">Download the original</a> or read the indexed content on the right.</div>`;
+  $('viewer').innerHTML = `<div class="grid">
+    <div class="card"><h2>Original file <span class="hint">${esc(d.filename)}</span></h2>${original}</div>
+    <div class="card"><h2>Indexed content <span class="hint">${chunks.length} chunks over ${byPage.size} pages — exactly what retrieval searches</span></h2>
+      ${[...byPage.entries()].sort((a, b) => a[0] - b[0]).map(([p, cs]) => `
+        <details class="page" ${byPage.size <= 3 ? 'open' : ''}><summary>Page ${p}${cs[0].section ? `<span class="muted">${esc(cs[0].section)}</span>` : ''}<span class="muted">${cs.length} chunk(s)</span></summary>
+          ${cs.map(c => `<div class="chunk"><div class="meta">${esc(c.chunk_id)}</div><pre>${esc(c.text)}</pre></div>`).join('')}
+        </details>`).join('') || '<span class="muted">No chunks found for this document.</span>'}
+    </div></div>`;
+}
+api('/api/health').then(h => $('meta').textContent = `LLM: ${h.llm_model}`).catch(() => {});
+load();
+
+</script>
+</body></html>
