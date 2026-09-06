@@ -20,6 +20,15 @@
 <div class="sub">All notable changes to RAG Generator. Versions follow <code>app/main.py</code>'s FastAPI version.</div>
 
 <section class="rel">
+  <h2>0.9.1 <time>2026-09-06</time></h2>
+  <p><span class="tag docs">Docs</span> Interactive flow and animated demo now cover every page.</p>
+  <ul>
+    <li><span class="tag docs">Docs</span> <a href="/documentation/flow.html">flow.html</a> gains tabs <b>3 · Pages: home, jobs, documents</b> (workbench, upload → job id, /jobs, /documents, job → documents, document → show page, plus a URL/page-size table) and <b>4 · Show page: chat + highlighting</b> (page text, scoped ask, page-number chips, click → jump + highlight, not-applicable states) with a live chip → highlight mini demo.</li>
+    <li><span class="tag added">Added</span> <code>documentation/demo.gif</code>, a 17-frame captioned walkthrough recorded from the real UI by <code>scripts/make_demo_gif.py</code> (Playwright; uses and then deletes a throw-away <code>demo</code> collection). Linked from the README and the flow page.</li>
+  </ul>
+</section>
+
+<section class="rel">
   <h2>0.9.0 <time>2026-09-06</time></h2>
   <p><span class="tag added">Added</span> Totals in the listings, on the home page and the dedicated pages alike.</p>
   <ul>

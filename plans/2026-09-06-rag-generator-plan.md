@@ -267,6 +267,7 @@ matches what was shipped.
 | 12 | Dedicated `/jobs` and `/documents` pages (20 per page) and `/documents/{id}` show page with viewer / not-applicable explanation / duplicate link | `app/static/jobs.html`, `documents.html`, `document.html`, `app/main.py` |
 | 13 | Show page as viewer (55%) + per-document chat (45%); page-number citations that jump to the page and highlight the passage; page text stored at ingest (`/api/documents/{id}/pages`) | `app/static/document.html`, `app/ingest/pipeline.py`, `app/main.py` |
 | 14 | Listings show total pages per document and total documents / pages per job, on the home page and the dedicated pages | `app/jobs.py`, `app/static/*.html`, `cli/rag_cli.py` |
+| 15 | Interactive flow covers all pages and the show-page chat/highlighting; animated GIF walkthrough recorded from the real UI | `documentation/flow.html`, `documentation/demo.gif`, `scripts/make_demo_gif.py` |
 | 10 | **Pagination** for job and document listings (0-based `page`, default `size` 5) in API, UI and CLI; `documentation/enhancements.md` | `app/main.py`, `app/static/index.html`, `cli/rag_cli.py`, `documentation/enhancements.md` |
 
 Verification performed locally (no Docker/Tesseract on the dev machine): `pytest` suite,

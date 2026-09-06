@@ -68,7 +68,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="RAG Generator", version="0.9.0", lifespan=lifespan)
+app = FastAPI(title="RAG Generator", version="0.9.1", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 if DOCS_DIR.exists():
     app.mount("/documentation", StaticFiles(directory=DOCS_DIR), name="documentation")

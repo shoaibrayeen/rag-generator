@@ -69,6 +69,12 @@ for a completely different set and it works unchanged — no code edits, only <c
 </tbody>
 </table>
 <hr />
+<h2 id="0-two-minute-tour">0. Two-minute tour</h2>
+<p><img alt="Animated walkthrough: upload as a job, job → documents filter, scoped ask, /jobs, /documents, show page chat, citation click → highlight, duplicate page" src="documentation/demo.gif" /></p>
+<p>The GIF (<code>documentation/demo.gif</code>) is recorded from the real UI by <code>scripts/make_demo_gif.py</code>; the
+step-by-step interactive version with explanations is <a href="/documentation/flow.html"><code>documentation/flow.html</code></a>
+(served at <code>/documentation/flow.html</code> when the app runs), now covering upload jobs, asking, the
+home/jobs/documents pages, and the show page's chat + citation highlighting.</p>
 <h2 id="1-setup">1. Setup</h2>
 <h3 id="docker-recommended">Docker (recommended)</h3>
 <pre><code class="language-bash">cp .env.example .env
@@ -654,8 +660,8 @@ the binary ones with <code>pip install -r requirements-dev.txt &amp;&amp; python
                 static/ index.html (workbench) · jobs.html · documents.html · document.html (show page))
 cli/            `rag` CLI
 evaluation/     Claude-as-judge runner, dataset generator, example dataset, reports/
-documentation/  architecture.md(.html), enhancements.md(.html), flow.html (interactive), changelog.html, readme.html
-samples/        demo corpus     scripts/  make_samples.py, mock_llm.py, build_docs.py, sync_rules.py
+documentation/  architecture.md(.html), enhancements.md(.html), flow.html (interactive), demo.gif (recorded walkthrough), changelog.html, readme.html
+samples/        demo corpus     scripts/  make_samples.py, mock_llm.py, build_docs.py, sync_rules.py, export_transcript.py, make_demo_gif.py
 tests/          pytest suite    transcripts/  agent session exports    plans/  the approved implementation plan + change log
 CLAUDE.md       rules for AI agents (source of truth) → synced to .cursor/rules/project.mdc and AGENTS.md
 memory.md       project memory: decisions, gotchas, conventions

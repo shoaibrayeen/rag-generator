@@ -21,6 +21,15 @@ for a completely different set and it works unchanged — no code edits, only `.
 
 ---
 
+## 0. Two-minute tour
+
+![Animated walkthrough: upload as a job, job → documents filter, scoped ask, /jobs, /documents, show page chat, citation click → highlight, duplicate page](documentation/demo.gif)
+
+The GIF (`documentation/demo.gif`) is recorded from the real UI by `scripts/make_demo_gif.py`; the
+step-by-step interactive version with explanations is [`documentation/flow.html`](documentation/flow.html)
+(served at `/documentation/flow.html` when the app runs), now covering upload jobs, asking, the
+home/jobs/documents pages, and the show page's chat + citation highlighting.
+
 ## 1. Setup
 
 ### Docker (recommended)
@@ -350,8 +359,8 @@ app/            FastAPI service (config, models, ingest/, retrieval/, llm/, rag.
                 static/ index.html (workbench) · jobs.html · documents.html · document.html (show page))
 cli/            `rag` CLI
 evaluation/     Claude-as-judge runner, dataset generator, example dataset, reports/
-documentation/  architecture.md(.html), enhancements.md(.html), flow.html (interactive), changelog.html, readme.html
-samples/        demo corpus     scripts/  make_samples.py, mock_llm.py, build_docs.py, sync_rules.py
+documentation/  architecture.md(.html), enhancements.md(.html), flow.html (interactive), demo.gif (recorded walkthrough), changelog.html, readme.html
+samples/        demo corpus     scripts/  make_samples.py, mock_llm.py, build_docs.py, sync_rules.py, export_transcript.py, make_demo_gif.py
 tests/          pytest suite    transcripts/  agent session exports    plans/  the approved implementation plan + change log
 CLAUDE.md       rules for AI agents (source of truth) → synced to .cursor/rules/project.mdc and AGENTS.md
 memory.md       project memory: decisions, gotchas, conventions

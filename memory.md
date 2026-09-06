@@ -50,6 +50,9 @@ evaluation script.
   (`chunker.normalise`) so `char_start/char_end` line up; the viewer also tries `indexOf(chunk.text)`.
   Citations shown to the user on that page are **page numbers**, not chunk numbers.
 
+- `scripts/make_demo_gif.py` needs the API running and a real or mock LLM in `.env`; it records against a
+  throw-away `demo` collection and deletes it. Playwright + Chromium come from `requirements-dev.txt`.
+
 ## Environment gotchas
 - The dev Mac has no Docker, Homebrew or Tesseract; Python is 3.9 system-wide. Use
   `uv venv --python 3.11 .venv`. Docker image must be built/verified elsewhere.
@@ -84,4 +87,5 @@ evaluation script.
   v0.6.0 content sniffing + RTF, precise failure reasons, retry endpoint, store-then-hash upload order, step logging;
   v0.7.0 `/jobs`, `/documents` (20/page) and `/documents/{id}` show page (+ `/api/documents/{id}/file`);
   v0.8.0 show page = 55% text viewer + 45% per-document chat, page-number citations that jump + highlight, `data/pages/`;
-  v0.9.0 listings show pages per document and documents/pages per job (home page and dedicated pages).
+  v0.9.0 listings show pages per document and documents/pages per job (home page and dedicated pages);
+  v0.9.1 flow.html tabs for pages + show page, `documentation/demo.gif` recorded by `scripts/make_demo_gif.py` (Playwright).
