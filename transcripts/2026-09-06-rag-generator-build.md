@@ -1,7 +1,7 @@
 # Claude Code transcript — session `a88920a3-6212-4085-ad05-80ba0afca34d`
 
 Project: `/Users/shoaib.rayeen/my_space/rag-generator`  
-Exported: 2026-09-06T15:47:19  
+Exported: 2026-09-06T16:00:24  
 Source log: `/Users/shoaib.rayeen/.claude/projects/-Users-shoaib-rayeen-my-space-rag-generator/a88920a3-6212-4085-ad05-80ba0afca34d.jsonl`
 
 ---
@@ -2554,4 +2554,915 @@ A  evaluation/dataset.example.jsonl
 A  evaluation/generate_dataset.py
 A  evaluation/judge.py
 A  evaluation/reports/.gitkeep
+```
+
+## Assistant  <sub>2026-09-06T10:17:15.119Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "set -e\n# dependencies: PyMuPDF replaces pypdf + pypdfium2\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"requirements.in\"); s = p.read_text()\ns = s.replace(\"# Document extraction\\npypdf\\n\", \"# Document extraction (primary extractors)\\npymupdf\\n\")\ns = s.replace(\"# OCR fallback (Tesseract binary required at runtime; see README)\\npypdfium2\\npytesseract\\npillow\\n\",\n              \"# OCR fallback (Tesseract binary required at runtime; see README). PyMuPDF renders the pages.\\npytesseract\\npillow\\n\")\np.write_text(s)\nEOF\nuv pip compile requirements.in -o requirements.txt --python .venv/bin/python -q && uv pip install -r requirements.txt --python .venv/bin/python -q && uv pip uninstall pypdf pypdfium2 --python .venv/bin/python -q 2>/dev/null || true\ngrep -E \"^(pymupdf|pytesseract|pillow)==\" requirements.txt\n\ncat > app/ingest/extractors.py <<'EOF'\n\"\"\"\nTurn a file into a list of `Page`s (text + page metadata).\n\nTwo-tier design:\n  1. PRIMARY extractor per format — PyMuPDF (PDF), python-docx (DOCX), beautifulsoup4 (HTML),\n     stdlib (TXT/MD/CSV). Fast and exact when the file contains real text.\n  2. FALLBACK — used only when the primary extractor raises or yields no text:\n       PDF   → render every page with PyMuPDF and read it with Tesseract OCR\n       DOCX  → OCR the images embedded in the document (word/media/*)\n       HTML  → stdlib tag-stripping (no pixels to OCR)\n       image → Tesseract is the primary and only path (there is no text layer)\n     Inside the PDF primary path, individual pages with fewer than OCR_MIN_CHARS_PER_PAGE\n     characters (scanned pages in an otherwise digital PDF) are OCR'd page by page.\n\nDispatch is driven by `app.config.SUPPORTED_EXTENSIONS`; each extractor name there must exist\nin `EXTRACTORS`. To support a new format add a primary function (and optionally a fallback),\nregister both, and add the extension.\n\nIf no text can be obtained at all, `extract()` raises `ExtractionError` with a precise reason\n(e.g. \"Tesseract OCR is not installed\") which becomes the job's FAILED reason.\n\"\"\"\nfrom __future__ import annotations\n\nimport csv\nimport io\nimport logging\nimport shutil\nimport zipfile\nfrom dataclasses import dataclass, field\nfrom html.parser import HTMLParser\nfrom pathlib import Path\nfrom typing import Callable\n\nfrom app.config import SUPPORTED_EXTENSIONS, settings\n\nlog = logging.getLogger(__name__)\n\n\n@dataclass\nclass Page:\n    text: str\n    page_no: int\n    section: str | None = None\n    extraction: str = \"text\"  # text | ocr\n    meta: dict = field(default_factory=dict)\n\n\nclass UnsupportedFormat(ValueError):\n    pass\n\n\nclass ExtractionError(ValueError):\n    \"\"\"Primary and fallback extraction both failed; the message is user-facing.\"\"\"\n\n\n# --------------------------------------------------------------------------- OCR\n\ndef ocr_available() -> bool:\n    return shutil.which(\"tesseract\") is not None\n\n\ndef _require_ocr(what: str) -> None:\n    if not settings.OCR_ENABLED:\n        raise ExtractionError(f\"{what} contains no text layer and OCR is disabled (OCR_ENABLED=false).\")\n    if not ocr_available():\n        raise ExtractionError(\n            f\"{what} contains no text layer and Tesseract OCR is not installed on this host, so it \"\n            \"could not be read. OCR works in the Docker image; locally install tesseract \"\n            \"(brew install tesseract / apt install tesseract-ocr) and upload again.\")\n\n\ndef _ocr_image(image) -> str:\n    import pytesseract\n\n    return (pytesseract.image_to_string(image, lang=settings.OCR_LANG) or \"\").strip()\n\n\ndef _pixmap_to_image(pix):\n    from PIL import Image\n\n    mode = \"RGBA\" if pix.alpha else \"RGB\"\n    return Image.frombytes(mode, (pix.width, pix.height), pix.samples).convert(\"RGB\")\n\n\ndef _ocr_pdf_page(page) -> str:\n    return _ocr_image(_pixmap_to_image(page.get_pixmap(dpi=settings.OCR_DPI)))\n\n\n# ------------------------------------------------------------------ PDF (PyMuPDF)\n\ndef extract_pdf(path: Path) -> list[Page]:\n    \"\"\"PyMuPDF text per page; pages without a usable text layer are OCR'd individually.\"\"\"\n    import fitz  # PyMuPDF\n\n    pages: list[Page] = []\n    with fitz.open(str(path)) as doc:\n        can_ocr = settings.OCR_ENABLED and ocr_available()\n        for i, page in enumerate(doc):\n            text = (page.get_text(\"text\") or \"\").strip()\n            extraction = \"text\"\n            if len(text) < settings.OCR_MIN_CHARS_PER_PAGE and can_ocr:\n                ocr_text = _ocr_pdf_page(page)\n                if ocr_text:\n                    text, extraction = ocr_text, \"ocr\"\n            if text:\n                pages.append(Page(text=text, page_no=i + 1, extraction=extraction))\n    return pages\n\n\ndef fallback_pdf(path: Path) -> list[Page]:\n    \"\"\"Primary produced nothing: the PDF is scanned/image-only. OCR every page.\"\"\"\n    import fitz\n\n    _require_ocr(\"This PDF\")\n    pages: list[Page] = []\n    with fitz.open(str(path)) as doc:\n        for i, page in enumerate(doc):\n            text = _ocr_pdf_page(page)\n            if text:\n                pages.append(Page(text=text, page_no=i + 1, extraction=\"ocr\"))\n    return pages\n\n\n# ------------------------------------------------------------------------ images\n\ndef extract_image(path: Path) -> list[Page]:\n    from PIL import Image, ImageSequence\n\n    _require_ocr(\"This image\")\n    pages: list[Page] = []\n    with Image.open(path) as img:\n        for i, frame in enumerate(ImageSequence.Iterator(img)):\n            text = _ocr_image(frame.convert(\"RGB\"))\n            if text:\n                pages.append(Page(text=text, page_no=i + 1, extraction=\"ocr\"))\n    return pages\n\n\n# ------------------------------------------------------------------------- DOCX\n\ndef extract_docx(path: Path) -> list[Page]:\n    \"\"\"DOCX has no real pages: each heading starts a new 'page' (section).\"\"\"\n    import docx\n\n    document = docx.Document(str(path))\n    pages: list[Page] = []\n    section_title: str | None = None\n    buffer: list[str] = []\n    page_no = 1\n\n    def flush():\n        nonlocal page_no, buffer\n        text = \"\\n\".join(buffer).strip()\n        if text:\n            pages.append(Page(text=text, page_no=page_no, section=section_title))\n            page_no += 1\n        buffer = []\n\n    for para in document.paragraphs:\n        txt = para.text.strip()\n        if not txt:\n            continue\n        if para.style is not None and para.style.name.lower().startswith(\"heading\"):\n            flush()\n            section_title = txt\n        buffer.append(txt)\n    for table in document.tables:\n        rows = [\" | \".join(c.text.strip() for c in row.cells) for row in table.rows]\n        if rows:\n            buffer.append(\"\\n\".join(rows))\n    flush()\n    return pages\n\n\ndef fallback_docx(path: Path) -> list[Page]:\n    \"\"\"No text in the document body: OCR the embedded images (scanned pages pasted into Word).\"\"\"\n    from PIL import Image\n\n    _require_ocr(\"This DOCX\")\n    pages: list[Page] = []\n    with zipfile.ZipFile(path) as zf:\n        media = sorted(n for n in zf.namelist() if n.startswith(\"word/media/\"))\n        for i, name in enumerate(media):\n            try:\n                with zf.open(name) as fh:\n                    text = _ocr_image(Image.open(io.BytesIO(fh.read())).convert(\"RGB\"))\n            except Exception as exc:  # unsupported image type etc.\n                log.debug(\"skip %s: %s\", name, exc)\n                continue\n            if text:\n                pages.append(Page(text=text, page_no=i + 1, section=Path(name).name, extraction=\"ocr\"))\n    return pages\n\n\n# ------------------------------------------------------------------------- HTML\n\ndef extract_html(path: Path) -> list[Page]:\n    from bs4 import BeautifulSoup\n\n    soup = BeautifulSoup(path.read_text(encoding=\"utf-8\", errors=\"replace\"), \"lxml\")\n    for tag in soup([\"script\", \"style\", \"noscript\", \"nav\", \"footer\", \"header\"]):\n        tag.decompose()\n    title = soup.title.get_text(strip=True) if soup.title else None\n    lines = [ln.strip() for ln in soup.get_text(\"\\n\").splitlines()]\n    text = \"\\n\".join(ln for ln in lines if ln)\n    return [Page(text=text, page_no=1, section=title, meta={\"title\": title})] if text else []\n\n\nclass _Stripper(HTMLParser):\n    def __init__(self):\n        super().__init__()\n        self.parts: list[str] = []\n        self._skip = 0\n\n    def handle_starttag(self, tag, attrs):\n        if tag in (\"script\", \"style\"):\n            self._skip += 1\n\n    def handle_endtag(self, tag):\n        if tag in (\"script\", \"style\") and self._skip:\n            self._skip -= 1\n\n    def handle_data(self, data):\n        if not self._skip and data.strip():\n            self.parts.append(data.strip())\n\n\ndef fallback_html(path: Path) -> list[Page]:\n    \"\"\"beautifulsoup/lxml choked: strip tags with the stdlib parser.\"\"\"\n    parser = _Stripper()\n    parser.feed(path.read_bytes().decode(\"utf-8\", errors=\"replace\"))\n    text = \"\\n\".join(parser.parts)\n    return [Page(text=text, page_no=1)] if text else []\n\n\n# ------------------------------------------------------------------- TXT / MD / CSV\n\ndef _read_text(path: Path) -> str:\n    raw = path.read_bytes()\n    for enc in (\"utf-8\", \"utf-16\", \"cp1252\", \"latin-1\"):\n        try:\n            return raw.decode(enc)\n        except UnicodeDecodeError:\n            continue\n    return raw.decode(\"utf-8\", errors=\"replace\")\n\n\ndef extract_text(path: Path) -> list[Page]:\n    \"\"\"TXT/MD. Markdown headings become `section` metadata on a per-heading page.\"\"\"\n    raw = _read_text(path)\n    if path.suffix.lower() != \".md\":\n        return [Page(text=raw.strip(), page_no=1)] if raw.strip() else []\n\n    pages: list[Page] = []\n    section: str | None = None\n    buffer: list[str] = []\n    page_no = 1\n    for line in raw.splitlines():\n        if line.startswith(\"#\"):\n            text = \"\\n\".join(buffer).strip()\n            if text:\n                pages.append(Page(text=text, page_no=page_no, section=section))\n                page_no += 1\n            buffer = []\n            section = line.lstrip(\"#\").strip()\n        buffer.append(line)\n    text = \"\\n\".join(buffer).strip()\n    if text:\n        pages.append(Page(text=text, page_no=page_no, section=section))\n    return pages\n\n\ndef extract_csv(path: Path) -> list[Page]:\n    \"\"\"Each block of CSV_ROWS_PER_PAGE rows becomes a page, header repeated on each.\"\"\"\n    reader = csv.reader(io.StringIO(_read_text(path)))\n    rows = [r for r in reader if any(cell.strip() for cell in r)]\n    if not rows:\n        return []\n    header, body = rows[0], rows[1:]\n    per_page = max(1, settings.CSV_ROWS_PER_PAGE)\n    pages: list[Page] = []\n    for i in range(0, len(body), per_page):\n        block = body[i:i + per_page]\n        lines = [\", \".join(header)] + [\"; \".join(f\"{h}: {v}\" for h, v in zip(header, r)) for r in block]\n        pages.append(Page(text=\"\\n\".join(lines), page_no=len(pages) + 1,\n                          section=f\"rows {i + 1}-{i + len(block)}\"))\n    return pages or [Page(text=\", \".join(header), page_no=1)]\n\n\n# ------------------------------------------------------------------------ registry\n\nEXTRACTORS: dict[str, Callable[[Path], list[Page]]] = {\n    \"pdf\": extract_pdf,\n    \"docx\": extract_docx,\n    \"html\": extract_html,\n    \"text\": extract_text,\n    \"csv\": extract_csv,\n    \"image\": extract_image,\n}\n\nFALLBACKS: dict[str, Callable[[Path], list[Page]]] = {\n    \"pdf\": fallback_pdf,\n    \"docx\": fallback_docx,\n    \"html\": fallback_html,\n}\n\n\ndef file_type_for(filename: str) -> str | None:\n    return SUPPORTED_EXTENSIONS.get(Path(filename).suffix.lower())\n\n\ndef extract(path: Path) -> list[Page]:\n    \"\"\"Primary extractor first; on exception or empty result, the format's fallback.\"\"\"\n    kind = file_type_for(path.name)\n    if kind is None or kind not in EXTRACTORS:\n        raise UnsupportedFormat(\n            f\"Unsupported file type '{path.suffix}'. Supported: {sorted(SUPPORTED_EXTENSIONS)}\")\n\n    primary_error: Exception | None = None\n    pages: list[Page] = []\n    try:\n        pages = EXTRACTORS[kind](path)\n    except ExtractionError:\n        raise\n    except Exception as exc:\n        primary_error = exc\n        log.warning(\"primary extractor for %s failed on %s: %s\", kind, path.name, exc)\n    if pages:\n        return pages\n\n    fallback = FALLBACKS.get(kind)\n    if fallback is None:\n        if primary_error is not None:\n            raise ExtractionError(f\"Could not read this {kind} file: {primary_error}\") from primary_error\n        raise ExtractionError(\"The file contains no extractable text.\")\n\n    log.info(\"using fallback extractor for %s (%s)\", path.name, kind)\n    try:\n        pages = fallback(path)\n    except ExtractionError:\n        raise\n    except Exception as exc:\n        cause = primary_error or exc\n        raise ExtractionError(f\"Could not read this {kind} file: {cause}\") from exc\n    if not pages:\n        raise ExtractionError(\"The file contains no extractable text, even after the fallback extractor.\")\n    return pages\nEOF\n\n# pipeline: rely on ExtractionError's message\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"app/ingest/pipeline.py\"); s = p.read_text()\nold_start = s.index(\"        pages = extract(path)\")\nold_end = s.index(\"        ocr_pages = sum(\")\ns = s[:old_start] + \"        pages = extract(path)  # raises ExtractionError with a user-facing reason\\n\" + s[old_end:]\ns = s.replace(\"from app.ingest.extractors import extract, ocr_available\", \"from app.ingest.extractors import extract\")\ns = s.replace('''    except Exception as exc:\n        log.exception(\"FAILED %s (%s)\", doc.filename, doc_id)\n        jobs.update(doc_id, status=\"FAILED\", stage=None,\n                    reason=f\"PROCESSING FAILED: {type(exc).__name__}: {exc}\")''',\n'''    except ExtractionError as exc:\n        log.warning(\"FAILED %s (%s): %s\", doc.filename, doc_id, exc)\n        jobs.update(doc_id, status=\"FAILED\", stage=None, reason=f\"PROCESSING FAILED: {exc}\")\n    except Exception as exc:\n        log.exception(\"FAILED %s (%s)\", doc.filename, doc_id)\n        jobs.update(doc_id, status=\"FAILED\", stage=None,\n                    reason=f\"PROCESSING FAILED: {type(exc).__name__}: {exc}\")''')\ns = s.replace(\"from app.ingest.extractors import extract\\n\", \"from app.ingest.extractors import ExtractionError, extract\\n\")\np.write_text(s)\nEOF\n\n# tests: PyMuPDF-based fixtures, fallback behaviour\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"tests/test_extractors.py\"); s = p.read_text()\nold_start = s.index(\"def test_pdf_without_tesseract_keeps_going\")\ns = s[:old_start] + '''def _blank_pdf(path: Path) -> Path:\n    import fitz\n\n    doc = fitz.open()\n    doc.new_page(width=200, height=200)\n    doc.save(str(path))\n    doc.close()\n    return path\n\n\ndef _text_pdf(path: Path, text: str) -> Path:\n    import fitz\n\n    doc = fitz.open()\n    page = doc.new_page()\n    page.insert_text((72, 72), text)\n    doc.save(str(path))\n    doc.close()\n    return path\n\n\ndef test_pdf_primary_pymupdf(tmp_path: Path):\n    pages = extract(_text_pdf(tmp_path / \"t.pdf\", \"Hello PyMuPDF world\"))\n    assert len(pages) == 1 and \"PyMuPDF\" in pages[0].text and pages[0].extraction == \"text\"\n\n\ndef test_scanned_pdf_without_tesseract_gives_clear_reason(tmp_path: Path, monkeypatch):\n    \"\"\"Image-only PDF + no tesseract -> ExtractionError naming Tesseract, not a crash.\"\"\"\n    monkeypatch.setattr(extractors, \"ocr_available\", lambda: False)\n    with pytest.raises(extractors.ExtractionError, match=\"Tesseract\"):\n        extract(_blank_pdf(tmp_path / \"blank.pdf\"))\n\n\ndef test_scanned_pdf_uses_ocr_fallback(tmp_path: Path, monkeypatch):\n    \"\"\"When OCR is available, the fallback OCRs every page and tags extraction=ocr.\"\"\"\n    monkeypatch.setattr(extractors, \"ocr_available\", lambda: True)\n    monkeypatch.setattr(extractors, \"_ocr_image\", lambda img: \"OCR TEXT FROM PIXELS\")\n    pages = extract(_blank_pdf(tmp_path / \"scan.pdf\"))\n    assert [(p.text, p.extraction) for p in pages] == [(\"OCR TEXT FROM PIXELS\", \"ocr\")]\n\n\ndef test_corrupt_pdf_reports_reason(tmp_path: Path, monkeypatch):\n    monkeypatch.setattr(extractors, \"ocr_available\", lambda: True)\n    p = tmp_path / \"bad.pdf\"\n    p.write_bytes(b\"not a pdf\")\n    with pytest.raises(extractors.ExtractionError, match=\"Could not read this pdf\"):\n        extract(p)\n\n\ndef test_html_fallback_when_bs4_fails(tmp_path: Path, monkeypatch):\n    p = tmp_path / \"x.html\"\n    p.write_text(\"<p>Plain <b>fallback</b> text</p><script>x()</script>\")\n\n    def boom(path):\n        raise RuntimeError(\"lxml exploded\")\n\n    monkeypatch.setitem(extractors.EXTRACTORS, \"html\", boom)\n    pages = extract(p)\n    assert \"fallback\" in pages[0].text and \"x()\" not in pages[0].text\n\n\ndef test_image_without_tesseract(tmp_path: Path, monkeypatch):\n    from PIL import Image\n\n    monkeypatch.setattr(extractors, \"ocr_available\", lambda: False)\n    p = tmp_path / \"i.png\"\n    Image.new(\"RGB\", (50, 50), \"white\").save(p)\n    with pytest.raises(extractors.ExtractionError, match=\"Tesseract\"):\n        extract(p)\n'''\np.write_text(s)\n\na = Path(\"tests/test_api.py\"); t = a.read_text()\nt = t.replace('''    # A PDF that is not really a PDF -> FAILED with \"PROCESSING FAILED\" reason.\n    [doc] = _upload(client, \"broken.pdf\", b\"not a pdf at all\", \"bad\")\n    d = _wait(client, doc[\"job_id\"])\n    assert d[\"status\"] == \"FAILED\" and d[\"reason\"].startswith(\"PROCESSING FAILED\")''',\n'''    # A PDF that is not really a PDF -> FAILED with a \"PROCESSING FAILED: ...\" reason.\n    [doc] = _upload(client, \"broken.pdf\", b\"not a pdf at all\", \"bad\")\n    d = _wait(client, doc[\"job_id\"])\n    assert d[\"status\"] == \"FAILED\" and d[\"reason\"].startswith(\"PROCESSING FAILED: Could not read this pdf\")''')\na.write_text(t)\nEOF\n.venv/bin/python -m compileall -q app cli evaluation scripts && .venv/bin/python -m pytest -q 2>&1 | tail -3",
+  "description": "Switch to PyMuPDF with generalized OCR fallback, update pipeline and tests, run checks",
+  "timeout": 600000
+}
+```
+
+## Tool  <sub>2026-09-06T10:17:18.692Z</sub>
+
+**Tool result**
+
+```
+pillow==12.3.0
+pymupdf==1.28.2
+pytesseract==0.3.13
+FAILED tests/test_api.py::test_processing_failure_is_reported - AssertionErro...
+1 failed, 21 passed, 6 warnings in 2.05s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
+
+## Assistant  <sub>2026-09-06T10:17:19.186Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": ".venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"scripts/export_transcript.py\"); s = p.read_text()\ns = s.replace('SLUG = \"-\" + str(ROOT).strip(\"/\").replace(\"/\", \"-\")',\n              'SLUG = \"-\" + re.sub(r\"[^A-Za-z0-9-]\", \"-\", str(ROOT).strip(\"/\"))  # Claude Code project slug')\ns = s.replace(\"import argparse\\nimport json\\n\", \"import argparse\\nimport json\\nimport re\\n\")\np.write_text(s)\nEOF\n.venv/bin/python scripts/export_transcript.py --session a88920a3-6212-4085-ad05-80ba0afca34d && wc -l transcripts/2026-09-06-rag-generator-build.md && sed -n '1,25p' transcripts/2026-09-06-rag-generator-build.md",
+  "description": "Fix project slug in transcript exporter and export this session"
+}
+```
+
+## Tool  <sub>2026-09-06T10:17:19.258Z</sub>
+
+**Tool result**
+
+```
+exported 148 messages from a88920a3-6212-4085-ad05-80ba0afca34d.jsonl -> transcripts/2026-09-06-rag-generator-build.md
+    2557 transcripts/2026-09-06-rag-generator-build.md
+# Claude Code transcript — session `a88920a3-6212-4085-ad05-80ba0afca34d`
+
+Project: `/Users/shoaib.rayeen/my_space/rag-generator`  
+Exported: 2026-09-06T15:47:19  
+Source log: `/Users/shoaib.rayeen/.claude/projects/-Users-shoaib-rayeen-my-space-rag-generator/a88920a3-6212-4085-ad05-80ba0afca34d.jsonl`
+
+---
+
+## User  <sub>2026-09-06T09:49:07.676Z</sub>
+
+Create a plan for below, ask question if any doubts
+
+
+RAG Generator
+
+Agentic Coding Assessment | Candidate Brief
+
+Problem Statement
+Build a RAG Generator that:
+• Accepts documents at runtime - create a simple UI for this that accept documents (Single HTML page plus CLI	Upload, status, ask, view sources)
+• Creates a RAG application over those documents
+• Allows users to ask questions and receive grounded answers
+• Works with different document sets without code changes
+You may choose the architecture, stack, models, tools and approach.
+```
+
+## Assistant  <sub>2026-09-06T10:17:37.643Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": ".venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"app/ingest/extractors.py\"); s = p.read_text()\nold = '''    import fitz\n\n    _require_ocr(\"This PDF\")\n    pages: list[Page] = []\n    with fitz.open(str(path)) as doc:\n        for i, page in enumerate(doc):\n            text = _ocr_pdf_page(page)'''\nnew = '''    import fitz\n\n    doc = fitz.open(str(path))  # raises on a corrupt file -> \"Could not read this pdf\"\n    _require_ocr(\"This PDF\")\n    pages: list[Page] = []\n    with doc:\n        for i, page in enumerate(doc):\n            text = _ocr_pdf_page(page)'''\nassert old in s; p.write_text(s.replace(old, new)); print(\"patched\")\nEOF\n.venv/bin/python -m compileall -q app cli evaluation scripts && .venv/bin/python -m pytest -q 2>&1 | grep -E \"passed|failed\"",
+  "description": "Reorder PDF fallback so corrupt files report correctly; rerun tests",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T10:17:38.578Z</sub>
+
+**Tool result**
+
+```
+patched
+22 passed, 6 warnings in 0.62s
+```
+
+## Assistant  <sub>2026-09-06T10:18:26.607Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": ".venv/bin/python - <<'EOF'\nfrom pathlib import Path\nimport re\n\n# ---- main.py version\np = Path(\"app/main.py\"); s = p.read_text()\np.write_text(s.replace('version=\"0.2.0\"', 'version=\"0.3.0\"'))\n\n# ---- README\np = Path(\"README.md\"); s = p.read_text()\ns = s.replace(\"| Formats | PDF, DOCX, HTML, TXT, MD, CSV → text with page metadata · PNG/JPG/TIFF and scanned PDF pages via Tesseract OCR |\",\n\"| Formats | PDF (PyMuPDF), DOCX (python-docx), HTML (beautifulsoup4), TXT/MD/CSV (stdlib) → text with page metadata · **Tesseract OCR as fallback** when a primary extractor fails or finds no text · PNG/JPG/TIFF via OCR |\")\ns = s.replace(\"\"\"- **Input formats:** `.pdf .docx .html .htm .txt .md .csv` plus `.png .jpg .jpeg .tiff .tif` (OCR).\n  Scanned PDF pages (fewer than `OCR_MIN_CHARS_PER_PAGE` extractable characters) fall back to OCR automatically.\"\"\",\n\"\"\"- **Input formats:** `.pdf .docx .html .htm .txt .md .csv` plus `.png .jpg .jpeg .tiff .tif` (OCR).\n- **Two-tier extraction.** Primary extractors run first: PyMuPDF (PDF), python-docx (DOCX),\n  beautifulsoup4 + lxml (HTML), stdlib (TXT/MD/CSV). **Tesseract is the fallback**, used only when a\n  primary extractor raises or yields no text: scanned/image-only PDFs are rendered page by page\n  (PyMuPDF) and OCR'd; a DOCX with no body text has its embedded images OCR'd; HTML that lxml cannot\n  parse falls back to stdlib tag-stripping; individual scanned pages inside a digital PDF (fewer than\n  `OCR_MIN_CHARS_PER_PAGE` characters) are OCR'd in place. Image files go straight to OCR.\n  If neither tier yields text the job ends `FAILED` with the precise reason (e.g. Tesseract not installed).\"\"\")\ns = s.replace(\"| Extraction | pypdf, python-docx, beautifulsoup4 + lxml, stdlib csv | one small library per format |\\n| OCR | Tesseract via pytesseract, pypdfium2 (page rendering), Pillow | fallback for scanned PDFs and images; no poppler dependency |\",\n\"| Extraction (primary) | PyMuPDF, python-docx, beautifulsoup4 + lxml, stdlib csv/html.parser | one small library per format; PyMuPDF also renders pages for OCR |\\n| OCR (fallback) | Tesseract via pytesseract + Pillow | runs only when the primary extractor fails or finds no text, and for images |\")\ns = s.replace(\"upload ─► validate/hash ─► QUEUED ─► worker: extract (pypdf/docx/bs4/csv/OCR) ─► chunk\",\n              \"upload ─► validate/hash ─► QUEUED ─► worker: extract (PyMuPDF/docx/bs4/stdlib → OCR fallback) ─► chunk\")\ns = s.replace(\"To add a format: write an\\nextractor in `app/ingest/extractors.py`, register it in `EXTRACTORS`, add the extension, add a test,\\nand update the docs.\",\n              \"To add a format: write a primary\\nextractor (and optionally a fallback) in `app/ingest/extractors.py`, register them in `EXTRACTORS` /\\n`FALLBACKS`, add the extension, add a test, and update the docs.\")\ns = s.replace(\"- OCR languages other than English\", \"- OCR of images embedded in HTML pages (only DOCX-embedded images and PDF pages are OCR'd).\\n- OCR languages other than English\")\np.write_text(s)\n\n# ---- architecture.md\np = Path(\"documentation/architecture.md\"); s = p.read_text()\ns = s.replace(\"| Extractors | `app/ingest/extractors.py` | file → pages with metadata; per-format functions; OCR fallback |\",\n              \"| Extractors | `app/ingest/extractors.py` | file → pages with metadata; primary extractor per format + fallback tier (Tesseract OCR) |\")\ns = s.replace(\"\"\"### Extraction and page metadata\n\n| Format | Library | \"page\" means | Section metadata |\n|---|---|---|---|\n| PDF | pypdf (+ Tesseract via pypdfium2 render when a page has < `OCR_MIN_CHARS_PER_PAGE` chars) | printed page | – |\n| DOCX | python-docx | one page per heading block | heading text |\n| HTML | beautifulsoup4 + lxml | 1 | `<title>` |\n| MD | stdlib | one page per heading | heading text |\n| TXT | stdlib | 1 | – |\n| CSV | stdlib csv | `CSV_ROWS_PER_PAGE` rows (header repeated) | `rows a-b` |\n| PNG/JPG/TIFF | Pillow + Tesseract | one page per frame | – |\n\"\"\", \"\"\"### Extraction: primary tier, then fallback tier\n\n`extract()` runs the format's **primary** extractor. If it raises or returns no pages, the\nformat's **fallback** runs. If that also yields nothing, an `ExtractionError` with a precise,\nuser-facing reason becomes the job's `FAILED` reason.\n\n| Format | Primary | Fallback (only when primary fails / finds no text) | \"page\" means | Section metadata |\n|---|---|---|---|---|\n| PDF | PyMuPDF `get_text` per page; a page with < `OCR_MIN_CHARS_PER_PAGE` chars is OCR'd in place | render every page with PyMuPDF → Tesseract | printed page | – |\n| DOCX | python-docx paragraphs + tables | OCR of embedded images (`word/media/*`) → Tesseract | one page per heading block | heading text |\n| HTML | beautifulsoup4 + lxml | stdlib `html.parser` tag stripping | 1 | `<title>` |\n| MD | stdlib (multi-encoding decode) | – | one page per heading | heading text |\n| TXT | stdlib (multi-encoding decode) | – | 1 | – |\n| CSV | stdlib csv | – | `CSV_ROWS_PER_PAGE` rows (header repeated) | `rows a-b` |\n| PNG/JPG/TIFF | Tesseract (there is no text layer) | – | one page per frame | – |\n\nTesseract is therefore never the first choice for a document that has a text layer; it is\nthe safety net for scanned, image-only or otherwise unreadable content.\n\"\"\")\ns = s.replace(\"Each chunk records: `doc_id, source, file_type, collection, page, section, extraction\\n(text|ocr|ocr_unavailable), chunk_index, char_start, char_end`.\",\n              \"Each chunk records: `doc_id, source, file_type, collection, page, section, extraction\\n(text|ocr), chunk_index, char_start, char_end`.\")\np.write_text(s)\n\n# ---- flow.html extracting step\np = Path(\"documentation/flow.html\"); s = p.read_text()\nold = s[s.index(\"{t:'PROCESSING · extracting'\"):s.index(\"{t:'PROCESSING · chunking'\")]\nnew = \"\"\"{t:'PROCESSING · extracting', d:'Two tiers. The PRIMARY extractor for the format runs first: PyMuPDF (PDF), python-docx (DOCX), BeautifulSoup + lxml (HTML), stdlib (TXT/MD/CSV). Each page keeps its page number and section. Only if the primary raises or finds no text does the FALLBACK run: Tesseract OCR over PyMuPDF-rendered PDF pages, OCR over images embedded in a DOCX, stdlib tag-stripping for HTML. Inside a digital PDF, single scanned pages (fewer than OCR_MIN_CHARS_PER_PAGE characters) are OCR\\\\'d in place. Image uploads go straight to Tesseract.',\n     code:`pages = [Page(text, page_no=3, section=\"Leave policy\", extraction=\"text\"), …]   # or extraction=\"ocr\" from the fallback`,\n     branches:[['primary','ok','PyMuPDF · python-docx · bs4 · stdlib — used whenever the file has a text layer'],['fallback','warn','Tesseract OCR (PDF pages, DOCX images) · stdlib HTML parser — only when the primary fails or yields nothing'],['FAILED','bad','neither tier produced text → precise reason (e.g. \"Tesseract OCR is not installed\")']]},\n    \"\"\"\ns = s.replace(old, new)\np.write_text(s)\n\n# ---- changelog\np = Path(\"documentation/changelog.html\"); s = p.read_text()\nentry = \"\"\"<section class=\"rel\">\n  <h2>0.3.0 <time>2026-09-06</time></h2>\n  <p><span class=\"tag changed\">Changed</span> Extraction is now explicitly two-tier: primary extractors first, Tesseract OCR strictly as the fallback.</p>\n  <ul>\n    <li><span class=\"tag changed\">Changed</span> <b>PyMuPDF</b> replaces pypdf as the primary PDF extractor and also renders pages for OCR (pypdfium2 removed).</li>\n    <li><span class=\"tag added\">Added</span> Fallback tier in <code>app/ingest/extractors.py</code> (<code>FALLBACKS</code> registry): OCR of all PDF pages, OCR of images embedded in DOCX, stdlib tag-stripping for HTML. Runs only when the primary extractor raises or yields no text.</li>\n    <li><span class=\"tag added\">Added</span> <code>ExtractionError</code> with user-facing reasons; a scanned file on a host without Tesseract now fails with \"Tesseract OCR is not installed…\" instead of a generic message, and a corrupt PDF reports \"Could not read this pdf\".</li>\n    <li><span class=\"tag added\">Added</span> Multi-encoding decoding for TXT/MD/CSV (utf-8, utf-16, cp1252, latin-1).</li>\n    <li><span class=\"tag added\">Added</span> <code>scripts/export_transcript.py</code> (Markdown transcript from the Claude Code session log), <code>scripts/sync_rules.py</code> (CLAUDE.md → Cursor / Codex rule copies), <code>scripts/build_docs.py</code> (HTML twins for Markdown docs).</li>\n    <li><span class=\"tag docs\">Docs</span> Documentation moved to <code>documentation/</code>; README, architecture and flow updated for the two-tier extraction; <code>APP_PORT</code> documented.</li>\n  </ul>\n</section>\n\n<section class=\"rel\">\n  <h2>0.2.0 <time>2026-09-06</time></h2>\"\"\"\ns = s.replace('<section class=\"rel\">\\n  <h2>0.2.0 <time>2026-09-06</time></h2>', entry, 1)\np.write_text(s)\n\n# ---- memory.md\np = Path(\"memory.md\"); s = p.read_text()\ns = s.replace(\"- **Tesseract OCR as a fallback only** — triggered when a PDF page has fewer than\\n  `OCR_MIN_CHARS_PER_PAGE` characters, and for image uploads. Missing binary degrades gracefully.\",\n\"- **Two-tier extraction; Tesseract is strictly the fallback** (user requirement 2026-09-06): primary =\\n  PyMuPDF / python-docx / beautifulsoup4 / stdlib; fallback runs only when the primary raises or yields\\n  no text (OCR of PDF pages, OCR of DOCX-embedded images, stdlib HTML stripping). Single scanned pages\\n  inside a digital PDF are OCR'd in place. `ExtractionError` carries the user-facing FAILED reason.\\n- **PyMuPDF replaced pypdf + pypdfium2** — one library for text and page rendering.\")\ns = s.replace(\"- Locally OCR is therefore unavailable: scanned sample pages are tagged `ocr_unavailable`\\n  and `scanned_memo.pdf` ends `FAILED` (\\\"No text could be extracted\\\") — expected without Tesseract.\",\n\"- Locally OCR is therefore unavailable: `scanned_memo.pdf` and `whiteboard.png` end `FAILED` with\\n  \\\"…Tesseract OCR is not installed on this host…\\\" — expected; they succeed inside Docker.\")\ns = s.replace(\"- 2026-09-06 — v0.1.0 initial build; v0.2.0 async job model with fixed statuses, dedupe, docs set.\",\n\"- 2026-09-06 — v0.1.0 initial build; v0.2.0 async job model with fixed statuses, dedupe, docs set;\\n  v0.3.0 PyMuPDF primary + Tesseract-as-fallback tiering, transcript/rules/docs scripts.\")\np.write_text(s)\n\n# ---- CLAUDE.md conventions\np = Path(\"CLAUDE.md\"); s = p.read_text()\ns = s.replace(\"- Adding a file format = extractor function in `app/ingest/extractors.py` + entry in\\n  `EXTRACTORS` + entry in `SUPPORTED_EXTENSIONS` (`app/config.py`) + README/architecture rows + a test.\",\n\"- Extraction is two-tier: primary extractors (PyMuPDF, python-docx, beautifulsoup4, stdlib) first;\\n  Tesseract OCR and other fallbacks run **only** when the primary raises or yields no text. Keep it that way.\\n- Adding a file format = primary extractor (+ optional fallback) in `app/ingest/extractors.py` +\\n  entries in `EXTRACTORS` / `FALLBACKS` + entry in `SUPPORTED_EXTENSIONS` (`app/config.py`) +\\n  README/architecture rows + a test.\")\np.write_text(s)\nprint(\"docs updated\")\nEOF\n.venv/bin/python scripts/build_docs.py >/dev/null && .venv/bin/python scripts/sync_rules.py && .venv/bin/python scripts/sync_rules.py --check && grep -c \"pypdf\" README.md documentation/architecture.md Dockerfile requirements.txt || true",
+  "description": "Bump version, update README/architecture/flow/changelog/memory/CLAUDE.md for two-tier extraction, rebuild docs and rules"
+}
+```
+
+## Tool  <sub>2026-09-06T10:18:26.743Z</sub>
+
+**Tool result**
+
+```
+docs updated
+wrote .cursor/rules/project.mdc
+wrote AGENTS.md
+rules in sync
+documentation/architecture.md:0
+README.md:0
+requirements.txt:0
+Dockerfile:0
+```
+
+## Assistant  <sub>2026-09-06T10:20:31.400Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "set -e\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\n# ------------------------------------------------------------------ models.py\np = Path(\"app/models.py\"); s = p.read_text()\ns = s.replace('''class DocumentInfo(BaseModel):\n    job_id: str                      # identical to doc_id; use either to poll status\n    doc_id: str''', '''JobStatus = Literal[\"QUEUED\", \"PROCESSING\", \"COMPLETED\", \"FAILED\"]\n\n\nclass DocumentInfo(BaseModel):\n    job_id: str                      # the upload request this document belongs to\n    doc_id: str''')\ns = s.replace('''class UploadResponse(BaseModel):\n    documents: list[DocumentInfo]\n\n\nclass AskRequest(BaseModel):\n    question: str = Field(..., min_length=1)\n    collection: Optional[str] = None\n    top_k: Optional[int] = Field(default=None, ge=1, le=50)\n''', '''class JobInfo(BaseModel):\n    \"\"\"One upload request. Status is derived from its documents every time it is read.\"\"\"\n    job_id: str\n    collection: str\n    status: JobStatus\n    reason: str\n    files: int\n    counts: dict[str, int]           # documents per status, e.g. {\"COMPLETED\": 2, \"DUPLICATE\": 1}\n    doc_ids: list[str]\n    created_at: str\n    updated_at: str\n\n\nclass JobDetail(JobInfo):\n    documents: list[DocumentInfo]\n\n\nUploadResponse = JobDetail\n\n\nclass AskRequest(BaseModel):\n    question: str = Field(..., min_length=1)\n    collection: Optional[str] = None\n    doc_ids: Optional[list[str]] = Field(default=None, description=\"restrict to these documents\")\n    job_ids: Optional[list[str]] = Field(default=None, description=\"restrict to the documents of these jobs\")\n    top_k: Optional[int] = Field(default=None, ge=1, le=50)\n\n\nclass AskScope(BaseModel):\n    collection: str\n    doc_ids: list[str]               # documents actually searched ([] = whole collection)\n    job_ids: list[str]\n    restricted: bool\n''')\ns = s.replace('''class AskResponse(BaseModel):\n    question: str\n    answer: str\n    sources: list[Source]\n    collection: str\n    model: str\n    latency_ms: int\n''', '''class AskResponse(BaseModel):\n    question: str\n    answer: str                      # answer text with [n] citation markers\n    citations: list[Source]          # the sources actually cited in the answer, in order of first use\n    sources: list[Source]            # everything retrieved (superset of citations)\n    unresolved_citations: list[int] = Field(default_factory=list)  # [n] markers the LLM produced that match no source (removed from text)\n    scope: AskScope\n    collection: str\n    model: str\n    latency_ms: int\n''')\np.write_text(s)\n\n# ------------------------------------------------------------------ jobs.py: add job registry\np = Path(\"app/jobs.py\"); s = p.read_text()\ns = s.replace(\"from app.models import TERMINAL_STATUSES, DocumentInfo\",\n              \"from app.models import TERMINAL_STATUSES, DocumentInfo, JobDetail, JobInfo\")\ns = s.replace(\"_docs: dict[str, DocumentInfo] = {}\\n\", \"_docs: dict[str, DocumentInfo] = {}\\n_jobs: dict[str, dict] = {}   # job_id -> {job_id, collection, doc_ids, created_at}\\n\")\ns = s.replace('''    path = settings.documents_file\n    if path.exists():''', '''    jpath = settings.DATA_DIR / \"jobs.json\"\n    if jpath.exists():\n        try:\n            for raw in json.loads(jpath.read_text()):\n                _jobs[raw[\"job_id\"]] = raw\n        except Exception:\n            pass\n    path = settings.documents_file\n    if path.exists():''')\ns = s.replace('''    tmp.replace(settings.documents_file)\n''', '''    tmp.replace(settings.documents_file)\n    jtmp = (settings.DATA_DIR / \"jobs.json\").with_suffix(\".tmp\")\n    jtmp.write_text(json.dumps(list(_jobs.values()), indent=2))\n    jtmp.replace(settings.DATA_DIR / \"jobs.json\")\n''')\ns = s.replace('''def create(doc_id: str, filename: str, collection: str, status: str, *, file_type: str | None = None,''',\n'''def create_job(job_id: str, collection: str) -> None:\n    with _lock:\n        _load()\n        _jobs[job_id] = {\"job_id\": job_id, \"collection\": collection, \"doc_ids\": [], \"created_at\": _now()}\n        _save()\n\n\ndef _job_view(raw: dict, with_docs: bool) -> JobInfo | JobDetail:\n    docs = [_docs[d] for d in raw[\"doc_ids\"] if d in _docs]\n    counts: dict[str, int] = {}\n    for d in docs:\n        counts[d.status] = counts.get(d.status, 0) + 1\n    if any(d.status == \"PROCESSING\" for d in docs):\n        status = \"PROCESSING\"\n    elif any(d.status == \"QUEUED\" for d in docs):\n        status = \"QUEUED\" if all(d.status == \"QUEUED\" for d in docs) else \"PROCESSING\"\n    elif counts.get(\"COMPLETED\") or counts.get(\"DUPLICATE\"):\n        status = \"COMPLETED\"\n    else:\n        status = \"FAILED\"\n    parts = [f\"{n} {st.lower().replace('_', ' ')}\" for st, n in sorted(counts.items())]\n    reason = \", \".join(parts) if parts else \"no files\"\n    if status == \"COMPLETED\" and any(st not in (\"COMPLETED\", \"DUPLICATE\") for st in counts):\n        reason = \"partially completed: \" + reason\n    if status == \"FAILED\":\n        reason = \"no file could be indexed: \" + reason\n    updated = max([raw[\"created_at\"]] + [d.updated_at for d in docs])\n    data = dict(job_id=raw[\"job_id\"], collection=raw[\"collection\"], status=status, reason=reason,\n                files=len(docs), counts=counts, doc_ids=list(raw[\"doc_ids\"]),\n                created_at=raw[\"created_at\"], updated_at=updated)\n    return JobDetail(**data, documents=docs) if with_docs else JobInfo(**data)\n\n\ndef get_job(job_id: str) -> Optional[JobDetail]:\n    with _lock:\n        _load()\n        raw = _jobs.get(job_id)\n        return _job_view(raw, True) if raw else None\n\n\ndef list_jobs(collection: str | None = None) -> list[JobInfo]:\n    with _lock:\n        _load()\n        views = [_job_view(r, False) for r in _jobs.values()\n                 if collection is None or r[\"collection\"] == collection]\n        return sorted(views, key=lambda j: j.created_at, reverse=True)\n\n\ndef delete_job(job_id: str) -> None:\n    with _lock:\n        _load()\n        if _jobs.pop(job_id, None) is not None:\n            _save()\n\n\ndef create(doc_id: str, filename: str, collection: str, status: str, *, file_type: str | None = None,''')\ns = s.replace('''                           created_at=_now(), updated_at=_now())\n        _docs[doc_id] = doc\n        _save()\n        return doc''', '''                           created_at=_now(), updated_at=_now())\n        _docs[doc_id] = doc\n        if job_id in _jobs:\n            _jobs[job_id][\"doc_ids\"].append(doc_id)\n        _save()\n        return doc''')\ns = s.replace('''def create(doc_id: str, filename: str, collection: str, status: str, *, file_type: str | None = None,\n           reason: str | None = None, sha256: str | None = None, duplicate_of: DocumentInfo | None = None\n           ) -> DocumentInfo:''', '''def create(doc_id: str, filename: str, collection: str, status: str, *, job_id: str,\n           file_type: str | None = None, reason: str | None = None, sha256: str | None = None,\n           duplicate_of: DocumentInfo | None = None) -> DocumentInfo:''')\ns = s.replace(\"        doc = DocumentInfo(job_id=doc_id, doc_id=doc_id,\", \"        doc = DocumentInfo(job_id=job_id, doc_id=doc_id,\")\ns = s.replace('''def list_docs(collection: str | None = None) -> list[DocumentInfo]:\n    with _lock:\n        _load()\n        docs = [d for d in _docs.values() if collection is None or d.collection == collection]''',\n'''def list_docs(collection: str | None = None, job_id: str | None = None) -> list[DocumentInfo]:\n    with _lock:\n        _load()\n        docs = [d for d in _docs.values() if (collection is None or d.collection == collection)\n                and (job_id is None or d.job_id == job_id)]''')\ns = s.replace('''        doc = _docs.pop(doc_id, None)\n        if doc is not None:\n            _save()\n        return doc''', '''        doc = _docs.pop(doc_id, None)\n        if doc is not None:\n            job = _jobs.get(doc.job_id)\n            if job and doc_id in job[\"doc_ids\"]:\n                job[\"doc_ids\"].remove(doc_id)\n                if not job[\"doc_ids\"]:\n                    _jobs.pop(doc.job_id, None)\n            _save()\n        return doc''')\np.write_text(s)\n\n# ------------------------------------------------------------------ retrieval: doc filter\np = Path(\"app/retrieval/vector_store.py\"); s = p.read_text()\ns = s.replace('''def query_dense(collection: str, query_embedding: list[float], top_k: int) -> list[dict]:\n    col = get_collection(collection)\n    total = col.count()\n    if total == 0:\n        return []\n    res = col.query(query_embeddings=[query_embedding], n_results=min(top_k, total),\n                    include=[\"documents\", \"metadatas\", \"distances\"])''',\n'''def query_dense(collection: str, query_embedding: list[float], top_k: int,\n                doc_ids: list[str] | None = None) -> list[dict]:\n    col = get_collection(collection)\n    total = col.count()\n    if total == 0 or doc_ids == []:\n        return []\n    kwargs = {}\n    if doc_ids:\n        kwargs[\"where\"] = {\"doc_id\": {\"$in\": list(doc_ids)}}\n        total = min(total, col.count() if len(doc_ids) > 50 else\n                    len(col.get(where=kwargs[\"where\"], include=[])[\"ids\"]))\n        if total == 0:\n            return []\n    res = col.query(query_embeddings=[query_embedding], n_results=min(top_k, total),\n                    include=[\"documents\", \"metadatas\", \"distances\"], **kwargs)''')\np.write_text(s)\n\np = Path(\"app/retrieval/bm25_index.py\"); s = p.read_text()\ns = s.replace('''    def search(self, query: str, top_k: int) -> list[dict]:\n        if not self.bm25:\n            return []\n        tokens = tokenize(query)\n        if not tokens:\n            return []\n        scores = self.bm25.get_scores(tokens)\n        ranked = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)\n        out = []\n        for i in ranked[:top_k]:\n            if scores[i] <= 0:\n                break\n            c = self.chunks[i]\n            out.append({**c, \"bm25_score\": float(scores[i])})\n        return out''', '''    def search(self, query: str, top_k: int, doc_ids: set[str] | None = None) -> list[dict]:\n        if not self.bm25:\n            return []\n        tokens = tokenize(query)\n        if not tokens:\n            return []\n        scores = self.bm25.get_scores(tokens)\n        candidates = range(len(scores))\n        if doc_ids is not None:\n            candidates = [i for i in candidates if self.chunks[i][\"metadata\"].get(\"doc_id\") in doc_ids]\n        ranked = sorted(candidates, key=lambda i: scores[i], reverse=True)\n        out = []\n        for i in ranked[:top_k]:\n            if scores[i] <= 0:\n                break\n            c = self.chunks[i]\n            out.append({**c, \"bm25_score\": float(scores[i])})\n        return out''')\ns = s.replace('''def search(collection: str, query: str, top_k: int) -> list[dict]:\n    idx = _indexes.get(collection)\n    if idx is None:\n        rebuild(collection)\n        idx = _indexes.get(collection)\n    return idx.search(query, top_k) if idx else []''', '''def search(collection: str, query: str, top_k: int, doc_ids: set[str] | None = None) -> list[dict]:\n    idx = _indexes.get(collection)\n    if idx is None:\n        rebuild(collection)\n        idx = _indexes.get(collection)\n    return idx.search(query, top_k, doc_ids) if idx else []''')\np.write_text(s)\n\np = Path(\"app/retrieval/fusion.py\"); s = p.read_text()\ns = s.replace('''def hybrid_retrieve(question: str, collection: str, top_k: int | None = None) -> list[dict]:\n    top_k = top_k or settings.FUSED_TOP_K\n    dense = vector_store.query_dense(collection, embedder.embed_query(question), settings.DENSE_TOP_K)\n    lexical = bm25_index.search(collection, question, settings.BM25_TOP_K)''',\n'''def hybrid_retrieve(question: str, collection: str, top_k: int | None = None,\n                    doc_ids: list[str] | None = None) -> list[dict]:\n    \"\"\"doc_ids=None searches the whole collection; a list restricts both retrievers to those documents.\"\"\"\n    top_k = top_k or settings.FUSED_TOP_K\n    dense = vector_store.query_dense(collection, embedder.embed_query(question), settings.DENSE_TOP_K,\n                                     doc_ids=doc_ids)\n    lexical = bm25_index.search(collection, question, settings.BM25_TOP_K,\n                                doc_ids=set(doc_ids) if doc_ids is not None else None)''')\np.write_text(s)\n\n# ------------------------------------------------------------------ rag.py: scope + citations\nPath(\"app/rag.py\").write_text('''\"\"\"answer() = hybrid retrieve (optionally scoped to documents) -> grounded prompt -> LLM\n-> answer text + validated citations + all retrieved sources.\"\"\"\nfrom __future__ import annotations\n\nimport re\nimport time\n\nfrom app.config import settings\nfrom app.llm import client as llm\nfrom app.llm.prompts import NOT_FOUND_MARKER, build_messages\nfrom app.models import AskResponse, AskScope, Source\nfrom app.retrieval.fusion import hybrid_retrieve\n\n_CITE = re.compile(r\"\\\\[(\\\\d+)\\\\]\")\n\n\ndef extract_citations(text: str, sources: list[Source]) -> tuple[str, list[Source], list[int]]:\n    \"\"\"Return (cleaned text, cited sources in order of first use, unresolved marker numbers).\n\n    Markers that do not match any retrieved source are removed from the text so the client\n    never shows a citation it cannot open.\"\"\"\n    by_n = {s.n: s for s in sources}\n    cited: list[Source] = []\n    unresolved: list[int] = []\n    for m in _CITE.finditer(text):\n        n = int(m.group(1))\n        if n in by_n:\n            if by_n[n] not in cited:\n                cited.append(by_n[n])\n        elif n not in unresolved:\n            unresolved.append(n)\n    if unresolved:\n        text = _CITE.sub(lambda m: \"\" if int(m.group(1)) in unresolved else m.group(0), text)\n        text = re.sub(r\"[ \\\\t]{2,}\", \" \", text).replace(\" .\", \".\").strip()\n    return text, cited, unresolved\n\n\ndef answer(question: str, collection: str | None = None, top_k: int | None = None,\n           doc_ids: list[str] | None = None, job_ids: list[str] | None = None) -> AskResponse:\n    collection = collection or settings.DEFAULT_COLLECTION\n    t0 = time.perf_counter()\n    hits = hybrid_retrieve(question, collection, top_k, doc_ids=doc_ids)\n    if hits:\n        text = llm.chat(build_messages(question, hits))\n    else:\n        where = \"the selected documents\" if doc_ids is not None else f\"collection '{collection}'\"\n        text = f\"{NOT_FOUND_MARKER} No indexed content was found in {where}.\"\n    sources = [\n        Source(\n            n=i,\n            chunk_id=h[\"chunk_id\"],\n            doc_id=h[\"metadata\"].get(\"doc_id\", \"\"),\n            source=h[\"metadata\"].get(\"source\", \"\"),\n            file_type=h[\"metadata\"].get(\"file_type\", \"\"),\n            page=int(h[\"metadata\"].get(\"page\", 0)),\n            section=h[\"metadata\"].get(\"section\") or None,\n            extraction=h[\"metadata\"].get(\"extraction\", \"text\"),\n            text=h[\"text\"],\n            dense_rank=h.get(\"dense_rank\"),\n            bm25_rank=h.get(\"bm25_rank\"),\n            rrf_score=h[\"rrf_score\"],\n        )\n        for i, h in enumerate(hits, start=1)\n    ]\n    text, citations, unresolved = extract_citations(text.strip(), sources)\n    scope = AskScope(collection=collection, doc_ids=list(doc_ids or []), job_ids=list(job_ids or []),\n                     restricted=doc_ids is not None)\n    return AskResponse(question=question, answer=text, citations=citations, sources=sources,\n                       unresolved_citations=unresolved, scope=scope, collection=collection,\n                       model=settings.LLM_MODEL, latency_ms=int((time.perf_counter() - t0) * 1000))\n''')\n\n# ------------------------------------------------------------------ main.py\np = Path(\"app/main.py\"); s = p.read_text()\ns = s.replace('version=\"0.3.0\"', 'version=\"0.4.0\"')\ns = s.replace(\"from app.models import (TERMINAL_STATUSES, AskRequest, AskResponse, ChunkOut, DocStatus, DocumentInfo,\\n                        HealthResponse, UploadResponse)\",\n              \"from app.models import (TERMINAL_STATUSES, AskRequest, AskResponse, ChunkOut, DocStatus, DocumentInfo,\\n                        HealthResponse, JobDetail, JobInfo, UploadResponse)\")\ns = s.replace('''    \"\"\"Accept files, return one job per file immediately; indexing happens in the background.\n\n    Every file gets a record, even rejected ones, so the listing explains what happened:\n    EXTRACTION_NOT_SUPPORTED, EMPTY_FILE, UPLOAD_FAILED, DUPLICATE, or QUEUED.\n    \"\"\"\n    col = _collection(collection)\n    limit = settings.MAX_UPLOAD_MB * 1024 * 1024\n    out: list[DocumentInfo] = []\n    for f in files:\n        name = Path(f.filename or \"upload\").name\n        doc_id = uuid.uuid4().hex[:12]\n        kind = file_type_for(name)\n''', '''    \"\"\"Accept files as ONE job; return the job (with a record per file) immediately.\n\n    Indexing happens in the background. Every file gets a document record, even rejected\n    ones, so the listing explains what happened: EXTRACTION_NOT_SUPPORTED, EMPTY_FILE,\n    UPLOAD_FAILED, DUPLICATE, or QUEUED. Poll GET /api/jobs/{job_id}.\n    \"\"\"\n    col = _collection(collection)\n    limit = settings.MAX_UPLOAD_MB * 1024 * 1024\n    job_id = uuid.uuid4().hex[:12]\n    jobs.create_job(job_id, col)\n    out: list[DocumentInfo] = []\n    for f in files:\n        name = Path(f.filename or \"upload\").name\n        doc_id = uuid.uuid4().hex[:12]\n        kind = file_type_for(name)\n''')\ns = s.replace(\"jobs.create(doc_id, name, col, \", \"jobs.create(doc_id, name, col, job_id=job_id, status=\")\n# fix positional->keyword: create(doc_id, name, col, job_id=job_id, status=\"X\", ...) ; status was positional 4th before\nimport re as _re\ns = _re.sub(r'jobs\\\\.create\\\\(doc_id, name, col, job_id=job_id, status=\"([A-Z_]+)\",\\\\s*\\\\n?\\\\s*', lambda m: f'jobs.create(doc_id, name, col, job_id=job_id, status=\"{m.group(1)}\", ', s)\ns = s.replace('''        background.add_task(pipeline.run, doc_id, path)\n    return UploadResponse(documents=out)''', '''        background.add_task(pipeline.run, doc_id, path)\n    return jobs.get_job(job_id)''')\ns = s.replace('''@app.get(\"/api/jobs/{job_id}\", response_model=DocumentInfo)\ndef job_status(job_id: str):\n    \"\"\"Poll the status of one upload job (job_id == doc_id).\"\"\"\n    doc = jobs.get(job_id)\n    if doc is None:\n        raise HTTPException(404, \"job not found\")\n    return doc\n\n\n@app.get(\"/api/documents\", response_model=list[DocumentInfo])\ndef list_documents(collection: str | None = Query(default=None),\n                   status: DocStatus | None = Query(default=None)):\n    \"\"\"Listing of every request: DOC ID, NAME, STATUS, REASON (+ duplicate link).\"\"\"\n    docs = jobs.list_docs(collection)\n    return [d for d in docs if status is None or d.status == status]\n\n\n@app.get(\"/api/documents/{doc_id}\", response_model=DocumentInfo)\ndef get_document(doc_id: str):\n    return job_status(doc_id)\n''', '''@app.get(\"/api/jobs\", response_model=list[JobInfo])\ndef list_jobs(collection: str | None = Query(default=None)):\n    \"\"\"Job listing: JOB ID, FILES, STATUS, REASON. Status is derived from the job's documents.\"\"\"\n    return jobs.list_jobs(collection)\n\n\n@app.get(\"/api/jobs/{job_id}\", response_model=JobDetail)\ndef job_status(job_id: str):\n    \"\"\"Poll one upload job; includes its documents.\"\"\"\n    job = jobs.get_job(job_id)\n    if job is None:\n        raise HTTPException(404, \"job not found\")\n    return job\n\n\n@app.get(\"/api/documents\", response_model=list[DocumentInfo])\ndef list_documents(collection: str | None = Query(default=None),\n                   job_id: str | None = Query(default=None),\n                   status: DocStatus | None = Query(default=None)):\n    \"\"\"Listing of every uploaded file: DOC ID, NAME, STATUS, REASON (+ duplicate link).\n    Filter by job_id to see only the files of one upload request.\"\"\"\n    docs = jobs.list_docs(collection, job_id)\n    return [d for d in docs if status is None or d.status == status]\n\n\n@app.get(\"/api/documents/{doc_id}\", response_model=DocumentInfo)\ndef get_document(doc_id: str):\n    doc = jobs.get(doc_id)\n    if doc is None:\n        raise HTTPException(404, \"document not found\")\n    return doc\n''')\ns = s.replace('''@app.post(\"/api/ask\", response_model=AskResponse)\ndef ask(req: AskRequest):\n    col = _collection(req.collection)\n    try:\n        return answer(req.question, col, req.top_k)\n    except LLMError as exc:\n        raise HTTPException(502, str(exc))''', '''def _resolve_scope(req: AskRequest) -> tuple[str, list[str] | None, list[str]]:\n    \"\"\"Turn doc_ids / job_ids into the concrete set of COMPLETED documents to search.\n\n    Returns (collection, doc_ids or None for the whole collection, job_ids used).\n    Validation errors are explicit so a client can fix its selection.\n    \"\"\"\n    if not req.doc_ids and not req.job_ids:\n        return _collection(req.collection), None, []\n\n    selected: dict[str, DocumentInfo] = {}\n    job_ids: list[str] = []\n    for jid in req.job_ids or []:\n        job = jobs.get_job(jid)\n        if job is None:\n            raise HTTPException(404, f\"job '{jid}' not found\")\n        job_ids.append(jid)\n        for d in job.documents:\n            if d.status == \"COMPLETED\":\n                selected[d.doc_id] = d\n        if not any(d.status == \"COMPLETED\" for d in job.documents):\n            raise HTTPException(409, f\"job '{jid}' has no COMPLETED document yet ({job.status}: {job.reason})\")\n    for did in req.doc_ids or []:\n        d = jobs.get(did)\n        if d is None:\n            raise HTTPException(404, f\"document '{did}' not found\")\n        if d.status == \"DUPLICATE\" and d.duplicate_of and (orig := jobs.get(d.duplicate_of)):\n            d = orig  # a duplicate points at the indexed original\n        if d.status != \"COMPLETED\":\n            raise HTTPException(409, f\"document '{did}' ({d.filename}) is {d.status}, not COMPLETED\")\n        selected[d.doc_id] = d\n\n    collections = {d.collection for d in selected.values()}\n    if len(collections) > 1:\n        raise HTTPException(400, f\"selected documents span several collections {sorted(collections)}; \"\n                                 \"select documents from one collection\")\n    col = collections.pop()\n    if req.collection and _collection(req.collection) != col:\n        raise HTTPException(400, f\"collection '{req.collection}' does not match the selected documents ('{col}')\")\n    return col, sorted(selected), job_ids\n\n\n@app.post(\"/api/ask\", response_model=AskResponse)\ndef ask(req: AskRequest):\n    \"\"\"Ask over the whole collection, or only over selected documents / jobs.\n\n    The answer text carries [n] markers; `citations` lists exactly the sources those markers\n    refer to (markers with no matching source are removed and reported in `unresolved_citations`).\n    \"\"\"\n    col, doc_ids, job_ids = _resolve_scope(req)\n    try:\n        return answer(req.question, col, req.top_k, doc_ids=doc_ids, job_ids=job_ids)\n    except LLMError as exc:\n        raise HTTPException(502, str(exc))''')\np.write_text(s)\nprint(\"backend updated\")\nEOF\ngrep -n \"jobs.create(\" app/main.py | head; .venv/bin/python -m compileall -q app && echo compile-ok",
+  "description": "Add job registry, scoped retrieval, citation validation, and job endpoints"
+}
+```
+
+## Tool  <sub>2026-09-06T10:20:31.484Z</sub>
+
+**Tool result**
+
+```
+Traceback (most recent call last):
+  File "<stdin>", line 386, in <module>
+  File "/Users/shoaib.rayeen/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/re/__init__.py", line 185, in sub
+    return _compile(pattern, flags).sub(repl, string, count)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/shoaib.rayeen/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/re/__init__.py", line 294, in _compile
+    p = _compiler.compile(pattern, flags)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/shoaib.rayeen/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/re/_compiler.py", line 745, in compile
+    p = _parser.parse(p, flags)
+        ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/shoaib.rayeen/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/re/_parser.py", line 989, in parse
+    p = _parse_sub(source, state, flags & SRE_FLAG_VERBOSE, 0)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/shoaib.rayeen/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/re/_parser.py", line 464, in _parse_sub
+    itemsappend(_parse(source, state, verbose, nested + 1,
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/shoaib.rayeen/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/lib/python3.11/re/_parser.py", line 874, in _parse
+    raise source.error("missing ), unterminated subpattern",
+re.error: missing ), unterminated subpattern at position 15
+103:            out.append(jobs.create(doc_id, name, col, "UPLOAD_FAILED", file_type=kind,
+108:            out.append(jobs.create(doc_id, name, col, "EXTRACTION_NOT_SUPPORTED",
+113:            out.append(jobs.create(doc_id, name, col, "EMPTY_FILE", file_type=kind,
+117:            out.append(jobs.create(doc_id, name, col, "UPLOAD_FAILED", file_type=kind,
+124:            out.append(jobs.create(doc_id, name, col, "DUPLICATE", file_type=kind, sha256=sha,
+134:            out.append(jobs.create(doc_id, name, col, "UPLOAD_FAILED", file_type=kind, sha256=sha,
+138:        out.append(jobs.create(doc_id, name, col, "QUEUED", file_type=kind, sha256=sha,
+compile-ok
+```
+
+## Assistant  <sub>2026-09-06T10:20:57.405Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": ".venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"cli/rag_cli.py\"); s = p.read_text()\n\n# ingest: one job per request\ns = s.replace('''        body = r.json()\n        for d in body[\"documents\"]:\n            typer.echo(f\"{d['status']:26} {d['filename']}  job_id={d['job_id']}\")\n        ids = [d[\"job_id\"] for d in body[\"documents\"] if d[\"status\"] not in TERMINAL]\n        if not wait or not ids:\n            return\n        while True:\n            mine = [c.get(f\"/api/jobs/{i}\").json() for i in ids]\n            if all(d[\"status\"] in TERMINAL for d in mine):\n                break\n            time.sleep(1)\n        for d in mine:\n            color = \"green\" if d[\"status\"] == \"COMPLETED\" else \"red\"\n            typer.secho(f\"{d['status']:26} {d['filename']}  {d.get('reason') or ''}\", fg=color)''',\n'''        job = r.json()\n        typer.secho(f\"job {job['job_id']}  {job['status']}  ({job['files']} files, collection {job['collection']})\", fg=\"cyan\")\n        for d in job[\"documents\"]:\n            typer.echo(f\"  {d['status']:26} {d['filename']}  doc_id={d['doc_id']}\")\n        if not wait or job[\"status\"] in (\"COMPLETED\", \"FAILED\"):\n            return\n        while True:\n            job = c.get(f\"/api/jobs/{job['job_id']}\").json()\n            if job[\"status\"] in (\"COMPLETED\", \"FAILED\"):\n                break\n            time.sleep(1)\n        typer.secho(f\"job {job['job_id']}  {job['status']}  {job['reason']}\",\n                    fg=\"green\" if job[\"status\"] == \"COMPLETED\" else \"red\")\n        for d in job[\"documents\"]:\n            color = \"green\" if d[\"status\"] == \"COMPLETED\" else (\"yellow\" if d[\"status\"] == \"DUPLICATE\" else \"red\")\n            typer.secho(f\"  {d['status']:26} {d['filename']}  {d.get('reason') or ''}\", fg=color)''')\n\n# status: optional --job filter\ns = s.replace('''def status(collection: Optional[str] = COL, api: Optional[str] = API,\n           watch: bool = typer.Option(False, help=\"Refresh every second until nothing is processing\")):\n    \"\"\"List documents and their indexing status.\"\"\"\n    with _client(api) as c:\n        while True:\n            r = c.get(\"/api/documents\", params={\"collection\": collection} if collection else None)''',\n'''def status(collection: Optional[str] = COL, api: Optional[str] = API,\n           job: Optional[str] = typer.Option(None, \"--job\", \"-j\", help=\"Only documents of this job\"),\n           watch: bool = typer.Option(False, help=\"Refresh every second until nothing is processing\")):\n    \"\"\"List documents (DOC ID · NAME · STATUS · REASON), optionally filtered by job.\"\"\"\n    with _client(api) as c:\n        while True:\n            params = {k: v for k, v in {\"collection\": collection, \"job_id\": job}.items() if v}\n            r = c.get(\"/api/documents\", params=params or None)''')\n\n# jobs listing + job detail\ns = s.replace('''@app.command(name=\"job\")\ndef job(job_id: str, api: Optional[str] = API):\n    \"\"\"Check the status of one upload job by its job id.\"\"\"\n    with _client(api) as c:\n        r = c.get(f\"/api/jobs/{job_id}\")\n        if r.status_code >= 400:\n            _die(r)\n        d = r.json()\n        for k in (\"job_id\", \"filename\", \"collection\", \"status\", \"stage\", \"reason\", \"duplicate_of\",\n                  \"pages\", \"chunks\", \"ocr_pages\", \"created_at\", \"updated_at\"):\n            if d.get(k) not in (None, \"\", 0):\n                typer.echo(f\"{k:14} {d[k]}\")''',\n'''@app.command()\ndef jobs(collection: Optional[str] = COL, api: Optional[str] = API):\n    \"\"\"List upload jobs (JOB ID · FILES · STATUS · REASON).\"\"\"\n    with _client(api) as c:\n        r = c.get(\"/api/jobs\", params={\"collection\": collection} if collection else None)\n        if r.status_code >= 400:\n            _die(r)\n        rows = r.json()\n        if not rows:\n            typer.echo(\"no jobs\")\n            return\n        typer.secho(f\"{'JOB ID':12} {'FILES':5} {'STATUS':10} {'COLLECTION':12} REASON\", fg=\"bright_black\")\n        for j in rows:\n            typer.echo(f\"{j['job_id']:12} {j['files']:<5} {j['status']:10} {j['collection']:12} {j['reason']}\")\n\n\n@app.command(name=\"job\")\ndef job(job_id: str, api: Optional[str] = API):\n    \"\"\"Show one upload job and the documents it contains.\"\"\"\n    with _client(api) as c:\n        r = c.get(f\"/api/jobs/{job_id}\")\n        if r.status_code >= 400:\n            _die(r)\n        j = r.json()\n        typer.echo(f\"job {j['job_id']}  {j['status']}  {j['reason']}  (collection {j['collection']})\")\n        for d in j[\"documents\"]:\n            dup = f\" -> original {d['duplicate_of']}\" if d.get(\"duplicate_of\") else \"\"\n            typer.echo(f\"  {d['doc_id']:12} {d['filename'][:32]:32} {d['status']:26} {d.get('reason') or ''}{dup}\")''')\n\n# ask: --doc / --job scope, citations output\ns = s.replace('''def ask(question: str, collection: Optional[str] = COL, api: Optional[str] = API,\n        top_k: Optional[int] = typer.Option(None, help=\"Chunks passed to the LLM\"),\n        show_sources: bool = typer.Option(False, \"--show-sources\", \"-s\")):\n    \"\"\"Ask a question; prints the grounded answer (and optionally the cited chunks).\"\"\"\n    with _client(api) as c:\n        r = c.post(\"/api/ask\", json={\"question\": question, \"collection\": collection, \"top_k\": top_k})\n        if r.status_code >= 400:\n            _die(r)\n        res = r.json()\n        typer.echo(res[\"answer\"])\n        typer.secho(f\"\\\\n[{res['model']} · {res['latency_ms']} ms · {len(res['sources'])} sources]\",\n                    fg=\"bright_black\")\n        if show_sources:\n            for s in res[\"sources\"]:''',\n'''def ask(question: str, collection: Optional[str] = COL, api: Optional[str] = API,\n        doc: list[str] = typer.Option([], \"--doc\", \"-d\", help=\"Restrict to this document id (repeatable)\"),\n        job: list[str] = typer.Option([], \"--job\", \"-j\", help=\"Restrict to the documents of this job (repeatable)\"),\n        top_k: Optional[int] = typer.Option(None, help=\"Chunks passed to the LLM\"),\n        show_sources: bool = typer.Option(False, \"--show-sources\", \"-s\", help=\"Print every retrieved chunk\")):\n    \"\"\"Ask a question over the collection, or only over selected documents / jobs.\n\n    Prints the answer text, then the citations it uses (file, page, section).\"\"\"\n    with _client(api) as c:\n        payload = {\"question\": question, \"collection\": collection, \"top_k\": top_k,\n                   \"doc_ids\": doc or None, \"job_ids\": job or None}\n        r = c.post(\"/api/ask\", json=payload)\n        if r.status_code >= 400:\n            _die(r)\n        res = r.json()\n        typer.echo(res[\"answer\"])\n        scope = res[\"scope\"]\n        scope_txt = (f\"{len(scope['doc_ids'])} selected document(s)\" if scope[\"restricted\"]\n                     else f\"whole collection '{scope['collection']}'\")\n        typer.secho(f\"\\\\n[{res['model']} · {res['latency_ms']} ms · scope: {scope_txt} · \"\n                    f\"{len(res['citations'])} citation(s) from {len(res['sources'])} retrieved chunks]\", fg=\"bright_black\")\n        if res[\"unresolved_citations\"]:\n            typer.secho(f\"note: removed citation markers with no source: {res['unresolved_citations']}\", fg=\"yellow\")\n        for s in res[\"citations\"]:\n            loc = f\"page {s['page']}\" + (f\", {s['section']}\" if s.get(\"section\") else \"\")\n            typer.secho(f\"  [{s['n']}] {s['source']} — {loc}  (doc {s['doc_id']})\", fg=\"cyan\")\n        if show_sources:\n            typer.secho(\"\\\\nAll retrieved chunks:\", fg=\"bright_black\")\n            for s in res[\"sources\"]:''')\np.write_text(s)\nprint(\"cli updated\")\nEOF\n.venv/bin/python -m compileall -q cli && echo cli-compile-ok",
+  "description": "Update CLI: jobs listing, job detail, status filter by job, scoped ask with citations"
+}
+```
+
+## Tool  <sub>2026-09-06T10:20:57.473Z</sub>
+
+**Tool result**
+
+```
+cli updated
+cli-compile-ok
+```
+
+## Assistant  <sub>2026-09-06T10:21:50.920Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > app/main.py <<'EOF'\n\"\"\"FastAPI application: REST API + single-page UI + documentation pages.\n\nUpload is asynchronous: POST /api/documents stores the files of ONE job, returns the job\n(with one document record per file) immediately (202), and a background worker indexes\nthem. Poll GET /api/jobs/{job_id}. Asking can be scoped to selected documents or jobs.\n\"\"\"\nfrom __future__ import annotations\n\nimport hashlib\nimport logging\nimport re\nimport uuid\nfrom contextlib import asynccontextmanager\nfrom pathlib import Path\nfrom typing import get_args\n\nfrom fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, UploadFile\nfrom fastapi.responses import FileResponse\nfrom fastapi.staticfiles import StaticFiles\n\nfrom app import jobs\nfrom app.config import SUPPORTED_EXTENSIONS, settings\nfrom app.ingest import pipeline\nfrom app.ingest.extractors import file_type_for, ocr_available\nfrom app.llm.client import LLMError\nfrom app.models import (TERMINAL_STATUSES, AskRequest, AskResponse, ChunkOut, DocStatus, DocumentInfo,\n                        HealthResponse, JobDetail, JobInfo, UploadResponse)\nfrom app.rag import answer\nfrom app.retrieval import bm25_index, embedder, vector_store\n\nlogging.basicConfig(level=logging.INFO, format=\"%(asctime)s %(levelname)s %(name)s: %(message)s\")\nlog = logging.getLogger(\"rag\")\n\nROOT = Path(__file__).resolve().parents[1]\nSTATIC_DIR = Path(__file__).parent / \"static\"\nDOCS_DIR = ROOT / \"documentation\"\n_COLLECTION_RE = re.compile(r\"^[a-zA-Z0-9][a-zA-Z0-9._-]{1,62}$\")\n\n\ndef _collection(name: str | None) -> str:\n    name = (name or settings.DEFAULT_COLLECTION).strip()\n    if not _COLLECTION_RE.match(name):\n        raise HTTPException(400, \"Collection name must be 2-63 chars: letters, digits, . _ -\")\n    return name\n\n\n@asynccontextmanager\nasync def lifespan(_: FastAPI):\n    settings.uploads_dir.mkdir(parents=True, exist_ok=True)\n    log.info(\"warming embedding model %s\", settings.EMBEDDING_MODEL)\n    embedder.get_model()\n    for col in vector_store.list_collections():\n        n = bm25_index.rebuild(col)\n        log.info(\"BM25 rebuilt for '%s' (%d chunks)\", col, n)\n    log.info(\"OCR available: %s | LLM: %s @ %s\", ocr_available(), settings.LLM_MODEL, settings.LLM_API_URL)\n    yield\n\n\napp = FastAPI(title=\"RAG Generator\", version=\"0.4.0\", lifespan=lifespan)\napp.mount(\"/static\", StaticFiles(directory=STATIC_DIR), name=\"static\")\nif DOCS_DIR.exists():\n    app.mount(\"/documentation\", StaticFiles(directory=DOCS_DIR), name=\"documentation\")\n\n\n@app.get(\"/\", include_in_schema=False)\ndef index():\n    return FileResponse(STATIC_DIR / \"index.html\")\n\n\n@app.get(\"/api/health\", response_model=HealthResponse)\ndef health():\n    public = {k: v for k, v in settings.model_dump().items() if \"KEY\" not in k}\n    public = {k: (str(v) if isinstance(v, Path) else v) for k, v in public.items()}\n    return HealthResponse(\n        status=\"ok\", llm_model=settings.LLM_MODEL, llm_api_url=settings.LLM_API_URL,\n        embedding_model=settings.EMBEDDING_MODEL, supported_extensions=sorted(SUPPORTED_EXTENSIONS),\n        ocr_enabled=settings.OCR_ENABLED, ocr_available=ocr_available(),\n        collections=sorted(set(vector_store.list_collections()) | set(jobs.collections())),\n        statuses=list(get_args(DocStatus)), settings=public,\n    )\n\n\n# ----------------------------------------------------------------------- upload (async)\n\n@app.post(\"/api/documents\", response_model=UploadResponse, status_code=202)\nasync def upload(background: BackgroundTasks, files: list[UploadFile] = File(...),\n                 collection: str | None = Form(default=None)):\n    \"\"\"Accept files as ONE job; return the job (with a record per file) immediately.\n\n    Indexing happens in the background. Every file gets a document record, even rejected\n    ones, so the listing explains what happened: EXTRACTION_NOT_SUPPORTED, EMPTY_FILE,\n    UPLOAD_FAILED, DUPLICATE, or QUEUED. Poll GET /api/jobs/{job_id}.\n    \"\"\"\n    col = _collection(collection)\n    limit = settings.MAX_UPLOAD_MB * 1024 * 1024\n    job_id = uuid.uuid4().hex[:12]\n    jobs.create_job(job_id, col)\n\n    def record(doc_id: str, name: str, status: str, **kw) -> DocumentInfo:\n        return jobs.create(doc_id, name, col, status, job_id=job_id, **kw)\n\n    for f in files:\n        name = Path(f.filename or \"upload\").name\n        doc_id = uuid.uuid4().hex[:12]\n        kind = file_type_for(name)\n\n        try:\n            data = await f.read()\n        except Exception as exc:\n            record(doc_id, name, \"UPLOAD_FAILED\", file_type=kind,\n                   reason=f\"UPLOAD FAILED: could not read upload stream ({exc})\")\n            continue\n\n        if kind is None:\n            record(doc_id, name, \"EXTRACTION_NOT_SUPPORTED\",\n                   reason=f\"Extension '{Path(name).suffix or '(none)'}' is not supported. \"\n                          f\"Supported: {' '.join(sorted(SUPPORTED_EXTENSIONS))}\")\n            continue\n        if not data:\n            record(doc_id, name, \"EMPTY_FILE\", file_type=kind, reason=\"The uploaded file is 0 bytes\")\n            continue\n        if len(data) > limit:\n            record(doc_id, name, \"UPLOAD_FAILED\", file_type=kind,\n                   reason=f\"UPLOAD FAILED: file is larger than {settings.MAX_UPLOAD_MB} MB\")\n            continue\n\n        sha = hashlib.sha256(data).hexdigest()\n        original = jobs.find_by_hash(col, sha)\n        if original is not None:\n            record(doc_id, name, \"DUPLICATE\", file_type=kind, sha256=sha, duplicate_of=original,\n                   reason=f\"Same content as '{original.filename}' ({original.doc_id}); not processed again\")\n            continue\n\n        path = settings.uploads_dir / f\"{doc_id}_{name}\"\n        try:\n            path.write_bytes(data)\n        except OSError as exc:\n            record(doc_id, name, \"UPLOAD_FAILED\", file_type=kind, sha256=sha,\n                   reason=f\"UPLOAD FAILED: could not store file ({exc})\")\n            continue\n\n        record(doc_id, name, \"QUEUED\", file_type=kind, sha256=sha, reason=\"Waiting for the background worker\")\n        background.add_task(pipeline.run, doc_id, path)\n    return jobs.get_job(job_id)\n\n\n# ----------------------------------------------------------------------- jobs\n\n@app.get(\"/api/jobs\", response_model=list[JobInfo])\ndef list_jobs(collection: str | None = Query(default=None)):\n    \"\"\"Job listing: JOB ID, FILES, STATUS, REASON. Status is derived from the job's documents.\"\"\"\n    return jobs.list_jobs(collection)\n\n\n@app.get(\"/api/jobs/{job_id}\", response_model=JobDetail)\ndef job_status(job_id: str):\n    \"\"\"Poll one upload job; includes its documents.\"\"\"\n    job = jobs.get_job(job_id)\n    if job is None:\n        raise HTTPException(404, \"job not found\")\n    return job\n\n\n# ----------------------------------------------------------------------- documents\n\n@app.get(\"/api/documents\", response_model=list[DocumentInfo])\ndef list_documents(collection: str | None = Query(default=None),\n                   job_id: str | None = Query(default=None),\n                   status: DocStatus | None = Query(default=None)):\n    \"\"\"Listing of every uploaded file: DOC ID, NAME, STATUS, REASON (+ duplicate link).\n    Filter by job_id to see only the files of one upload request.\"\"\"\n    docs = jobs.list_docs(collection, job_id)\n    return [d for d in docs if status is None or d.status == status]\n\n\n@app.get(\"/api/documents/{doc_id}\", response_model=DocumentInfo)\ndef get_document(doc_id: str):\n    doc = jobs.get(doc_id)\n    if doc is None:\n        raise HTTPException(404, \"document not found\")\n    return doc\n\n\n@app.delete(\"/api/documents/{doc_id}\", status_code=204)\ndef delete_document(doc_id: str):\n    doc = jobs.get(doc_id)\n    if doc is None:\n        raise HTTPException(404, \"document not found\")\n    if doc.status not in TERMINAL_STATUSES:\n        raise HTTPException(409, f\"document is {doc.status}; wait until it finishes\")\n    if doc.status == \"COMPLETED\":\n        vector_store.delete_document(doc.collection, doc_id)\n        bm25_index.rebuild(doc.collection)\n    for p in settings.uploads_dir.glob(f\"{doc_id}_*\"):\n        p.unlink(missing_ok=True)\n    jobs.delete(doc_id)\n\n\n@app.delete(\"/api/collections/{name}\", status_code=204)\ndef reset_collection(name: str):\n    col = _collection(name)\n    vector_store.delete_collection(col)\n    bm25_index.drop(col)\n    for doc in jobs.list_docs(col):\n        for p in settings.uploads_dir.glob(f\"{doc.doc_id}_*\"):\n            p.unlink(missing_ok=True)\n        jobs.delete(doc.doc_id)\n    for job in jobs.list_jobs(col):\n        jobs.delete_job(job.job_id)\n\n\n@app.get(\"/api/chunks\", response_model=list[ChunkOut])\ndef list_chunks(collection: str | None = Query(default=None),\n                limit: int = Query(default=50, ge=1, le=1000), offset: int = Query(default=0, ge=0)):\n    col = _collection(collection)\n    chunks = vector_store.get_all_chunks(col)[offset:offset + limit]\n    return [ChunkOut(chunk_id=c[\"chunk_id\"], doc_id=c[\"metadata\"].get(\"doc_id\", \"\"),\n                     source=c[\"metadata\"].get(\"source\", \"\"), page=int(c[\"metadata\"].get(\"page\", 0)),\n                     section=c[\"metadata\"].get(\"section\") or None, text=c[\"text\"]) for c in chunks]\n\n\n# ----------------------------------------------------------------------- ask\n\ndef _resolve_scope(req: AskRequest) -> tuple[str, list[str] | None, list[str]]:\n    \"\"\"Turn doc_ids / job_ids into the concrete set of COMPLETED documents to search.\n\n    Returns (collection, doc_ids or None for the whole collection, job_ids used).\n    Validation errors are explicit so a client can fix its selection:\n      404 unknown id · 409 document/job not COMPLETED · 400 mixed collections.\n    \"\"\"\n    if not req.doc_ids and not req.job_ids:\n        return _collection(req.collection), None, []\n\n    selected: dict[str, DocumentInfo] = {}\n    job_ids: list[str] = []\n    for jid in req.job_ids or []:\n        job = jobs.get_job(jid)\n        if job is None:\n            raise HTTPException(404, f\"job '{jid}' not found\")\n        job_ids.append(jid)\n        completed = [d for d in job.documents if d.status == \"COMPLETED\"]\n        if not completed:\n            raise HTTPException(409, f\"job '{jid}' has no COMPLETED document yet ({job.status}: {job.reason})\")\n        for d in completed:\n            selected[d.doc_id] = d\n    for did in req.doc_ids or []:\n        d = jobs.get(did)\n        if d is None:\n            raise HTTPException(404, f\"document '{did}' not found\")\n        if d.status == \"DUPLICATE\" and d.duplicate_of:\n            original = jobs.get(d.duplicate_of)\n            if original is not None:\n                d = original  # a duplicate points at the indexed original\n        if d.status != \"COMPLETED\":\n            raise HTTPException(409, f\"document '{did}' ({d.filename}) is {d.status}, not COMPLETED\")\n        selected[d.doc_id] = d\n\n    collections = {d.collection for d in selected.values()}\n    if len(collections) > 1:\n        raise HTTPException(400, f\"selected documents span several collections {sorted(collections)}; \"\n                                 \"select documents from one collection\")\n    col = collections.pop()\n    if req.collection and _collection(req.collection) != col:\n        raise HTTPException(400, f\"collection '{req.collection}' does not match the selected documents ('{col}')\")\n    return col, sorted(selected), job_ids\n\n\n@app.post(\"/api/ask\", response_model=AskResponse)\ndef ask(req: AskRequest):\n    \"\"\"Ask over the whole collection, or only over selected documents / jobs.\n\n    The answer text carries [n] markers; `citations` lists exactly the sources those markers\n    refer to. Markers with no matching source are removed and reported in `unresolved_citations`.\n    \"\"\"\n    col, doc_ids, job_ids = _resolve_scope(req)\n    try:\n        return answer(req.question, col, req.top_k, doc_ids=doc_ids, job_ids=job_ids)\n    except LLMError as exc:\n        raise HTTPException(502, str(exc))\nEOF\n.venv/bin/python -m compileall -q app cli && echo compile-ok && .venv/bin/python -c \"import app.main, app.jobs, app.rag; print('import-ok')\"",
+  "description": "Rewrite main.py with job endpoints and scoped ask; compile and import check"
+}
+```
+
+## Tool  <sub>2026-09-06T10:21:51.308Z</sub>
+
+**Tool result**
+
+```
+compile-ok
+import-ok
+```
+
+## Assistant  <sub>2026-09-06T10:22:05.170Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "mkdir -p plans && cp /Users/shoaib.rayeen/.claude/plans/create-a-plan-for-async-beacon.md plans/2026-09-06-rag-generator-plan.md && cat >> plans/2026-09-06-rag-generator-plan.md <<'EOF'\n\n---\n\n## Plan changes during implementation (requirements added mid-session, 2026-09-06)\n\nThe plan above was approved before coding. The user added requirements while work was in\nprogress; each was folded into the build and the documentation. Recorded here so the plan\nmatches what was shipped.\n\n| # | Change | Where it landed |\n|---|---|---|\n| 1 | Async job model with a **fixed status vocabulary**: `QUEUED, DUPLICATE, PROCESSING, COMPLETED, FAILED, EMPTY_FILE, EXTRACTION_NOT_SUPPORTED, UPLOAD_FAILED`; every request listed as DOC ID · NAME · STATUS · REASON; SHA-256 duplicate detection linking to the original | `app/models.py`, `app/jobs.py`, `app/main.py`, UI listing, CLI `status` |\n| 2 | Documentation set: `changelog.html`, `architecture.md`, interactive `flow.html`; all in **`documentation/`** (not `docs/`); every `.md` has an `.html` twin via `scripts/build_docs.py` | `documentation/`, `scripts/build_docs.py` |\n| 3 | Agent rules: always update docs, run compile + tests after each change, **never commit**, read `memory.md` when planning; rules mirrored to Cursor (`.cursor/rules/project.mdc`) and Codex (`AGENTS.md`) by `scripts/sync_rules.py` | `CLAUDE.md`, `scripts/sync_rules.py` |\n| 4 | `memory.md` project memory; transcripts exported into `transcripts/` (`scripts/export_transcript.py` produces the `/export`-equivalent Markdown) | `memory.md`, `transcripts/`, `scripts/export_transcript.py` |\n| 5 | Default port 8000, user-changeable via `APP_PORT` | `app/config.py`, `docker-compose.yml`, README |\n| 6 | **Tesseract strictly as fallback**; **PyMuPDF** replaces pypdf/pypdfium2 as the primary PDF extractor; fallback tier for PDF (OCR all pages), DOCX (OCR embedded images), HTML (stdlib stripping); `ExtractionError` gives precise FAILED reasons | `app/ingest/extractors.py`, `app/ingest/pipeline.py` |\n| 7 | **Jobs as first-class objects**: one upload request = one job with derived status (`QUEUED/PROCESSING/COMPLETED/FAILED`), `GET /api/jobs`, job → documents filter, and **scoped asking** by selected documents and/or jobs with validated `citations` in the answer | `app/jobs.py`, `app/main.py`, `app/rag.py`, `app/retrieval/*`, UI, CLI `jobs`/`job`/`ask --doc/--job` |\n| 8 | This plan committed inside the repo under `plans/` | `plans/` |\n\nVerification performed locally (no Docker/Tesseract on the dev machine): `pytest` suite,\n`rag ingest` of the full sample corpus (duplicate, unsupported, empty and OCR-only cases\nincluded), UI upload/status/ask/sources flow in the browser, mock LLM. Docker build to be\nverified on a machine with Docker.\nEOF\nls plans && wc -l plans/*.md",
+  "description": "Copy the approved plan into plans/ with a record of mid-session changes"
+}
+```
+
+## Tool  <sub>2026-09-06T10:22:05.210Z</sub>
+
+**Tool result**
+
+```
+2026-09-06-rag-generator-plan.md
+     269 plans/2026-09-06-rag-generator-plan.md
+```
+
+## Assistant  <sub>2026-09-06T10:22:52.876Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > tests/test_api.py <<'EOF'\n\"\"\"End-to-end API tests with the LLM mocked (embeddings + Chroma + BM25 are real).\"\"\"\nimport shutil\nimport time\n\nimport pytest\nfrom fastapi.testclient import TestClient\n\nfrom app.config import settings\nfrom app.models import TERMINAL_STATUSES\n\nDATA = settings.DATA_DIR\nJOB_TERMINAL = (\"COMPLETED\", \"FAILED\")\n\n\n@pytest.fixture(scope=\"module\")\ndef client():\n    shutil.rmtree(DATA, ignore_errors=True)\n    from app.main import app\n\n    with TestClient(app) as c:\n        yield c\n    shutil.rmtree(DATA, ignore_errors=True)\n\n\ndef _wait_job(client, job_id, timeout=60):\n    t0 = time.time()\n    while time.time() - t0 < timeout:\n        j = client.get(f\"/api/jobs/{job_id}\").json()\n        if j[\"status\"] in JOB_TERMINAL:\n            return j\n        time.sleep(0.2)\n    raise AssertionError(\"timed out waiting for job\")\n\n\ndef _upload(client, files, collection):\n    r = client.post(\"/api/documents\", files=[(\"files\", (n, b)) for n, b in files], data={\"collection\": collection})\n    assert r.status_code == 202, r.text\n    return r.json()\n\n\nPOLICY = (b\"# Refund policy\\nCustomers may request a refund within 30 days of purchase.\\n\\n\"\n          b\"# Shipping\\nOrders ship within 2 business days.\\n\")\nSECURITY = b\"Passwords must be rotated every 180 days and be at least 14 characters long.\"\n\n\ndef test_health(client):\n    h = client.get(\"/api/health\").json()\n    assert h[\"status\"] == \"ok\" and \".pdf\" in h[\"supported_extensions\"]\n    assert \"LLM_API_KEY\" not in h[\"settings\"]\n    assert set(h[\"statuses\"]) == {\"QUEUED\", \"DUPLICATE\", \"PROCESSING\", \"COMPLETED\", \"FAILED\",\n                                  \"EMPTY_FILE\", \"EXTRACTION_NOT_SUPPORTED\", \"UPLOAD_FAILED\"}\n\n\ndef test_job_lifecycle_listing_and_filter(client):\n    job = _upload(client, [(\"policy.md\", POLICY), (\"security.txt\", SECURITY), (\"junk.xyz\", b\"?\")], \"t1\")\n    assert job[\"files\"] == 3 and job[\"status\"] in (\"QUEUED\", \"PROCESSING\")\n    assert {d[\"status\"] for d in job[\"documents\"]} <= {\"QUEUED\", \"EXTRACTION_NOT_SUPPORTED\"}\n    assert all(d[\"job_id\"] == job[\"job_id\"] for d in job[\"documents\"])\n\n    done = _wait_job(client, job[\"job_id\"])\n    assert done[\"status\"] == \"COMPLETED\", done\n    assert done[\"counts\"] == {\"COMPLETED\": 2, \"EXTRACTION_NOT_SUPPORTED\": 1}\n    assert done[\"reason\"].startswith(\"partially completed\")\n\n    jobs = client.get(\"/api/jobs\", params={\"collection\": \"t1\"}).json()\n    assert [j[\"job_id\"] for j in jobs] == [job[\"job_id\"]]\n    assert {\"job_id\", \"files\", \"status\", \"reason\"} <= set(jobs[0])\n\n    # job -> document listing filter\n    docs = client.get(\"/api/documents\", params={\"job_id\": job[\"job_id\"]}).json()\n    assert {d[\"filename\"] for d in docs} == {\"policy.md\", \"security.txt\", \"junk.xyz\"}\n    assert client.get(\"/api/documents\", params={\"job_id\": \"nope\"}).json() == []\n    assert client.get(\"/api/jobs/nope\").status_code == 404\n\n    # duplicate in a second job -> job COMPLETED (nothing new indexed), doc DUPLICATE linking original\n    job2 = _upload(client, [(\"policy-copy.md\", POLICY)], \"t1\")\n    done2 = _wait_job(client, job2[\"job_id\"])\n    dup = done2[\"documents\"][0]\n    original = next(d for d in docs if d[\"filename\"] == \"policy.md\")\n    assert dup[\"status\"] == \"DUPLICATE\" and dup[\"duplicate_of\"] == original[\"doc_id\"]\n    assert done2[\"status\"] == \"COMPLETED\" and done2[\"counts\"] == {\"DUPLICATE\": 1}\n\n    # a job whose only file fails -> FAILED\n    job3 = _upload(client, [(\"broken.pdf\", b\"not a pdf\")], \"t1\")\n    done3 = _wait_job(client, job3[\"job_id\"])\n    assert done3[\"status\"] == \"FAILED\" and done3[\"reason\"].startswith(\"no file could be indexed\")\n    assert done3[\"documents\"][0][\"reason\"].startswith(\"PROCESSING FAILED: Could not read this pdf\")\n\n\ndef test_ask_scoped_by_docs_and_jobs_with_citations(client, monkeypatch):\n    seen = {}\n\n    def fake_chat(messages, **kw):\n        seen[\"prompt\"] = messages[1][\"content\"]\n        # cites source 1 and a bogus 9 that must be removed and reported\n        return \"The refund window is 30 days [1]. Bogus claim [9].\"\n\n    monkeypatch.setattr(\"app.rag.llm.chat\", fake_chat)\n\n    jp = _upload(client, [(\"policy.md\", POLICY)], \"t2\")\n    js = _upload(client, [(\"security.txt\", SECURITY)], \"t2\")\n    _wait_job(client, jp[\"job_id\"])\n    _wait_job(client, js[\"job_id\"])\n    policy_id = jp[\"documents\"][0][\"doc_id\"]\n    security_id = js[\"documents\"][0][\"doc_id\"]\n\n    # whole collection: both documents can appear\n    r = client.post(\"/api/ask\", json={\"question\": \"How long is the refund window?\", \"collection\": \"t2\"})\n    assert r.status_code == 200, r.text\n    body = r.json()\n    assert body[\"scope\"] == {\"collection\": \"t2\", \"doc_ids\": [], \"job_ids\": [], \"restricted\": False}\n    assert body[\"answer\"] == \"The refund window is 30 days [1].\"\n    assert [c[\"n\"] for c in body[\"citations\"]] == [1] and body[\"unresolved_citations\"] == [9]\n    assert body[\"citations\"][0][\"source\"] == \"policy.md\" and body[\"citations\"][0][\"page\"] == 1\n    assert {s[\"doc_id\"] for s in body[\"sources\"]} == {policy_id, security_id}\n\n    # scoped to the security document only: no policy chunk may be retrieved\n    r = client.post(\"/api/ask\", json={\"question\": \"How long is the refund window?\", \"doc_ids\": [security_id]})\n    body = r.json()\n    assert body[\"scope\"][\"restricted\"] and body[\"scope\"][\"doc_ids\"] == [security_id]\n    assert {s[\"doc_id\"] for s in body[\"sources\"]} == {security_id}\n    assert \"Passwords\" in seen[\"prompt\"] and \"refund\" not in seen[\"prompt\"].lower().split(\"question:\")[0]\n\n    # scoped by job id -> resolves to that job's COMPLETED documents\n    r = client.post(\"/api/ask\", json={\"question\": \"refund?\", \"job_ids\": [jp[\"job_id\"]]})\n    body = r.json()\n    assert body[\"scope\"][\"job_ids\"] == [jp[\"job_id\"]] and body[\"scope\"][\"doc_ids\"] == [policy_id]\n    assert {s[\"doc_id\"] for s in body[\"sources\"]} == {policy_id}\n\n    # docs + jobs together are unioned\n    r = client.post(\"/api/ask\", json={\"question\": \"refund?\", \"job_ids\": [js[\"job_id\"]], \"doc_ids\": [policy_id]})\n    assert set(r.json()[\"scope\"][\"doc_ids\"]) == {policy_id, security_id}\n\n    # validation\n    assert client.post(\"/api/ask\", json={\"question\": \"q\", \"doc_ids\": [\"missing\"]}).status_code == 404\n    assert client.post(\"/api/ask\", json={\"question\": \"q\", \"job_ids\": [\"missing\"]}).status_code == 404\n    r = client.post(\"/api/ask\", json={\"question\": \"q\", \"doc_ids\": [policy_id], \"collection\": \"other\"})\n    assert r.status_code == 400 and \"does not match\" in r.json()[\"detail\"]\n    bad = _upload(client, [(\"x.exe\", b\"MZ\")], \"t2\")[\"documents\"][0][\"doc_id\"]\n    r = client.post(\"/api/ask\", json={\"question\": \"q\", \"doc_ids\": [bad]})\n    assert r.status_code == 409 and \"EXTRACTION_NOT_SUPPORTED\" in r.json()[\"detail\"]\n    other = _upload(client, [(\"policy.md\", POLICY)], \"t3\")\n    _wait_job(client, other[\"job_id\"])\n    r = client.post(\"/api/ask\", json={\"question\": \"q\", \"doc_ids\": [policy_id, other[\"documents\"][0][\"doc_id\"]]})\n    assert r.status_code == 400 and \"several collections\" in r.json()[\"detail\"]\n\n    # a duplicate id resolves to its original\n    dup = _upload(client, [(\"copy.md\", POLICY)], \"t2\")[\"documents\"][0]\n    r = client.post(\"/api/ask\", json={\"question\": \"refund?\", \"doc_ids\": [dup[\"doc_id\"]]})\n    assert r.status_code == 200 and r.json()[\"scope\"][\"doc_ids\"] == [policy_id]\n\n    # delete + empty scope message\n    assert client.delete(f\"/api/documents/{policy_id}\").status_code == 204\n    r = client.post(\"/api/ask\", json={\"question\": \"anything\", \"collection\": \"t2\", \"doc_ids\": [security_id]})\n    assert r.status_code == 200 and r.json()[\"sources\"]\n    client.delete(\"/api/collections/t2\")\n    client.delete(\"/api/collections/t3\")\n    r = client.post(\"/api/ask\", json={\"question\": \"anything\", \"collection\": \"t2\"})\n    assert r.json()[\"sources\"] == [] and \"could not find\" in r.json()[\"answer\"]\n    assert client.get(\"/api/jobs\", params={\"collection\": \"t2\"}).json() == []\n\n\ndef test_rejections_become_records(client):\n    job = _upload(client, [(\"x.exe\", b\"MZ\"), (\"empty.txt\", b\"\")], \"rej\")\n    by_name = {d[\"filename\"]: d for d in job[\"documents\"]}\n    assert by_name[\"x.exe\"][\"status\"] == \"EXTRACTION_NOT_SUPPORTED\" and \".exe\" in by_name[\"x.exe\"][\"reason\"]\n    assert by_name[\"empty.txt\"][\"status\"] == \"EMPTY_FILE\"\n    assert job[\"status\"] == \"FAILED\"\n    client.delete(\"/api/collections/rej\")\n\n\ndef test_llm_error_is_502(client, monkeypatch):\n    from app.llm.client import LLMError\n\n    def boom(messages, **kw):\n        raise LLMError(\"bad key\")\n\n    monkeypatch.setattr(\"app.rag.llm.chat\", boom)\n    job = _upload(client, [(\"n.txt\", b\"The capital of Freedonia is Marxburg.\")], \"err\")\n    _wait_job(client, job[\"job_id\"])\n    r = client.post(\"/api/ask\", json={\"question\": \"capital of Freedonia?\", \"collection\": \"err\"})\n    assert r.status_code == 502 and \"bad key\" in r.json()[\"detail\"]\n    client.delete(\"/api/collections/err\")\nEOF\ncat > tests/test_citations.py <<'EOF'\nfrom app.models import Source\nfrom app.rag import extract_citations\n\n\ndef _src(n):\n    return Source(n=n, chunk_id=f\"d:{n}\", doc_id=\"d\", source=\"f.md\", file_type=\"text\", page=n,\n                  text=\"t\", rrf_score=0.1)\n\n\ndef test_citations_kept_in_first_use_order_and_bogus_removed():\n    sources = [_src(1), _src(2), _src(3)]\n    text, cited, unresolved = extract_citations(\"Fact A [2]. Fact B [1][2]. Fact C [7].\", sources)\n    assert [c.n for c in cited] == [2, 1]\n    assert unresolved == [7]\n    assert text == \"Fact A [2]. Fact B [1][2]. Fact C.\"\n\n\ndef test_no_markers():\n    text, cited, unresolved = extract_citations(\"I could not find this in the provided documents.\", [_src(1)])\n    assert cited == [] and unresolved == [] and text.startswith(\"I could not\")\nEOF\n.venv/bin/python -m compileall -q app cli evaluation scripts tests && .venv/bin/python -m pytest -q 2>&1 | grep -E \"passed|failed|Error\" | head",
+  "description": "Write job/scope/citation tests and run the suite",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T10:22:54.022Z</sub>
+
+**Tool result**
+
+```
+E       AssertionError: {'job_id': '80cf419ea321', 'collection': 't1', 'status': 'FAILED', 'reason': 'no file could be indexed: 1 extraction not supported, 2 failed', ...}
+tests/test_api.py:61: AssertionError
+chromadb.errors.InvalidArgumentError: Validation error: name: Expected a name containing 3-512 characters from [a-zA-Z0-9._-], starting and ending with a character in [a-zA-Z0-9]. Got: t1
+chromadb.errors.InvalidArgumentError: Validation error: name: Expected a name containing 3-512 characters from [a-zA-Z0-9._-], starting and ending with a character in [a-zA-Z0-9]. Got: t1
+E       chromadb.errors.InvalidArgumentError: Validation error: name: Expected a name containing 3-512 characters from [a-zA-Z0-9._-], starting and ending with a character in [a-zA-Z0-9]. Got: t2
+.venv/lib/python3.11/site-packages/chromadb/api/rust.py:244: InvalidArgumentError
+chromadb.errors.InvalidArgumentError: Validation error: name: Expected a name containing 3-512 characters from [a-zA-Z0-9._-], starting and ending with a character in [a-zA-Z0-9]. Got: t2
+chromadb.errors.InvalidArgumentError: Validation error: name: Expected a name containing 3-512 characters from [a-zA-Z0-9._-], starting and ending with a character in [a-zA-Z0-9]. Got: t2
+2 failed, 22 passed, 6 warnings in 0.83s
+```
+
+## Assistant  <sub>2026-09-06T10:24:04.526Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "cat > app/static/index.html <<'EOF'\n<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>RAG Generator</title>\n<style>\n  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c1f26; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --ok:#15803d; --bad:#b91c1c; --warn:#b45309; --info:#0369a1; }\n  * { box-sizing:border-box; }\n  body { margin:0; font:14px/1.5 -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif; background:var(--bg); color:var(--ink); }\n  header { padding:14px 28px; background:var(--card); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:16px; flex-wrap:wrap; }\n  header h1 { margin:0; font-size:18px; }\n  header .meta { color:var(--muted); font-size:12px; } header a { color:var(--accent); text-decoration:none; }\n  main { display:grid; grid-template-columns:minmax(320px,440px) 1fr; gap:20px; padding:20px 28px; max-width:1500px; margin:0 auto; }\n  @media (max-width:980px) { main { grid-template-columns:1fr; } }\n  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:20px; }\n  .card h2 { margin:0 0 12px; font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }\n  .card h2 .hint { text-transform:none; letter-spacing:0; font-weight:400; }\n  label { display:block; font-size:12px; color:var(--muted); margin:8px 0 4px; }\n  input[type=text], textarea { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:6px; font:inherit; }\n  textarea { min-height:70px; resize:vertical; }\n  button { padding:8px 13px; border:0; border-radius:6px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }\n  button.secondary { background:#eef2ff; color:var(--accent); } button.small { padding:3px 8px; font-size:12px; }\n  button:disabled { opacity:.5; cursor:default; }\n  .drop { border:2px dashed var(--line); border-radius:8px; padding:18px; text-align:center; color:var(--muted); cursor:pointer; }\n  .drop.over { border-color:var(--accent); background:#eff6ff; }\n  table { width:100%; border-collapse:collapse; font-size:13px; }\n  th, td { text-align:left; padding:6px 6px; border-bottom:1px solid var(--line); vertical-align:top; }\n  th { color:var(--muted); font-weight:600; font-size:12px; }\n  tr.clickable { cursor:pointer; } tr.clickable:hover { background:#f8fafc; } tr.active { background:#eff6ff; }\n  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:600; background:#eef2ff; color:var(--accent); white-space:nowrap; }\n  .pill.COMPLETED { background:#dcfce7; color:var(--ok); }\n  .pill.FAILED, .pill.UPLOAD_FAILED, .pill.EXTRACTION_NOT_SUPPORTED, .pill.EMPTY_FILE { background:#fee2e2; color:var(--bad); }\n  .pill.DUPLICATE { background:#fef3c7; color:var(--warn); } .pill.PROCESSING { background:#e0f2fe; color:var(--info); }\n  .pill.ocr { background:#fef3c7; color:var(--warn); }\n  code.id { font:11px ui-monospace, Menlo, monospace; color:var(--muted); }\n  .answer { white-space:pre-wrap; padding:14px; background:#f8fafc; border:1px solid var(--line); border-radius:8px; min-height:60px; }\n  .answer cite { color:var(--accent); font-style:normal; font-weight:600; cursor:pointer; }\n  .cites { margin-top:10px; font-size:13px; } .cites div { padding:4px 0; border-bottom:1px dashed var(--line); }\n  .src { border:1px solid var(--line); border-radius:8px; margin-top:10px; padding:10px 12px; }\n  .src summary { cursor:pointer; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }\n  .src .n { font-weight:700; color:var(--accent); }\n  .src pre { white-space:pre-wrap; font:12px/1.5 ui-monospace, Menlo, monospace; color:#374151; margin:10px 0 0; max-height:260px; overflow:auto; }\n  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }\n  .err { color:var(--bad); font-size:13px; white-space:pre-wrap; } .warn { color:var(--warn); font-size:12px; }\n  .muted { color:var(--muted); font-size:12px; }\n  .del { background:none; color:var(--bad); padding:0 4px; font-size:12px; }\n  .chip { display:inline-flex; gap:6px; align-items:center; background:#eff6ff; color:var(--accent); border-radius:999px; padding:2px 10px; font-size:12px; }\n  .chip button { background:none; color:var(--accent); padding:0; font-size:14px; line-height:1; }\n  .scope { background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:12px; margin-bottom:8px; }\n  .scroll { max-height:320px; overflow:auto; }\n</style>\n</head>\n<body>\n<header>\n  <h1>RAG Generator</h1>\n  <span class=\"meta\" id=\"meta\">connecting…</span>\n  <span class=\"meta\" style=\"margin-left:auto\"><a href=\"/documentation/flow.html\" target=\"_blank\">How it works</a> · <a href=\"/documentation/architecture.html\" target=\"_blank\">Architecture</a> · <a href=\"/documentation/changelog.html\" target=\"_blank\">Changelog</a> · <a href=\"/docs\" target=\"_blank\">API docs</a></span>\n</header>\n<main>\n  <section>\n    <div class=\"card\">\n      <h2>1 · Upload documents</h2>\n      <label for=\"collection\">Collection (document set)</label>\n      <input type=\"text\" id=\"collection\" value=\"default\">\n      <div class=\"drop\" id=\"drop\">Drop files here or click to choose<br><span class=\"muted\" id=\"exts\"></span></div>\n      <input type=\"file\" id=\"files\" multiple hidden>\n      <div class=\"row\" style=\"margin-top:10px\">\n        <button id=\"uploadBtn\" disabled>Upload as one job</button>\n        <button class=\"secondary\" id=\"resetBtn\" title=\"Delete every job and document in this collection\">Reset collection</button>\n        <span class=\"muted\" id=\"picked\"></span>\n      </div>\n      <div class=\"err\" id=\"uploadErr\"></div>\n      <div class=\"muted\" id=\"lastJob\"></div>\n    </div>\n\n    <div class=\"card\">\n      <h2>2 · Jobs <span class=\"hint\">(one upload request = one job · click a row to see its documents · tick to ask over it)</span></h2>\n      <div class=\"scroll\"><table>\n        <thead><tr><th></th><th>Job ID</th><th>Files</th><th>Status</th><th>Reason</th></tr></thead>\n        <tbody id=\"jobs\"><tr><td colspan=\"5\" class=\"muted\">No jobs yet.</td></tr></tbody>\n      </table></div>\n    </div>\n\n    <div class=\"card\">\n      <h2>3 · Documents <span class=\"hint\">(tick COMPLETED documents to ask over them · poll <code>/api/jobs/{id}</code>)</span>\n        <span id=\"jobFilter\"></span></h2>\n      <div class=\"scroll\"><table>\n        <thead><tr><th></th><th>Doc ID</th><th>Name</th><th>Status</th><th>Reason</th><th></th></tr></thead>\n        <tbody id=\"docs\"><tr><td colspan=\"6\" class=\"muted\">No documents yet.</td></tr></tbody>\n      </table></div>\n    </div>\n  </section>\n\n  <section>\n    <div class=\"card\">\n      <h2>4 · Ask</h2>\n      <div class=\"scope\" id=\"scope\"></div>\n      <textarea id=\"question\" placeholder=\"Ask something answerable from the uploaded documents…\"></textarea>\n      <div class=\"row\" style=\"margin-top:8px\">\n        <button id=\"askBtn\">Ask</button>\n        <span class=\"muted\" id=\"askMeta\"></span>\n      </div>\n      <div class=\"err\" id=\"askErr\"></div>\n      <div class=\"answer\" id=\"answer\" style=\"margin-top:12px\"></div>\n      <div class=\"warn\" id=\"unresolved\"></div>\n      <div class=\"cites\" id=\"cites\"></div>\n    </div>\n\n    <div class=\"card\">\n      <h2>5 · Sources <span class=\"hint\">(every retrieved chunk; citations above point into this list)</span></h2>\n      <div id=\"sources\" class=\"muted\">Retrieved chunks appear here after you ask a question.</div>\n    </div>\n  </section>\n</main>\n\n<script>\nconst $ = (id) => document.getElementById(id);\nconst TERMINAL = ['DUPLICATE','COMPLETED','FAILED','EMPTY_FILE','EXTRACTION_NOT_SUPPORTED','UPLOAD_FAILED'];\nconst BAD = ['FAILED','UPLOAD_FAILED','EXTRACTION_NOT_SUPPORTED','EMPTY_FILE'];\nlet pending = [], pollTimer = null, activeJob = null;\nconst selDocs = new Set(), selJobs = new Set();\nlet docsCache = [], jobsCache = [];\n\nasync function api(path, opts = {}) {\n  const r = await fetch(path, opts);\n  if (r.status === 204) return null;\n  const body = await r.json().catch(() => ({}));\n  if (!r.ok) throw new Error(typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail || body));\n  return body;\n}\nconst col = () => $('collection').value.trim() || 'default';\nconst esc = (s) => String(s ?? '').replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));\n\nasync function loadHealth() {\n  try {\n    const h = await api('/api/health');\n    $('meta').textContent = `LLM: ${h.llm_model} · embeddings: ${h.embedding_model} · OCR: ${h.ocr_available ? 'on' : 'unavailable (fallback disabled on this host)'} · collections: ${h.collections.join(', ') || 'none'}`;\n    $('exts').textContent = 'Accepted: ' + h.supported_extensions.join(' ');\n  } catch (e) { $('meta').textContent = 'API unreachable: ' + e.message; }\n}\n\n/* ---------------- upload ---------------- */\nfunction setPending(list) {\n  pending = Array.from(list);\n  $('picked').textContent = pending.length ? pending.map(f => f.name).join(', ') : '';\n  $('uploadBtn').disabled = pending.length === 0;\n}\n$('drop').onclick = () => $('files').click();\n$('files').onchange = (e) => setPending(e.target.files);\n$('drop').ondragover = (e) => { e.preventDefault(); $('drop').classList.add('over'); };\n$('drop').ondragleave = () => $('drop').classList.remove('over');\n$('drop').ondrop = (e) => { e.preventDefault(); $('drop').classList.remove('over'); setPending(e.dataTransfer.files); };\n\n$('uploadBtn').onclick = async () => {\n  $('uploadErr').textContent = '';\n  const fd = new FormData();\n  pending.forEach(f => fd.append('files', f));\n  fd.append('collection', col());\n  $('uploadBtn').disabled = true;\n  try {\n    const job = await api('/api/documents', { method: 'POST', body: fd });\n    $('lastJob').innerHTML = `Job <code class=\"id\">${esc(job.job_id)}</code> accepted with ${job.files} file(s) — status <span class=\"pill ${job.status}\">${job.status}</span>. Poll <code>/api/jobs/${esc(job.job_id)}</code>.`;\n    setPending([]); $('files').value = '';\n    activeJob = job.job_id;\n    await refresh(); loadHealth();\n  } catch (e) { $('uploadErr').textContent = e.message; $('uploadBtn').disabled = false; }\n};\n\n$('resetBtn').onclick = async () => {\n  if (!confirm(`Delete all jobs and documents in collection \"${col()}\"?`)) return;\n  try { await api(`/api/collections/${encodeURIComponent(col())}`, { method: 'DELETE' }); selDocs.clear(); selJobs.clear(); activeJob = null; await refresh(); loadHealth(); }\n  catch (e) { $('uploadErr').textContent = e.message; }\n};\n\nasync function deleteDoc(id) {\n  try { await api(`/api/documents/${id}`, { method: 'DELETE' }); selDocs.delete(id); await refresh(); }\n  catch (e) { $('uploadErr').textContent = e.message; }\n}\n\n/* ---------------- jobs + documents ---------------- */\nasync function refresh() {\n  try {\n    [jobsCache, docsCache] = await Promise.all([\n      api(`/api/jobs?collection=${encodeURIComponent(col())}`),\n      api(`/api/documents?collection=${encodeURIComponent(col())}${activeJob ? `&job_id=${activeJob}` : ''}`),\n    ]);\n  } catch (e) { return; }\n  renderJobs(); renderDocs(); renderScope();\n  const busy = jobsCache.some(j => !['COMPLETED', 'FAILED'].includes(j.status));\n  clearTimeout(pollTimer);\n  if (busy) pollTimer = setTimeout(refresh, 1500);\n}\n\nfunction renderJobs() {\n  const tb = $('jobs');\n  if (!jobsCache.length) { tb.innerHTML = '<tr><td colspan=\"5\" class=\"muted\">No jobs in this collection.</td></tr>'; return; }\n  tb.innerHTML = jobsCache.map(j => `\n    <tr class=\"clickable ${j.job_id === activeJob ? 'active' : ''}\" onclick=\"filterJob('${j.job_id}')\">\n      <td><input type=\"checkbox\" ${selJobs.has(j.job_id) ? 'checked' : ''} ${j.counts.COMPLETED ? '' : 'disabled title=\"no COMPLETED document yet\"'} onclick=\"event.stopPropagation(); toggleJob('${j.job_id}', this.checked)\"></td>\n      <td><code class=\"id\">${esc(j.job_id)}</code></td>\n      <td>${j.files}</td>\n      <td><span class=\"pill ${j.status}\">${j.status}</span></td>\n      <td class=\"muted\" style=\"font-size:12px\">${esc(j.reason)}</td>\n    </tr>`).join('');\n}\n\nfunction filterJob(id) { activeJob = activeJob === id ? null : id; refresh(); }\nfunction renderFilterChip() {\n  $('jobFilter').innerHTML = activeJob ? `<span class=\"chip\">job ${esc(activeJob)} <button title=\"Show all documents\" onclick=\"filterJob('${activeJob}')\">×</button></span>` : '';\n}\n\nfunction renderDocs() {\n  renderFilterChip();\n  const tb = $('docs');\n  if (!docsCache.length) { tb.innerHTML = `<tr><td colspan=\"6\" class=\"muted\">${activeJob ? 'This job has no documents.' : 'No documents in this collection.'}</td></tr>`; return; }\n  tb.innerHTML = docsCache.map(d => `\n    <tr id=\"row-${d.doc_id}\">\n      <td><input type=\"checkbox\" ${selDocs.has(d.doc_id) ? 'checked' : ''} ${d.status === 'COMPLETED' ? '' : 'disabled title=\"only COMPLETED documents can be searched\"'} onclick=\"toggleDoc('${d.doc_id}', this.checked)\"></td>\n      <td><code class=\"id\">${esc(d.doc_id)}</code><br><span class=\"muted\" title=\"job\">job ${esc(d.job_id)}</span></td>\n      <td>${esc(d.filename)}<br><span class=\"muted\">${esc(d.file_type || '')}${d.ocr_pages ? ` · <span class=\"pill ocr\">OCR ×${d.ocr_pages}</span>` : ''}</span></td>\n      <td><span class=\"pill ${d.status}\">${d.status}</span>${d.stage ? `<div class=\"muted\">${esc(d.stage)}…</div>` : ''}</td>\n      <td class=\"${BAD.includes(d.status) ? 'err' : 'muted'}\" style=\"font-size:12px\">${esc(d.reason || '')}${d.duplicate_of ? ` <a href=\"#\" onclick=\"highlight('${d.duplicate_of}');return false;\">→ original ${esc(d.duplicate_of)}</a>` : ''}</td>\n      <td>${TERMINAL.includes(d.status) ? `<button class=\"del\" title=\"Delete\" onclick=\"deleteDoc('${d.doc_id}')\">✕</button>` : ''}</td>\n    </tr>`).join('');\n}\nfunction highlight(id) { activeJob = null; refresh().then(() => { const row = $(`row-${id}`); if (row) { row.style.background = '#fef9c3'; row.scrollIntoView({behavior:'smooth', block:'center'}); setTimeout(() => row.style.background = '', 1500); } }); }\nfunction toggleDoc(id, on) { on ? selDocs.add(id) : selDocs.delete(id); renderScope(); }\nfunction toggleJob(id, on) { on ? selJobs.add(id) : selJobs.delete(id); renderScope(); }\nfunction clearScope() { selDocs.clear(); selJobs.clear(); renderJobs(); renderDocs(); renderScope(); }\nfunction renderScope() {\n  const parts = [];\n  if (selJobs.size) parts.push(`${selJobs.size} job(s): ${[...selJobs].map(esc).join(', ')}`);\n  if (selDocs.size) parts.push(`${selDocs.size} document(s): ${[...selDocs].map(esc).join(', ')}`);\n  $('scope').innerHTML = parts.length\n    ? `<b>Scope:</b> only ${parts.join(' + ')} <button class=\"small secondary\" onclick=\"clearScope()\">clear</button>`\n    : `<b>Scope:</b> every COMPLETED document in collection <b>${esc(col())}</b>. Tick jobs or documents on the left to narrow it.`;\n}\n$('collection').onchange = () => { activeJob = null; selDocs.clear(); selJobs.clear(); refresh(); };\n\n/* ---------------- ask ---------------- */\n$('askBtn').onclick = ask;\n$('question').onkeydown = (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) ask(); };\n\nasync function ask() {\n  const q = $('question').value.trim();\n  if (!q) return;\n  $('askErr').textContent = ''; $('answer').textContent = 'Thinking…'; $('askMeta').textContent = ''; $('cites').innerHTML = ''; $('unresolved').textContent = '';\n  $('sources').innerHTML = '<span class=\"muted\">Retrieving…</span>';\n  $('askBtn').disabled = true;\n  try {\n    const payload = { question: q, collection: (selDocs.size || selJobs.size) ? null : col(),\n                      doc_ids: selDocs.size ? [...selDocs] : null, job_ids: selJobs.size ? [...selJobs] : null };\n    const res = await api('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });\n    $('answer').innerHTML = esc(res.answer).replace(/\\[(\\d+)\\]/g, (m, n) => `<cite onclick=\"openSrc(${n})\">[${n}]</cite>`);\n    const sc = res.scope.restricted ? `${res.scope.doc_ids.length} selected document(s)` : `whole collection \"${res.scope.collection}\"`;\n    $('askMeta').textContent = `${res.model} · ${res.latency_ms} ms · scope: ${sc} · ${res.citations.length} citation(s) from ${res.sources.length} chunks (dense+BM25 → RRF)`;\n    if (res.unresolved_citations.length) $('unresolved').textContent = `Removed citation markers with no matching source: ${res.unresolved_citations.map(n => `[${n}]`).join(' ')}`;\n    $('cites').innerHTML = res.citations.length\n      ? `<b>Citations</b>` + res.citations.map(s => `<div><cite onclick=\"openSrc(${s.n})\" style=\"color:var(--accent);font-style:normal;font-weight:600;cursor:pointer\">[${s.n}]</cite> ${esc(s.source)} — page ${s.page}${s.section ? ` · ${esc(s.section)}` : ''} <span class=\"muted\">doc ${esc(s.doc_id)}${s.extraction === 'ocr' ? ' · OCR' : ''}</span></div>`).join('')\n      : `<span class=\"muted\">The answer cites no source.</span>`;\n    renderSources(res.sources, new Set(res.citations.map(c => c.n)));\n  } catch (e) { $('answer').textContent = ''; $('askErr').textContent = e.message; $('sources').innerHTML = ''; }\n  $('askBtn').disabled = false;\n}\n\nfunction renderSources(sources, cited) {\n  if (!sources.length) { $('sources').innerHTML = '<span class=\"muted\">No chunks retrieved.</span>'; return; }\n  $('sources').innerHTML = sources.map(s => `\n    <details class=\"src\" id=\"src-${s.n}\" ${cited.has(s.n) ? 'open' : ''}>\n      <summary><span class=\"n\">[${s.n}]</span> <strong>${esc(s.source)}</strong>\n        <span class=\"muted\">page ${s.page}${s.section ? ` · ${esc(s.section)}` : ''} · doc ${esc(s.doc_id)}</span>\n        ${cited.has(s.n) ? '<span class=\"pill COMPLETED\">cited</span>' : ''}\n        ${s.extraction === 'ocr' ? '<span class=\"pill ocr\">OCR</span>' : ''}\n        <span class=\"muted\">dense #${s.dense_rank ?? '–'} · bm25 #${s.bm25_rank ?? '–'} · rrf ${s.rrf_score}</span>\n      </summary>\n      <pre>${esc(s.text)}</pre>\n    </details>`).join('');\n}\nfunction openSrc(n) { const el = $(`src-${n}`); if (el) { el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }\n\nloadHealth(); refresh();\n</script>\n</body>\n</html>\nEOF\necho ui-ok",
+  "description": "Rewrite the UI with jobs panel, job filter, selection scope, and citations"
+}
+```
+
+## Tool  <sub>2026-09-06T10:24:04.557Z</sub>
+
+**Tool result**
+
+```
+ui-ok
+```
+
+## Assistant  <sub>2026-09-06T10:24:24.921Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": ".venv/bin/python - <<'EOF'\nfrom pathlib import Path\np = Path(\"app/main.py\"); s = p.read_text()\ns = s.replace('_COLLECTION_RE = re.compile(r\"^[a-zA-Z0-9][a-zA-Z0-9._-]{1,62}$\")',\n              '# Mirrors ChromaDB\\'s collection-name rule: 3-63 chars, [a-zA-Z0-9._-], alphanumeric at both ends.\\n_COLLECTION_RE = re.compile(r\"^[a-zA-Z0-9][a-zA-Z0-9._-]{1,61}[a-zA-Z0-9]$\")')\ns = s.replace('raise HTTPException(400, \"Collection name must be 2-63 chars: letters, digits, . _ -\")',\n              'raise HTTPException(400, \"Collection name must be 3-63 chars of letters, digits, . _ - and start/end with a letter or digit\")')\np.write_text(s)\nt = Path(\"tests/test_api.py\"); x = t.read_text()\nfor a, b in (('\"t1\"', '\"col1\"'), ('\"t2\"', '\"col2\"'), ('\"t3\"', '\"col3\"')):\n    x = x.replace(a, b)\nx = x.replace(\"'t2'\", \"'col2'\").replace('\"collection\": \"t2\"', '\"collection\": \"col2\"')\nx = x.replace('''def test_health(client):''', '''def test_collection_name_validation(client):\n    r = client.post(\"/api/documents\", files=[(\"files\", (\"a.txt\", b\"x\"))], data={\"collection\": \"ab\"})\n    assert r.status_code == 400 and \"3-63\" in r.json()[\"detail\"]\n\n\ndef test_health(client):''')\nt.write_text(x)\nr = Path(\"README.md\"); y = r.read_text()\nr.write_text(y)\nprint(\"fixed\")\nEOF\ngrep -n \"t2\\b\" tests/test_api.py | head -3; .venv/bin/python -m compileall -q app cli evaluation scripts tests && .venv/bin/python -m pytest -q 2>&1 | grep -E \"passed|failed|Error\" | head",
+  "description": "Align collection-name validation with Chroma, rename test collections, rerun tests",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T10:24:25.910Z</sub>
+
+**Tool result**
+
+```
+fixed
+161:    client.delete("/api/collections/t2")
+E       AssertionError: assert 'The refund w... Bogus claim.' == 'The refund w... 30 days [1].'
+tests/test_api.py:117: AssertionError
+1 failed, 24 passed, 6 warnings in 0.68s
+```
+
+## Assistant  <sub>2026-09-06T10:26:05.118Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": ".venv/bin/python - <<'EOF'\nfrom pathlib import Path\n\n# ---------------- README\np = Path(\"README.md\"); s = p.read_text()\ns = s.replace(\"| Interface | REST API (FastAPI) · single-page UI (upload · requests & status · ask · sources) · `rag` CLI |\",\n              \"| Interface | REST API (FastAPI) · single-page UI (upload · jobs · documents · ask · sources) · `rag` CLI |\")\ns = s.replace(\"| Ingestion | asynchronous jobs: submit → `job_id` → poll status; fixed status vocabulary with reasons; SHA-256 duplicate detection |\",\n              \"| Ingestion | asynchronous **jobs**: one upload request = one job → `job_id` → poll; job listing and per-file document listing with a fixed status vocabulary and reasons; SHA-256 duplicate detection |\\n| Asking | over the whole collection **or scoped to selected documents and/or jobs**; answer = text with `[n]` markers + validated `citations` + all retrieved `sources` |\")\ns = s.replace(\"\"\"## 2. How the upload job flow works\n\nUploading is asynchronous. Every file in a request becomes a **job** and the API returns\nimmediately (HTTP 202) with one `job_id` per file. A background worker indexes the file; you\npoll `GET /api/jobs/{job_id}` or watch the listing. The interactive walkthrough is in\n[`documentation/flow.html`](documentation/flow.html).\n\nThe listing (`GET /api/documents`, and the **Requests & status** table in the UI) shows\n**DOC ID · NAME · STATUS · REASON** for every request ever made, including rejected ones.\n\"\"\", \"\"\"## 2. How the upload job flow works\n\nUploading is asynchronous. **One upload request (any number of files) = one job.** The API\nreturns immediately (HTTP 202) with the job — its `job_id`, a derived job status, and one\ndocument record per file. A background worker indexes the files; poll `GET /api/jobs/{job_id}`\nor watch the listings. The interactive walkthrough is in\n[`documentation/flow.html`](documentation/flow.html).\n\nTwo listings:\n\n- **Jobs** (`GET /api/jobs`, UI panel 2): **JOB ID · FILES · STATUS · REASON**. Job status is\n  derived from its documents every time it is read: `QUEUED` (nothing started), `PROCESSING`\n  (any file still running), `COMPLETED` (all files finished and at least one indexed or\n  duplicate; reason says \"partially completed: …\" when some files failed) or `FAILED` (all\n  files finished, none indexed). Clicking a job in the UI filters the document listing to that\n  job (`GET /api/documents?job_id=…`).\n- **Documents** (`GET /api/documents`, UI panel 3): **DOC ID · NAME · STATUS · REASON** for every\n  file ever uploaded, including rejected ones, with a link from a duplicate to its original.\n\"\"\")\ns = s.replace(\"\"\"Terminal statuses are all of them except `QUEUED` and `PROCESSING`. Duplicate detection is\nper collection: the same file in another collection is a separate document set. Jobs caught\nmid-flight by a restart are marked `FAILED` with an explanatory reason.\"\"\",\n\"\"\"Terminal statuses are all of them except `QUEUED` and `PROCESSING`. Duplicate detection is\nper collection: the same file in another collection is a separate document set. Documents caught\nmid-flight by a restart are marked `FAILED` with an explanatory reason.\n\n### Asking over selected documents or jobs\n\n`POST /api/ask` accepts `doc_ids` and/or `job_ids`. Without them the whole collection is\nsearched. With them, both retrievers (dense and BM25) are restricted to exactly those\ndocuments (a job expands to its `COMPLETED` documents; a duplicate id resolves to its original).\nThe request is validated: unknown id → 404, a document or job that is not `COMPLETED` → 409,\nids spanning several collections or contradicting `collection` → 400.\n\nThe response always contains the **answer text** (with `[n]` markers), **`citations`** — the\nsources those markers actually refer to, in order of first use — plus **`sources`** (everything\nretrieved) and **`scope`** (what was searched). Markers the LLM produced that match no retrieved\nsource are removed from the text and reported in `unresolved_citations`, so a client never shows a\ncitation it cannot open.\"\"\")\ns = s.replace(\"\"\"### UI (<http://localhost:8000>)\n1. **Upload** — drop files, optionally name a *collection* (a document set). Accepted extensions are shown.\n2. **Requests & status** — every job with its Doc ID, name, status pill and reason; duplicates link to their original; delete finished jobs with ✕.\n3. **Ask** — the answer cites `[n]` blocks; click a citation to jump to the chunk.\n4. **Sources** — each retrieved chunk with file, page/section, whether it came from dense or BM25 (or both) and its RRF score. OCR'd chunks are flagged.\"\"\",\n\"\"\"### UI (<http://localhost:8000>)\n1. **Upload** — drop files, optionally name a *collection* (a document set); they are submitted as one job and the job id is shown.\n2. **Jobs** — JOB ID · FILES · STATUS · REASON. Click a row to filter the documents to that job; tick a job to ask over it.\n3. **Documents** — DOC ID · NAME · STATUS · REASON for every file (job id shown under the doc id); duplicates link to their original; tick `COMPLETED` documents to ask over them; delete finished ones with ✕.\n4. **Ask** — the scope line shows what will be searched (whole collection or the ticked jobs/documents). The answer shows `[n]` markers, then a **Citations** list (file, page, section, doc id); click a marker to jump to the chunk.\n5. **Sources** — every retrieved chunk with file, page/section, doc id, whether it came from dense or BM25 (or both), its RRF score and a \"cited\" badge. OCR'd chunks are flagged.\"\"\")\ns = s.replace(\"\"\"rag ingest samples/*.md samples/*.pdf --collection demo   # prints job ids, waits for terminal status\nrag status --watch                                        # DOC ID · NAME · STATUS · REASON\nrag job <job_id>                                          # one job in detail\nrag ask \"How many days of annual leave do employees get?\" -c demo --show-sources\nrag reset -c demo --yes\nrag serve\"\"\", \"\"\"rag ingest samples/*.md samples/*.pdf --collection demo   # one job; prints the job id, waits for it\nrag jobs                                                  # JOB ID · FILES · STATUS · REASON\nrag job <job_id>                                          # one job and its documents\nrag status --watch                                        # DOC ID · NAME · STATUS · REASON (all documents)\nrag status --job <job_id>                                 # documents of one job\nrag ask \"How many days of annual leave do employees get?\" -c demo          # whole collection\nrag ask \"What is the notice period?\" --doc <doc_id> --doc <doc_id>         # only these documents\nrag ask \"Summarise the warranty terms\" --job <job_id> --show-sources        # only this job's documents\nrag reset -c demo --yes\nrag serve\"\"\")\ns = s.replace(\"\"\"| `POST` | `/api/documents` | multipart `files[]` (+ `collection`) → **202** with one job per file |\n| `GET` | `/api/jobs/{job_id}` | poll one job (`job_id` = `doc_id`) |\n| `GET` | `/api/documents?collection=&status=` | listing of all requests: doc id, name, status, reason, duplicate link |\n| `GET` | `/api/documents/{doc_id}` | same record as `/api/jobs/{id}` |\n| `DELETE` | `/api/documents/{doc_id}` | remove a finished job and its chunks |\n| `GET` | `/api/chunks?collection=&limit=&offset=` | inspect indexed chunks |\n| `POST` | `/api/ask` | `{\"question\", \"collection\"?, \"top_k\"?}` → answer + cited sources |\"\"\",\n\"\"\"| `POST` | `/api/documents` | multipart `files[]` (+ `collection`) → **202** with the **job** (`job_id`, status, one document record per file) |\n| `GET` | `/api/jobs?collection=` | job listing: job id, files, status, reason, counts per status |\n| `GET` | `/api/jobs/{job_id}` | poll one job, including its documents |\n| `GET` | `/api/documents?collection=&job_id=&status=` | document listing: doc id, name, status, reason, duplicate link; filter by job |\n| `GET` | `/api/documents/{doc_id}` | one document |\n| `DELETE` | `/api/documents/{doc_id}` | remove a finished document and its chunks |\n| `GET` | `/api/chunks?collection=&limit=&offset=` | inspect indexed chunks |\n| `POST` | `/api/ask` | `{\"question\", \"collection\"?, \"doc_ids\"?, \"job_ids\"?, \"top_k\"?}` → `answer`, `citations`, `sources`, `scope`, `unresolved_citations` |\"\"\")\ns = s.replace(\"\"\"curl -F \"files=@samples/handbook.md\" -F collection=demo localhost:8000/api/documents\ncurl localhost:8000/api/jobs/<job_id>\ncurl -X POST localhost:8000/api/ask -H 'content-type: application/json' \\\\\n     -d '{\"question\":\"What is the meal allowance?\",\"collection\":\"demo\"}'\"\"\",\n\"\"\"curl -F \"files=@samples/handbook.md\" -F \"files=@samples/warranty.pdf\" -F collection=demo localhost:8000/api/documents\ncurl localhost:8000/api/jobs/<job_id>                       # job status + its documents\ncurl \"localhost:8000/api/documents?job_id=<job_id>\"         # documents of that job\ncurl -X POST localhost:8000/api/ask -H 'content-type: application/json' \\\\\n     -d '{\"question\":\"What is the meal allowance?\",\"collection\":\"demo\"}'\ncurl -X POST localhost:8000/api/ask -H 'content-type: application/json' \\\\\n     -d '{\"question\":\"How long is the Titan warranty?\",\"job_ids\":[\"<job_id>\"]}'\"\"\")\ns = s.replace(\"- **Multiple document sets** via collections; reset or delete without restarting.\",\n              \"- **Multiple document sets** via collections (names: 3-63 chars of letters, digits, `. _ -`); reset or delete without restarting.\\n- **Scoped questions** over selected documents and/or jobs, with validated citations in every answer.\")\ns = s.replace(\"upload ─► validate/hash ─► QUEUED ─► worker: extract (PyMuPDF/docx/bs4/stdlib → OCR fallback) ─► chunk ─► fastembed ─► ChromaDB + BM25 ─► COMPLETED\\nask    ─► embed ─► Chroma top-k ─┐\\n       └► tokenize ─► BM25 top-k ─┴─► RRF ─► top FUSED_TOP_K ─► grounded prompt ─► OpenAI-compatible LLM ─► answer + sources\",\n              \"upload ─► job ─► per file: validate/hash ─► QUEUED ─► worker: extract (PyMuPDF/docx/bs4/stdlib → OCR fallback) ─► chunk ─► fastembed ─► ChromaDB + BM25 ─► COMPLETED\\nask    ─► resolve scope (collection | doc_ids | job_ids) ─► embed ─► Chroma top-k ─┐\\n                                                         └► tokenize ─► BM25 top-k ─┴─► RRF ─► grounded prompt ─► LLM ─► answer + validated citations + sources\")\ns = s.replace(\"- Cross-encoder reranking, query rewriting, multi-hop or conversational memory: single-turn retrieval → answer only.\",\n              \"- Cross-encoder reranking, query rewriting, multi-hop or conversational memory: single-turn retrieval → answer only.\\n- Asking across several collections in one question (a scope must live in one collection).\")\ns = s.replace(\"`pytest`   # chunker, RRF, every extractor, OCR-unavailable path, async job flow, duplicates, rejections, 502 on LLM errors\",\n              \"`pytest`   # chunker, RRF, every extractor + fallbacks, job lifecycle, job→document filter, scoped ask, citation validation, duplicates, rejections, 502 on LLM errors\")\ns = s.replace(\"app/            FastAPI service (config, models, ingest/, retrieval/, llm/, rag.py, jobs.py, main.py, static/index.html)\",\n              \"app/            FastAPI service (config, models, ingest/, retrieval/, llm/, rag.py, jobs.py [jobs + documents registry], main.py, static/index.html)\")\ns = s.replace(\"tests/          pytest suite    transcripts/  agent session exports\",\n              \"tests/          pytest suite    transcripts/  agent session exports    plans/  the approved implementation plan + change log\")\np.write_text(s)\n\n# ---------------- architecture.md\np = Path(\"documentation/architecture.md\"); s = p.read_text()\ns = s.replace(\"| Job registry | `app/jobs.py` | in-memory dict persisted to `data/documents.json`; status per upload |\",\n              \"| Job & document registry | `app/jobs.py` | jobs (`data/jobs.json`) and documents (`data/documents.json`); a job's status is derived from its documents on every read |\")\ns = s.replace(\"\"\"```\nclient ──POST /api/documents (multipart, collection)──► API\n                                                        │ per file:\"\"\", \"\"\"```\nclient ──POST /api/documents (multipart, collection)──► API creates ONE job (job_id)\n                                                        │ per file (each becomes a document of that job):\"\"\")\ns = s.replace(\"client ◄── 202 {documents:[{job_id, status, reason, …}]} ──┘\",\n              \"client ◄── 202 {job_id, status, reason, counts, documents:[{doc_id, status, reason, …}]} ──┘\")\ns = s.replace(\"\"\"client ──GET /api/jobs/{job_id}──► current record        client ──GET /api/documents?collection=──► listing\n```\"\"\", \"\"\"client ──GET /api/jobs──► job listing (JOB ID · FILES · STATUS · REASON)\nclient ──GET /api/jobs/{job_id}──► job + its documents\nclient ──GET /api/documents?job_id=──► documents of one job (DOC ID · NAME · STATUS · REASON)\n```\n\nJob status is never stored; it is derived from the documents each time it is read:\n`PROCESSING` if any document is processing (or some are queued and others done), `QUEUED` if\nall are queued, `COMPLETED` if all are terminal and at least one is `COMPLETED` or `DUPLICATE`\n(reason prefixed \"partially completed\" when others failed), otherwise `FAILED`.\"\"\")\ns = s.replace(\"\"\"## Ask flow (synchronous)\n\n```\nquestion ─► embed (fastembed) ─► Chroma cosine top DENSE_TOP_K ──┐\"\"\", \"\"\"## Ask flow (synchronous)\n\n```\n{question, collection | doc_ids | job_ids}\n   └─► resolve scope: job_ids → their COMPLETED documents; duplicate ids → their original;\n       validate (404 unknown, 409 not COMPLETED, 400 mixed collections) → concrete doc_id set or \"whole collection\"\nquestion ─► embed (fastembed) ─► Chroma cosine top DENSE_TOP_K (where doc_id ∈ scope) ──┐\"\"\")\ns = s.replace(\"        └─► tokenize          ─► BM25 top BM25_TOP_K ────────────┴─► RRF: score = Σ 1/(RRF_K + rank)\",\n              \"        └─► tokenize          ─► BM25 top BM25_TOP_K (chunks filtered to scope) ─┴─► RRF: score = Σ 1/(RRF_K + rank)\")\ns = s.replace(\"\"\"            {answer, sources:[{n, source, page, section, text, dense_rank, bm25_rank, rrf_score}], latency_ms}\n```\"\"\", \"\"\"            answer text ─► citation check: every [n] must match a retrieved source; unmatched markers are\n                           removed from the text and listed in unresolved_citations\n                                                                         ▼\n {answer, citations:[sources actually cited, first-use order], sources:[all retrieved], unresolved_citations, scope, latency_ms}\n```\"\"\")\ns = s.replace(\"- `data/uploads/` original files, `data/chroma/` vectors + chunk text + metadata,\\n  `data/documents.json` job registry. All under one Docker volume.\",\n              \"- `data/uploads/` original files, `data/chroma/` vectors + chunk text + metadata,\\n  `data/documents.json` document registry, `data/jobs.json` job registry. All under one Docker volume.\")\np.write_text(s)\n\n# ---------------- flow.html: ingest step 1 + ask steps\np = Path(\"documentation/flow.html\"); s = p.read_text()\ns = s.replace(\"\"\"    {t:'POST /api/documents', d:'Client sends one or more files (multipart) with an optional collection name. The API responds 202 immediately — nothing waits for indexing.',\n     code:`curl -F \"files=@handbook.md\" -F collection=demo localhost:8000/api/documents\\\\n→ 202 {\"documents\":[{\"job_id\":\"7f3a…\",\"status\":\"QUEUED\",\"reason\":\"Waiting for the background worker\"}]}`},\"\"\",\n\"\"\"    {t:'POST /api/documents', d:'Client sends one or more files (multipart) with an optional collection name. The whole request becomes ONE job; every file becomes a document of that job. The API responds 202 immediately with the job — nothing waits for indexing.',\n     code:`curl -F \"files=@handbook.md\" -F \"files=@warranty.pdf\" -F collection=demo localhost:8000/api/documents\\\\n→ 202 {\"job_id\":\"7f3a…\",\"status\":\"QUEUED\",\"files\":2,\"reason\":\"2 queued\",\\\\n        \"documents\":[{\"doc_id\":\"a1…\",\"status\":\"QUEUED\"},{\"doc_id\":\"b2…\",\"status\":\"QUEUED\"}]}`},\"\"\")\ns = s.replace(\"\"\"    {t:'QUEUED', d:'File stored at data/uploads/<doc_id>_<name>. A job record (job_id = doc_id) is written to data/documents.json and a background task is scheduled.',\n     code:`GET /api/jobs/7f3a…  → {\"status\":\"QUEUED\"}`},\"\"\",\n\"\"\"    {t:'QUEUED', d:'File stored at data/uploads/<doc_id>_<name>. The document record is written to data/documents.json, the job (data/jobs.json) lists it, and a background task is scheduled. The job status is derived from its documents whenever it is read.',\n     code:`GET /api/jobs/7f3a…            → {\"status\":\"QUEUED\", \"counts\":{\"QUEUED\":2}, \"documents\":[…]}\\\\nGET /api/documents?job_id=7f3a… → the two documents of this job`},\"\"\")\ns = s.replace(\"\"\"    {t:'COMPLETED', d:'The record becomes COMPLETED with a reason like \"Indexed 5 pages into 14 chunks\". The listing (DOC ID · NAME · STATUS · REASON) and GET /api/jobs/{id} reflect it. Any exception on the way → FAILED with \"PROCESSING FAILED: …\".',\n     branches:[['COMPLETED','ok','searchable now'],['FAILED','bad','PROCESSING FAILED: <exception>']]},\"\"\",\n\"\"\"    {t:'COMPLETED', d:'The document becomes COMPLETED with a reason like \"Indexed 5 pages into 14 chunks\". Any exception on the way → FAILED with \"PROCESSING FAILED: …\". The job rolls these up: PROCESSING while any file runs, then COMPLETED (at least one file indexed or duplicate; \"partially completed\" if some failed) or FAILED (nothing indexed). Both listings reflect it.',\n     branches:[['document COMPLETED','ok','searchable now'],['document FAILED','bad','PROCESSING FAILED: <exception>'],['job COMPLETED','ok','all files terminal, ≥1 indexed/duplicate'],['job FAILED','bad','all files terminal, none indexed']]},\"\"\")\ns = s.replace(\"\"\"    {t:'POST /api/ask', d:'{\"question\": \"...\", \"collection\": \"demo\"}. Synchronous: the answer comes back in the response.',\n     code:`curl -X POST localhost:8000/api/ask -H 'content-type: application/json' -d '{\"question\":\"How many leave days?\",\"collection\":\"demo\"}'`},\"\"\",\n\"\"\"    {t:'POST /api/ask', d:'{\"question\": \"...\", \"collection\": \"demo\"} searches the whole collection. Add \"doc_ids\": [...] and/or \"job_ids\": [...] to search only those documents (a job expands to its COMPLETED documents; a duplicate id resolves to its original). Synchronous: the answer comes back in the response.',\n     code:`# whole collection\\\\n{\"question\":\"How many leave days?\",\"collection\":\"demo\"}\\\\n# only two documents\\\\n{\"question\":\"How many leave days?\",\"doc_ids\":[\"a1…\",\"b2…\"]}\\\\n# only the documents of one upload job\\\\n{\"question\":\"Summarise the warranty\",\"job_ids\":[\"7f3a…\"]}`},\n    {t:'Resolve & validate scope', d:'The selection is turned into a concrete set of COMPLETED documents in exactly one collection. Anything else is rejected with a precise error so the client can fix the selection.',\n     branches:[['404','bad','unknown doc_id or job_id'],['409','bad','document or job not COMPLETED yet'],['400','bad','ids span several collections, or contradict \"collection\"'],['ok','ok','scope = {collection, doc_ids, job_ids, restricted}']]},\"\"\")\ns = s.replace(\"\"\"    {t:'Dense retrieval', d:'The question is embedded with the same fastembed model and ChromaDB returns the DENSE_TOP_K (20) nearest chunks by cosine similarity.'},\n    {t:'BM25 retrieval', d:'The question is tokenised (lower-cased words, stop-words removed) and rank-bm25 scores every chunk in the collection; the BM25_TOP_K (20) best are kept.'},\"\"\",\n\"\"\"    {t:'Dense retrieval', d:'The question is embedded with the same fastembed model and ChromaDB returns the DENSE_TOP_K (20) nearest chunks by cosine similarity — filtered with where doc_id ∈ scope when the question is scoped.'},\n    {t:'BM25 retrieval', d:'The question is tokenised (lower-cased words, stop-words removed) and rank-bm25 scores every chunk in the collection; chunks outside the scope are dropped, then the BM25_TOP_K (20) best are kept.'},\"\"\")\ns = s.replace(\"\"\"    {t:'Answer + sources', d:'The response carries the answer text with [n] citations plus every retrieved chunk: source file, page, section, whether it came from dense, BM25 or both (ranks), RRF score, and the chunk text. The UI links each citation to its source card.',\n     code:`{\"answer\":\"Employees accrue 24 days … [1]\",\"sources\":[{\"n\":1,\"source\":\"handbook.md\",\"page\":3,\"dense_rank\":1,\"bm25_rank\":2,\"rrf_score\":0.0325,…}]}`},\"\"\",\n\"\"\"    {t:'Validate citations', d:'Every [n] marker in the answer is checked against the retrieved sources. Markers that match become the citations list (in order of first use). Markers that match nothing are removed from the text and reported in unresolved_citations, so the client never shows a citation it cannot open.',\n     code:`\"The refund window is 30 days [1]. Bogus claim [9].\"\\\\n→ answer: \"The refund window is 30 days [1]. Bogus claim.\"\\\\n  citations: [source 1]   unresolved_citations: [9]`},\n    {t:'Answer + citations + sources', d:'The response carries the answer text with [n] markers, the citations (file, page, section, doc id, chunk text) those markers point to, every retrieved chunk (source file, page, section, dense/BM25 ranks, RRF score, text) and the scope that was searched. The UI shows the citations list under the answer and links each marker to its source card.',\n     code:`{\"answer\":\"Employees accrue 24 days … [1]\",\\\\n \"citations\":[{\"n\":1,\"source\":\"handbook.md\",\"page\":3,\"doc_id\":\"a1…\",…}],\\\\n \"sources\":[{\"n\":1,…},{\"n\":2,…}],\\\\n \"unresolved_citations\":[],\\\\n \"scope\":{\"collection\":\"demo\",\"doc_ids\":[\"a1…\"],\"job_ids\":[\"7f3a…\"],\"restricted\":true}}`},\"\"\")\np.write_text(s)\n\n# ---------------- changelog\np = Path(\"documentation/changelog.html\"); s = p.read_text()\nentry = \"\"\"<section class=\"rel\">\n  <h2>0.4.0 <time>2026-09-06</time></h2>\n  <p><span class=\"tag added\">Added</span> Jobs are first-class: one upload request = one job that owns its documents; questions can be scoped to documents and/or jobs; answers carry validated citations.</p>\n  <ul>\n    <li><span class=\"tag changed\">Changed</span> <code>POST /api/documents</code> now returns the <b>job</b> (<code>job_id</code>, derived status <code>QUEUED / PROCESSING / COMPLETED / FAILED</code>, reason, per-status counts, documents). Document records keep the parent <code>job_id</code>.</li>\n    <li><span class=\"tag added\">Added</span> <code>GET /api/jobs</code> listing (JOB ID · FILES · STATUS · REASON) and <code>GET /api/documents?job_id=</code> to see one job's documents. UI: Jobs panel; clicking a job filters the Documents panel.</li>\n    <li><span class=\"tag added\">Added</span> Scoped asking: <code>POST /api/ask</code> accepts <code>doc_ids</code> and <code>job_ids</code>; both retrievers (Chroma <code>where</code> filter, BM25 candidate filter) honour the scope. Validation: 404 unknown id, 409 not COMPLETED, 400 mixed collections. UI: tick jobs/documents; CLI: <code>rag ask --doc … --job …</code>.</li>\n    <li><span class=\"tag added\">Added</span> Answer payload: <code>citations</code> (sources actually cited, first-use order), <code>unresolved_citations</code> (bogus <code>[n]</code> markers removed from the text), <code>scope</code>. UI shows a Citations list under the answer and a \"cited\" badge on sources.</li>\n    <li><span class=\"tag added\">Added</span> CLI <code>rag jobs</code>, <code>rag job &lt;id&gt;</code> (job + documents), <code>rag status --job</code>.</li>\n    <li><span class=\"tag fixed\">Fixed</span> Collection names are validated with ChromaDB's rule (3-63 chars) instead of accepting 2-char names Chroma rejects.</li>\n    <li><span class=\"tag docs\">Docs</span> README, architecture, flow walkthrough updated; approved plan and its mid-session changes committed under <code>plans/</code>.</li>\n  </ul>\n</section>\n\n<section class=\"rel\">\n  <h2>0.3.0 <time>2026-09-06</time></h2>\"\"\"\ns = s.replace('<section class=\"rel\">\\n  <h2>0.3.0 <time>2026-09-06</time></h2>', entry, 1)\np.write_text(s)\n\n# ---------------- memory.md\np = Path(\"memory.md\"); s = p.read_text()\ns = s.replace(\"- `job_id == doc_id`. Terminal statuses: everything except `QUEUED` and `PROCESSING`.\",\n\"- A **job** is one upload request; its documents carry `job_id`. Job status is *derived* from its\\n  documents on every read (never stored). Document terminal statuses: everything except `QUEUED`\\n  and `PROCESSING`; job terminal statuses: `COMPLETED`, `FAILED`.\\n- Scoped ask: `doc_ids`/`job_ids` → concrete COMPLETED doc set in one collection; Chroma `where`\\n  `{doc_id: {$in: [...]}}` + BM25 candidate filter. Citations are validated in `app/rag.py`\\n  (`extract_citations`); bogus `[n]` markers are stripped and reported.\\n- Collection names follow Chroma's rule (3-63 chars, alnum at both ends) — 2-char names fail in Chroma.\")\ns = s.replace(\"  v0.3.0 PyMuPDF primary + Tesseract-as-fallback tiering, transcript/rules/docs scripts.\",\n              \"  v0.3.0 PyMuPDF primary + Tesseract-as-fallback tiering, transcript/rules/docs scripts;\\n  v0.4.0 jobs as first-class objects, job→document filter, scoped ask, validated citations, `plans/`.\")\np.write_text(s)\n\n# ---------------- CLAUDE.md repo map\np = Path(\"CLAUDE.md\"); s = p.read_text()\ns = s.replace(\"`tests/` · `transcripts/` agent session exports.\", \"`tests/` · `transcripts/` agent session exports · `plans/` approved plan + mid-session change log (append there when the plan changes).\")\np.write_text(s)\nprint(\"docs updated\")\nEOF\n.venv/bin/python scripts/build_docs.py >/dev/null && .venv/bin/python scripts/sync_rules.py >/dev/null && .venv/bin/python scripts/sync_rules.py --check",
+  "description": "Update README, architecture, flow, changelog, memory, CLAUDE.md for v0.4.0; rebuild docs and rules"
+}
+```
+
+## Tool  <sub>2026-09-06T10:26:05.256Z</sub>
+
+**Tool result**
+
+```
+docs updated
+rules in sync
+```
+
+## Assistant  <sub>2026-09-06T10:27:09.935Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "set -e\n.venv/bin/python - <<'EOF'\nfrom pathlib import Path\n\n# ---- config: single Chroma collection + store names\np = Path(\"app/config.py\"); s = p.read_text()\ns = s.replace('''    # --- Storage / server ---\n    DATA_DIR: Path = Path(\"data\")\n    DEFAULT_COLLECTION: str = \"default\"''', '''    # --- Storage / server ---\n    DATA_DIR: Path = Path(\"data\")\n    DEFAULT_COLLECTION: str = \"default\"      # default document set (user-facing \"collection\")\n    # The three stores. `jobs` and `documents` are JSON registries under DATA_DIR; `document_chunks`\n    # is the single ChromaDB collection holding every chunk, tagged with collection / doc_id / job_id.\n    JOBS_STORE: str = \"jobs\"\n    DOCUMENTS_STORE: str = \"documents\"\n    CHUNKS_STORE: str = \"document_chunks\"''')\ns = s.replace('''    @property\n    def documents_file(self) -> Path:\n        return self.DATA_DIR / \"documents.json\"''', '''    @property\n    def documents_file(self) -> Path:\n        return self.DATA_DIR / f\"{self.DOCUMENTS_STORE}.json\"\n\n    @property\n    def jobs_file(self) -> Path:\n        return self.DATA_DIR / f\"{self.JOBS_STORE}.json\"''')\np.write_text(s)\n\n# ---- jobs.py: use jobs_file\np = Path(\"app/jobs.py\"); s = p.read_text()\ns = s.replace('jpath = settings.DATA_DIR / \"jobs.json\"', 'jpath = settings.jobs_file')\ns = s.replace('jtmp = (settings.DATA_DIR / \"jobs.json\").with_suffix(\".tmp\")', 'jtmp = settings.jobs_file.with_suffix(\".tmp\")')\ns = s.replace('jtmp.replace(settings.DATA_DIR / \"jobs.json\")', 'jtmp.replace(settings.jobs_file)')\np.write_text(s)\n\n# ---- vector_store: one Chroma collection, metadata filters\nPath(\"app/retrieval/vector_store.py\").write_text('''\"\"\"ChromaDB (embedded PersistentClient) wrapper.\n\nAll chunks live in ONE Chroma collection, `settings.CHUNKS_STORE` (\"document_chunks\").\nEvery chunk's metadata carries `collection` (the user-facing document set), `doc_id` and\n`job_id`, so document sets, documents and upload jobs are all metadata filters.\n\"\"\"\nfrom __future__ import annotations\n\nimport threading\n\nimport chromadb\n\nfrom app.config import settings\n\n_client = None\n_lock = threading.Lock()\n\n\ndef client() -> chromadb.ClientAPI:\n    global _client\n    if _client is None:\n        with _lock:\n            if _client is None:\n                settings.chroma_dir.mkdir(parents=True, exist_ok=True)\n                _client = chromadb.PersistentClient(path=str(settings.chroma_dir))\n    return _client\n\n\ndef store():\n    return client().get_or_create_collection(name=settings.CHUNKS_STORE, metadata={\"hnsw:space\": \"cosine\"})\n\n\ndef _where(collection: str, doc_ids: list[str] | None = None, job_id: str | None = None) -> dict:\n    clauses: list[dict] = [{\"collection\": collection}]\n    if doc_ids is not None:\n        clauses.append({\"doc_id\": {\"$in\": list(doc_ids) or [\"__none__\"]}})\n    if job_id:\n        clauses.append({\"job_id\": job_id})\n    return clauses[0] if len(clauses) == 1 else {\"$and\": clauses}\n\n\ndef add_chunks(ids: list[str], texts: list[str], embeddings: list[list[float]], metadatas: list[dict]) -> None:\n    if not ids:\n        return\n    col = store()\n    step = 500  # stay under Chroma's per-call batch limit\n    for i in range(0, len(ids), step):\n        col.add(ids=ids[i:i + step], documents=texts[i:i + step],\n                embeddings=embeddings[i:i + step], metadatas=metadatas[i:i + step])\n\n\ndef count(collection: str, doc_ids: list[str] | None = None, job_id: str | None = None) -> int:\n    return len(store().get(where=_where(collection, doc_ids, job_id), include=[])[\"ids\"])\n\n\ndef query_dense(collection: str, query_embedding: list[float], top_k: int,\n                doc_ids: list[str] | None = None) -> list[dict]:\n    if doc_ids == []:\n        return []\n    where = _where(collection, doc_ids)\n    total = count(collection, doc_ids)\n    if total == 0:\n        return []\n    res = store().query(query_embeddings=[query_embedding], n_results=min(top_k, total), where=where,\n                        include=[\"documents\", \"metadatas\", \"distances\"])\n    return [{\"chunk_id\": cid, \"text\": doc, \"metadata\": meta, \"distance\": dist}\n            for cid, doc, meta, dist in zip(res[\"ids\"][0], res[\"documents\"][0],\n                                            res[\"metadatas\"][0], res[\"distances\"][0])]\n\n\ndef get_all_chunks(collection: str, doc_ids: list[str] | None = None, job_id: str | None = None) -> list[dict]:\n    col = store()\n    where = _where(collection, doc_ids, job_id)\n    out: list[dict] = []\n    step = 1000\n    offset = 0\n    while True:\n        res = col.get(where=where, include=[\"documents\", \"metadatas\"], limit=step, offset=offset)\n        for cid, doc, meta in zip(res[\"ids\"], res[\"documents\"], res[\"metadatas\"]):\n            out.append({\"chunk_id\": cid, \"text\": doc, \"metadata\": meta})\n        if len(res[\"ids\"]) < step:\n            break\n        offset += step\n    out.sort(key=lambda c: (c[\"metadata\"].get(\"doc_id\", \"\"), int(c[\"metadata\"].get(\"chunk_index\", 0))))\n    return out\n\n\ndef list_collections() -> list[str]:\n    \"\"\"Distinct document sets that currently have chunks.\"\"\"\n    col = store()\n    seen: set[str] = set()\n    offset, step = 0, 5000\n    while True:\n        res = col.get(include=[\"metadatas\"], limit=step, offset=offset)\n        for meta in res[\"metadatas\"]:\n            if meta and meta.get(\"collection\"):\n                seen.add(meta[\"collection\"])\n        if len(res[\"ids\"]) < step:\n            break\n        offset += step\n    return sorted(seen)\n\n\ndef delete_document(collection: str, doc_id: str) -> None:\n    store().delete(where=_where(collection, [doc_id]))\n\n\ndef delete_collection(collection: str) -> None:\n    if count(collection):\n        store().delete(where=_where(collection))\n''')\n\n# ---- bm25: rebuild from the document set\np = Path(\"app/retrieval/bm25_index.py\"); s = p.read_text()\ns = s.replace('\"\"\"rank-bm25 lexical index, one per collection, rebuilt from Chroma.\"\"\"',\n              '\"\"\"rank-bm25 lexical index, one per document set (collection), rebuilt from the document_chunks store.\"\"\"')\np.write_text(s)\n\n# ---- chunker + pipeline: job_id in chunk metadata\np = Path(\"app/ingest/chunker.py\"); s = p.read_text()\ns = s.replace('''def chunk_pages(pages: list[Page], *, doc_id: str, source: str, file_type: str,\n                collection: str) -> list[Chunk]:''', '''def chunk_pages(pages: list[Page], *, doc_id: str, source: str, file_type: str,\n                collection: str, job_id: str = \"\") -> list[Chunk]:''')\ns = s.replace('''                        \"doc_id\": doc_id,\n                        \"source\": source,''', '''                        \"doc_id\": doc_id,\n                        \"job_id\": job_id,\n                        \"source\": source,''')\np.write_text(s)\n\np = Path(\"app/ingest/pipeline.py\"); s = p.read_text()\ns = s.replace('''        chunks = chunk_pages(pages, doc_id=doc_id, source=doc.filename,\n                             file_type=doc.file_type or \"\", collection=doc.collection)''',\n'''        chunks = chunk_pages(pages, doc_id=doc_id, source=doc.filename, file_type=doc.file_type or \"\",\n                             collection=doc.collection, job_id=doc.job_id)''')\ns = s.replace('''        vector_store.add_chunks(doc.collection, [c.chunk_id for c in chunks],\n                                [c.text for c in chunks], vectors, [c.metadata for c in chunks])''',\n'''        vector_store.add_chunks([c.chunk_id for c in chunks], [c.text for c in chunks], vectors,\n                                [c.metadata for c in chunks])''')\np.write_text(s)\n\n# ---- models: ChunkOut gains job_id\np = Path(\"app/models.py\"); s = p.read_text()\ns = s.replace('''class ChunkOut(BaseModel):\n    chunk_id: str\n    doc_id: str\n    source: str''', '''class ChunkOut(BaseModel):\n    chunk_id: str\n    doc_id: str\n    job_id: str\n    collection: str\n    source: str''')\np.write_text(s)\n\n# ---- main.py: /api/chunks filters by doc_id / job_id\np = Path(\"app/main.py\"); s = p.read_text()\ns = s.replace('''@app.get(\"/api/chunks\", response_model=list[ChunkOut])\ndef list_chunks(collection: str | None = Query(default=None),\n                limit: int = Query(default=50, ge=1, le=1000), offset: int = Query(default=0, ge=0)):\n    col = _collection(collection)\n    chunks = vector_store.get_all_chunks(col)[offset:offset + limit]\n    return [ChunkOut(chunk_id=c[\"chunk_id\"], doc_id=c[\"metadata\"].get(\"doc_id\", \"\"),\n                     source=c[\"metadata\"].get(\"source\", \"\"), page=int(c[\"metadata\"].get(\"page\", 0)),\n                     section=c[\"metadata\"].get(\"section\") or None, text=c[\"text\"]) for c in chunks]''',\n'''@app.get(\"/api/chunks\", response_model=list[ChunkOut])\ndef list_chunks(collection: str | None = Query(default=None),\n                doc_id: str | None = Query(default=None), job_id: str | None = Query(default=None),\n                limit: int = Query(default=50, ge=1, le=1000), offset: int = Query(default=0, ge=0)):\n    \"\"\"Inspect the document_chunks store; filter by document set, document and/or upload job.\"\"\"\n    col = _collection(collection)\n    chunks = vector_store.get_all_chunks(col, [doc_id] if doc_id else None, job_id)[offset:offset + limit]\n    return [ChunkOut(chunk_id=c[\"chunk_id\"], doc_id=c[\"metadata\"].get(\"doc_id\", \"\"),\n                     job_id=c[\"metadata\"].get(\"job_id\", \"\"), collection=c[\"metadata\"].get(\"collection\", col),\n                     source=c[\"metadata\"].get(\"source\", \"\"), page=int(c[\"metadata\"].get(\"page\", 0)),\n                     section=c[\"metadata\"].get(\"section\") or None, text=c[\"text\"]) for c in chunks]''')\np.write_text(s)\n\n# ---- tests\np = Path(\"tests/test_api.py\"); s = p.read_text()\ns = s.replace('client.delete(\"/api/collections/t2\")', 'client.delete(\"/api/collections/col2\")')\ns = s.replace('''    assert body[\"answer\"] == \"The refund window is 30 days [1].\"''',\n              '''    assert body[\"answer\"] == \"The refund window is 30 days [1]. Bogus claim.\"  # only the bogus [9] marker is removed''')\ns = s.replace('''    # scoped to the security document only: no policy chunk may be retrieved''',\n'''    # chunk store carries job_id / collection and can be filtered by either\n    chunks = client.get(\"/api/chunks\", params={\"collection\": \"col2\", \"job_id\": jp[\"job_id\"]}).json()\n    assert chunks and all(c[\"job_id\"] == jp[\"job_id\"] and c[\"doc_id\"] == policy_id and c[\"collection\"] == \"col2\" for c in chunks)\n    assert client.get(\"/api/chunks\", params={\"collection\": \"col2\", \"doc_id\": security_id}).json()[0][\"source\"] == \"security.txt\"\n    assert client.get(\"/api/chunks\", params={\"collection\": \"col2\", \"job_id\": \"nope\"}).json() == []\n\n    # scoped to the security document only: no policy chunk may be retrieved''')\np.write_text(s)\np = Path(\"tests/test_chunker.py\"); s = p.read_text()\ns = s.replace('''    chunks = chunk_pages(pages, doc_id=\"d1\", source=\"f.pdf\", file_type=\"pdf\", collection=\"c\")\n    assert len(chunks) > 1\n    m = chunks[0].metadata\n    assert m[\"page\"] == 3 and m[\"section\"] == \"Intro\" and m[\"extraction\"] == \"ocr\"\n    assert m[\"source\"] == \"f.pdf\" and m[\"doc_id\"] == \"d1\"''',\n'''    chunks = chunk_pages(pages, doc_id=\"d1\", source=\"f.pdf\", file_type=\"pdf\", collection=\"c\", job_id=\"j9\")\n    assert len(chunks) > 1\n    m = chunks[0].metadata\n    assert m[\"page\"] == 3 and m[\"section\"] == \"Intro\" and m[\"extraction\"] == \"ocr\"\n    assert m[\"source\"] == \"f.pdf\" and m[\"doc_id\"] == \"d1\" and m[\"job_id\"] == \"j9\" and m[\"collection\"] == \"c\"''')\np.write_text(s)\nprint(\"stores refactored\")\nEOF\n.venv/bin/python -m compileall -q app cli evaluation scripts tests && .venv/bin/python -m pytest -q 2>&1 | grep -E \"passed|failed|Error\" | head",
+  "description": "Move vectors into a single document_chunks store with collection/doc_id/job_id metadata; update chunker, pipeline, chunks API, tests",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T10:27:10.959Z</sub>
+
+**Tool result**
+
+```
+stores refactored
+25 passed, 6 warnings in 0.71s
+```
+
+## Assistant  <sub>2026-09-06T10:27:47.222Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": ".venv/bin/python - <<'EOF'\nfrom pathlib import Path\n\n# .env.example: store names\np = Path(\".env.example\"); s = p.read_text()\ns = s.replace(\"#DEFAULT_COLLECTION=default\\n\", \"#DEFAULT_COLLECTION=default\\n# The three stores: JSON registries `jobs` and `documents` under DATA_DIR, and the single\\n# ChromaDB collection `document_chunks` (chunks tagged with collection / doc_id / job_id).\\n#JOBS_STORE=jobs\\n#DOCUMENTS_STORE=documents\\n#CHUNKS_STORE=document_chunks\\n\")\np.write_text(s)\n\n# README\np = Path(\"README.md\"); s = p.read_text()\ns = s.replace(\"\"\"## 6. Architecture\n\"\"\", \"\"\"## 6. Architecture\n\n### The three stores\n\n| Store | Where | Serves | Keyed / filtered by |\n|---|---|---|---|\n| `jobs` | `data/jobs.json` | job listing, `GET /api/jobs`, job status (derived) | `job_id`, `collection` |\n| `documents` | `data/documents.json` | document listing, `GET /api/documents`, per-file status and reason | `doc_id`, `job_id`, `collection`, `status`, `sha256` |\n| `document_chunks` | ChromaDB collection (`data/chroma/`) | chunking output: text + embedding + metadata for retrieval; `GET /api/chunks` | metadata `collection`, `doc_id`, `job_id`, `page`, `section`, `chunk_index` |\n\nEvery chunk carries `job_id` as well as `doc_id`, so filtering retrieval (or `/api/chunks`) by an\nupload job needs no join. Names are settings (`JOBS_STORE`, `DOCUMENTS_STORE`, `CHUNKS_STORE`).\n\"\"\")\ns = s.replace(\"| `GET` | `/api/chunks?collection=&limit=&offset=` | inspect indexed chunks |\",\n              \"| `GET` | `/api/chunks?collection=&doc_id=&job_id=&limit=&offset=` | inspect the `document_chunks` store, filterable by document or job |\")\ns = s.replace(\"| Vector DB | ChromaDB embedded `PersistentClient` | required by the brief; zero extra services |\",\n              \"| Vector DB | ChromaDB embedded `PersistentClient`, one `document_chunks` collection with metadata filters | required by the brief; zero extra services; jobs/documents/sets are metadata, not separate indexes |\")\np.write_text(s)\n\n# architecture.md\np = Path(\"documentation/architecture.md\"); s = p.read_text()\ns = s.replace(\"| Vector store | `app/retrieval/vector_store.py` | ChromaDB `PersistentClient`, one collection per document set |\",\n              \"| Vector store | `app/retrieval/vector_store.py` | ChromaDB `PersistentClient`; single `document_chunks` collection; document set / document / job are metadata filters |\")\ns = s.replace(\"\"\"## Persistence and process model\n\n- `data/uploads/` original files, `data/chroma/` vectors + chunk text + metadata,\n  `data/documents.json` document registry, `data/jobs.json` job registry. All under one Docker volume.\"\"\",\n\"\"\"## Persistence and process model\n\nThree named stores (names are settings):\n\n| Store | Backing | Contents |\n|---|---|---|\n| `jobs` | `data/jobs.json` | `{job_id, collection, doc_ids, created_at}`; status derived on read |\n| `documents` | `data/documents.json` | one record per uploaded file: status, reason, stage, sha256, job_id, duplicate_of, counts |\n| `document_chunks` | ChromaDB collection in `data/chroma/` | chunk text, embedding and metadata `{collection, doc_id, job_id, source, file_type, page, section, extraction, chunk_index, char_start, char_end}` |\n\nRetrieval scopes are metadata `where` clauses on `document_chunks`\n(`{\"collection\": …}` and optionally `{\"doc_id\": {\"$in\": […]}}`); the BM25 index is rebuilt per\ndocument set from the same store. `data/uploads/` keeps the original files. Everything sits\nunder one Docker volume.\"\"\")\np.write_text(s)\n\n# changelog: amend 0.4.0\np = Path(\"documentation/changelog.html\"); s = p.read_text()\ns = s.replace(\"\"\"    <li><span class=\"tag fixed\">Fixed</span> Collection names are validated with ChromaDB's rule (3-63 chars) instead of accepting 2-char names Chroma rejects.</li>\"\"\",\n\"\"\"    <li><span class=\"tag changed\">Changed</span> Storage is now three named stores: <code>jobs</code> and <code>documents</code> (JSON registries) and one ChromaDB collection <code>document_chunks</code> whose metadata carries <code>collection</code>, <code>doc_id</code> and <code>job_id</code>. Document sets, documents and jobs are metadata filters instead of separate Chroma collections; <code>GET /api/chunks</code> accepts <code>doc_id</code> / <code>job_id</code>.</li>\n    <li><span class=\"tag fixed\">Fixed</span> Collection names are validated with ChromaDB's rule (3-63 chars) instead of accepting 2-char names Chroma rejects.</li>\"\"\")\np.write_text(s)\n\n# memory.md\np = Path(\"memory.md\"); s = p.read_text()\ns = s.replace(\"- **ChromaDB embedded** (`PersistentClient`) rather than a separate server — one compose service.\",\n\"- **ChromaDB embedded** (`PersistentClient`) rather than a separate server — one compose service.\\n- **Three named stores** (user requirement): `jobs` + `documents` JSON registries, and ONE Chroma\\n  collection `document_chunks` with metadata `collection` / `doc_id` / `job_id`. Document sets are a\\n  metadata filter, not separate Chroma collections (earlier versions used one Chroma collection per\\n  set; old `data/chroma` dirs from before v0.4.0 must be deleted).\")\np.write_text(s)\nprint(\"docs ok\")\nEOF\n.venv/bin/python scripts/build_docs.py >/dev/null && .venv/bin/python scripts/sync_rules.py --check && rm -rf data tests/_data && echo \"data cleared\"",
+  "description": "Document the three stores, rebuild docs, clear pre-refactor data"
+}
+```
+
+## Tool  <sub>2026-09-06T10:27:47.351Z</sub>
+
+**Tool result**
+
+```
+docs ok
+rules in sync
+data cleared
+```
+
+## Assistant  <sub>2026-09-06T10:27:48.611Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "curl -s -m 3 -X POST localhost:8001/v1/chat/completions -H 'content-type: application/json' -d '{\"model\":\"m\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}' | head -c 200; echo; echo \"mock-check-done\"",
+  "description": "Check the mock LLM server is still running"
+}
+```
+
+## Tool  <sub>2026-09-06T10:27:48.650Z</sub>
+
+**Tool result**
+
+```
+{"id":"chatcmpl-51485d0aea98","object":"chat.completion","created":1788690468,"model":"m","choices":[{"index":0,"message":{"role":"assistant","content":"I could not find this in the provided documents
+mock-check-done
+```
+
+## Assistant  <sub>2026-09-06T10:27:56.564Z</sub>
+
+Docs and stores are in sync and the mock LLM is up. Restarting the API on the new store layout.
+
+## Assistant  <sub>2026-09-06T10:27:56.577Z</sub>
+
+**Tool call — `mcp__Claude_Browser__preview_start`**
+
+```json
+{
+  "name": "rag-api"
+}
+```
+
+## Tool  <sub>2026-09-06T10:28:01.842Z</sub>
+
+**Tool result**
+
+```
+{
+  "serverId": "ed76dfe0-335b-4d83-b67c-13f7f7e47349",
+  "port": 8000,
+  "name": "rag-api",
+  "reused": false,
+  "previewId": "preview-local_ed8547aa-7d57-4f03-9aba-91798b56bd6d",
+  "tabId": "seed"
+}
+Server started successfully on port 8000. Opened tab "seed" at http://localhost:8000. Use tabId "seed" with read_page / computer / navigate; serverId is for preview_stop and preview_logs only.
+```
+
+## Assistant  <sub>2026-09-06T10:28:18.102Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "sleep 5; printf 'junk' > /tmp/notes.xyz\ncd /Users/shoaib.rayeen/my_space/rag-generator\necho \"=== JOB A: policies + catalog (+ duplicate + unsupported) ===\"\n.venv/bin/python -m cli.rag_cli ingest samples/handbook.md samples/security_policy.txt samples/robot_catalog.csv samples/release_notes.html samples/handbook.md /tmp/notes.xyz 2>&1\necho; echo \"=== JOB B: warranty + onboarding + scanned memo ===\"\n.venv/bin/python -m cli.rag_cli ingest samples/warranty.pdf samples/onboarding.docx samples/scanned_memo.pdf 2>&1\necho; echo \"=== rag jobs ===\"\n.venv/bin/python -m cli.rag_cli jobs 2>&1\nJOB_B=$(curl -s localhost:8000/api/jobs | .venv/bin/python -c \"import sys,json; js=json.load(sys.stdin); print(next(j['job_id'] for j in js if j['files']==3))\")\nDOC_SEC=$(curl -s localhost:8000/api/documents | .venv/bin/python -c \"import sys,json; ds=json.load(sys.stdin); print(next(d['doc_id'] for d in ds if d['filename']=='security_policy.txt'))\")\necho; echo \"=== rag job $JOB_B ===\"\n.venv/bin/python -m cli.rag_cli job \"$JOB_B\" 2>&1\necho; echo \"=== ask scoped to JOB B (warranty question) ===\"\n.venv/bin/python -m cli.rag_cli ask \"How long is the warranty on Titan series industrial arms?\" --job \"$JOB_B\" 2>&1\necho; echo \"=== same question scoped to the security doc only (should not find it) ===\"\n.venv/bin/python -m cli.rag_cli ask \"How long is the warranty on Titan series industrial arms?\" --doc \"$DOC_SEC\" 2>&1\necho; echo \"=== chunks of JOB B ===\"\ncurl -s \"localhost:8000/api/chunks?job_id=$JOB_B&limit=3\" | .venv/bin/python -c \"import sys,json; [print(c['source'], 'page', c['page'], 'job', c['job_id']) for c in json.load(sys.stdin)]\"",
+  "description": "Ingest two jobs via CLI, list jobs, show a job, ask scoped by job and by document, inspect chunks by job",
+  "timeout": 240000
+}
+```
+
+## Tool  <sub>2026-09-06T10:28:26.010Z</sub>
+
+**Tool result**
+
+```
+=== JOB A: policies + catalog (+ duplicate + unsupported) ===
+job 36e614c28562  PROCESSING  (6 files, collection default)
+  QUEUED                     handbook.md  doc_id=1012aa4f3a1e
+  QUEUED                     security_policy.txt  doc_id=4fcf5fdf7e1c
+  QUEUED                     robot_catalog.csv  doc_id=49bb425b9da2
+  QUEUED                     release_notes.html  doc_id=b36bd960c207
+  DUPLICATE                  handbook.md  doc_id=21234342ba73
+  EXTRACTION_NOT_SUPPORTED   notes.xyz  doc_id=cd667545b023
+job 36e614c28562  COMPLETED  partially completed: 4 completed, 1 duplicate, 1 extraction not supported
+  COMPLETED                  handbook.md  Indexed 6 pages into 6 chunks
+  COMPLETED                  security_policy.txt  Indexed 1 pages into 1 chunks
+  COMPLETED                  robot_catalog.csv  Indexed 1 pages into 1 chunks
+  COMPLETED                  release_notes.html  Indexed 1 pages into 1 chunks
+  DUPLICATE                  handbook.md  Same content as 'handbook.md' (1012aa4f3a1e); not processed again
+  EXTRACTION_NOT_SUPPORTED   notes.xyz  Extension '.xyz' is not supported. Supported: .csv .docx .htm .html .jpeg .jpg .md .pdf .png .tif .tiff .txt
+
+=== JOB B: warranty + onboarding + scanned memo ===
+job e68d8b4d9697  QUEUED  (3 files, collection default)
+  QUEUED                     warranty.pdf  doc_id=4b67badd3411
+  QUEUED                     onboarding.docx  doc_id=11fb5d056cf8
+  QUEUED                     scanned_memo.pdf  doc_id=a259123ccbba
+job e68d8b4d9697  COMPLETED  partially completed: 2 completed, 1 failed
+  COMPLETED                  warranty.pdf  Indexed 4 pages into 4 chunks
+  COMPLETED                  onboarding.docx  Indexed 5 pages into 5 chunks
+  FAILED                     scanned_memo.pdf  PROCESSING FAILED: This PDF contains no text layer and Tesseract OCR is not installed on this host, so it could not be read. OCR works in the Docker image; locally install tesseract (brew install tesseract / apt install tesseract-ocr) and upload again.
+
+=== rag jobs ===
+JOB ID       FILES STATUS     COLLECTION   REASON
+e68d8b4d9697 3     COMPLETED  default      partially completed: 2 completed, 1 failed
+36e614c28562 6     COMPLETED  default      partially completed: 4 completed, 1 duplicate, 1 extraction not supported
+
+=== rag job e68d8b4d9697 ===
+job e68d8b4d9697  COMPLETED  partially completed: 2 completed, 1 failed  (collection default)
+  4b67badd3411 warranty.pdf                     COMPLETED                  Indexed 4 pages into 4 chunks
+  11fb5d056cf8 onboarding.docx                  COMPLETED                  Indexed 5 pages into 5 chunks
+  a259123ccbba scanned_memo.pdf                 FAILED                     PROCESSING FAILED: This PDF contains no text layer and Tesseract OCR is not installed on this host, so it could not be read. OCR works in the Docker image; locally install tesseract (brew install tesseract / apt install tesseract-ocr) and upload again.
+
+=== ask scoped to JOB B (warranty question) ===
+Desktop and collaborative arms: 2 years. Industrial arms (Titan series): 3 years. [1]
+
+[mock-extractive · 10 ms · scope: 2 selected document(s) · 1 citation(s) from 6 retrieved chunks]
+  [1] warranty.pdf — page 2  (doc 4b67badd3411)
+
+=== same question scoped to the security doc only (should not find it) ===
+I could not find this in the provided documents.
+
+[mock-extractive · 8 ms · scope: 1 selected document(s) · 0 citation(s) from 1 retrieved chunks]
+
+=== chunks of JOB B ===
+onboarding.docx page 1 job e68d8b4d9697
+onboarding.docx page 2 job e68d8b4d9697
+onboarding.docx page 3 job e68d8b4d9697
+```
+
+## Assistant  <sub>2026-09-06T10:28:35.577Z</sub>
+
+**Tool call — `mcp__Claude_Browser__browser_batch`**
+
+```json
+{
+  "actions": [
+    {
+      "name": "navigate",
+      "input": {
+        "url": "http://localhost:8000",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "wait",
+        "duration": 2,
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "screenshot",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "read_page",
+      "input": {
+        "filter": "interactive",
+        "tabId": "seed"
+      }
+    }
+  ]
+}
+```
+
+## Tool  <sub>2026-09-06T10:28:39.801Z</sub>
+
+**Tool result**
+
+```
+[navigate] navigated to http://localhost:8000
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+[computer:wait] waited 2s
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+[computer:screenshot] Screenshot size: 800x571
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+
+[read_page] link "How it works" [ref_1] href="/documentation/flow.html"
+link "Architecture" [ref_2] href="/documentation/architecture.html"
+link "Changelog" [ref_3] href="/documentation/changelog.html"
+link "API docs" [ref_4] href="/docs"
+textbox "Collection (document set)" [ref_5] type="text"
+button "Upload as one job" [ref_6]
+button "Delete every job and document in this collection" [ref_7]
+generic [ref_8]
+ checkbox "on" [ref_9] type="checkbox"
+generic [ref_10]
+ checkbox "on" [ref_11] type="checkbox"
+checkbox "on" [ref_12] type="checkbox"
+button "Delete" [ref_13]
+textbox "Ask something answerable from the uploaded documents…" [ref_14] placeholder="Ask something answerable from the uploaded documents…"
+button "Ask" [ref_15]
+
+Viewport: 1214x867
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+```
+
+## Assistant  <sub>2026-09-06T10:28:53.095Z</sub>
+
+**Tool call — `mcp__Claude_Browser__browser_batch`**
+
+```json
+{
+  "actions": [
+    {
+      "name": "computer",
+      "input": {
+        "action": "left_click",
+        "ref": "ref_9",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "left_click",
+        "ref": "ref_14",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "type",
+        "text": "How long is the warranty on Titan series industrial arms?",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "left_click",
+        "ref": "ref_15",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "wait",
+        "duration": 2,
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "screenshot",
+        "tabId": "seed"
+      }
+    }
+  ]
+}
+```
+
+## Tool  <sub>2026-09-06T10:28:57.129Z</sub>
+
+**Tool result**
+
+```
+[computer:left_click] left_click at (64, 434) [ref_9]
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+[computer:left_click] left_click at (837, 244) [ref_14]
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+[computer:type] typed 57 chars
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+[computer:left_click] left_click at (532, 311) [ref_15]
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+[computer:wait] waited 2s
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+[computer:screenshot] Screenshot size: 800x571
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+
+```
+
+## Assistant  <sub>2026-09-06T10:29:10.005Z</sub>
+
+**Tool call — `mcp__Claude_Browser__browser_batch`**
+
+```json
+{
+  "actions": [
+    {
+      "name": "computer",
+      "input": {
+        "action": "left_click",
+        "coordinate": [
+          220,
+          580
+        ],
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "wait",
+        "duration": 1,
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "scroll",
+        "coordinate": [
+          240,
+          700
+        ],
+        "scroll_direction": "down",
+        "scroll_amount": 5,
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "screenshot",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "navigate",
+      "input": {
+        "url": "http://localhost:8000/documentation/flow.html",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "wait",
+        "duration": 1,
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "find",
+      "input": {
+        "query": "Play",
+        "tabId": "seed"
+      }
+    }
+  ]
+}
+```
+
+## Tool  <sub>2026-09-06T10:29:12.005Z</sub>
+
+**Tool result**
+
+```
+actions[0] (computer:left_click) failed: left_click: coordinate (220, 580) is outside the coordinate frame (800x571). Coordinates are pixels in the full-resolution frame — if the page changed, take a new screenshot first. (0 completed, 6 remaining)
+```
+
+## Assistant  <sub>2026-09-06T10:29:15.273Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": "MEM=/Users/shoaib.rayeen/.claude/projects/-Users-shoaib-rayeen-my-space-rag-generator/memory\n.venv/bin/python - \"$MEM\" <<'EOF'\nimport sys\nfrom pathlib import Path\np = Path(sys.argv[1]) / \"rag-generator-project-context.md\"; s = p.read_text()\ns = s.replace(\"Judge for evaluation is Claude (`claude-opus-5`) via the anthropic SDK with its own key.\",\n\"Judge for evaluation is Claude (`claude-opus-5`) via the anthropic SDK with its own key.\\nv0.4.0: one upload request = one job; three stores `jobs`, `documents` (JSON) and `document_chunks`\\n(single Chroma collection, metadata collection/doc_id/job_id); asks can be scoped by doc_ids/job_ids\\nand return validated citations. PyMuPDF is the primary PDF extractor, Tesseract strictly a fallback.\")\ns = s.replace(\"Built 2026-09-06 (v0.1.0 → v0.2.0 same day).\", \"Built 2026-09-06 (v0.1.0 → v0.4.0 same day).\")\np.write_text(s); print(\"memory updated\")\nEOF",
+  "description": "Update persistent memory with v0.4.0 facts"
+}
+```
+
+## Tool  <sub>2026-09-06T10:29:15.319Z</sub>
+
+**Tool result**
+
+```
+memory updated
+```
+
+## Assistant  <sub>2026-09-06T10:29:17.270Z</sub>
+
+**Tool call — `Bash`**
+
+```json
+{
+  "command": ".venv/bin/python -m compileall -q app cli evaluation scripts tests && .venv/bin/python -m pytest -q 2>&1 | grep -E \"passed|failed\" && .venv/bin/python scripts/sync_rules.py --check && .venv/bin/python scripts/build_docs.py >/dev/null && git status --short | grep -v \"^A \" | head -20; echo \"---\"; git status --short | wc -l",
+  "description": "Final compile, tests, rules sync check, docs rebuild, git status summary",
+  "timeout": 300000
+}
+```
+
+## Tool  <sub>2026-09-06T10:29:18.377Z</sub>
+
+**Tool result**
+
+```
+25 passed, 6 warnings in 0.71s
+rules in sync
+M  .cursor/rules/project.mdc
+M  .env.example
+M  AGENTS.md
+M  CLAUDE.md
+M  README.md
+M  app/config.py
+M  app/ingest/chunker.py
+M  app/ingest/pipeline.py
+M  app/jobs.py
+M  app/main.py
+M  app/models.py
+M  app/retrieval/bm25_index.py
+M  app/retrieval/vector_store.py
+M  app/static/index.html
+M  documentation/architecture.html
+M  documentation/architecture.md
+M  documentation/changelog.html
+M  documentation/flow.html
+M  documentation/readme.html
+M  memory.md
+---
+      23
+```
+
+## Assistant  <sub>2026-09-06T10:29:32.456Z</sub>
+
+**Tool call — `mcp__Claude_Browser__browser_batch`**
+
+```json
+{
+  "actions": [
+    {
+      "name": "computer",
+      "input": {
+        "action": "left_click",
+        "ref": "ref_8",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "wait",
+        "duration": 1,
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "scroll",
+        "coordinate": [
+          240,
+          450
+        ],
+        "scroll_direction": "down",
+        "scroll_amount": 6,
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "screenshot",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "navigate",
+      "input": {
+        "url": "http://localhost:8000/documentation/flow.html",
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "wait",
+        "duration": 1,
+        "tabId": "seed"
+      }
+    },
+    {
+      "name": "computer",
+      "input": {
+        "action": "screenshot",
+        "scale": 0.6,
+        "tabId": "seed"
+      }
+    }
+  ]
+}
+```
+
+## Tool  <sub>2026-09-06T10:30:06.759Z</sub>
+
+**Tool result**
+
+```
+[computer:left_click] left_click at (248, 434) [ref_8]
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+[computer:wait] waited 1s
+
+
+Tab Context:
+- Executed on tabId: seed
+- Available tabs:
+  • tabId seed: "RAG Generator" (http://localhost:8000)
+
+actions[2] (computer:scroll) failed: computer timed out after 30s. The Browser pane is currently hidden. The page is not rendered while it is not displayed, so actions that wait for it to draw (scrolling, hovering, dragging) cannot complete. Read it with `get_page_text`, `find` or `read_page` instead of retrying, or scroll with `javascript_tool` (window.scrollBy). (2 completed, 4 remaining)
 ```

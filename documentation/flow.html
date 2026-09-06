@@ -29,7 +29,7 @@
   .bar{height:8px;background:#eef2ff;border-radius:4px;overflow:hidden} .bar i{display:block;height:100%;background:var(--accent)}
 </style></head>
 <body><main>
-<div class="nav"><a href="/">← App</a> · <a href="/documentation/changelog.html">Changelog</a> · <a href="/documentation/architecture.html">architecture.md</a> · <a href="/docs">API docs</a></div>
+<div class="nav"><a href="/">← App</a> · <a href="/documentation/changelog.html">Changelog</a> · <a href="/documentation/architecture.html">Architecture</a> · <a href="/docs">API docs</a></div>
 <h1>How RAG Generator works</h1>
 <div class="sub">Step through what happens after you upload a file, and what happens when you ask a question. Click any step, or press <b>Play</b>.</div>
 
@@ -115,12 +115,12 @@ const pos = {ingest:-1, ask:-1}; const timers = {};
 
 function render(name){
   const flow = FLOWS[name], track = document.getElementById(name+'-track');
-  track.innerHTML = flow.map((s,i)=>`<div class="step ${i<pos[name]?'done':''} ${i===pos[name]?'now':''}" onclick="goto('${name}',${i})"><div class="n">step ${i+1}</div><h3>${s.t}</h3><p>${s.d.split('.')[0]}.</p></div>`).join('');
+  track.innerHTML = flow.map((s,i)=>`<div class="step ${i<pos[name]?'done':''} ${i===pos[name]?'now':''}" onclick="goto('${name}',${i})"><div class="n">step ${i+1}</div><h3>${esc(s.t)}</h3><p>${esc(s.d.split(/(?<=[a-z0-9\)])\. /)[0])}.</p></div>`).join('');
   const det = document.getElementById(name+'-detail');
   const s = flow[pos[name]];
   document.getElementById(name+'-pos').textContent = pos[name]<0 ? `${flow.length} steps` : `step ${pos[name]+1} of ${flow.length}`;
   if(!s){ det.innerHTML = `<h3>Press Play or click a step</h3><p class="muted">Each card explains what the service does at that point, which module does it, and what you would see in the API.</p>`; return; }
-  det.innerHTML = `<h3>${s.t}</h3><p>${s.d}</p>${s.code?`<pre>${esc(s.code)}</pre>`:''}${s.branches?`<div class="branches">${s.branches.map(([st,cls,why])=>`<div class="branch"><b><span class="pill ${cls}">${st}</span></b>${why}</div>`).join('')}</div>`:''}`;
+  det.innerHTML = `<h3>${esc(s.t)}</h3><p>${esc(s.d)}</p>${s.code?`<pre>${esc(s.code)}</pre>`:''}${s.branches?`<div class="branches">${s.branches.map(([st,cls,why])=>`<div class="branch"><b><span class="pill ${cls}">${st}</span></b>${why}</div>`).join('')}</div>`:''}`;
 }
 function goto(name,i){ pos[name]=i; render(name); }
 function step(name,d){ pos[name]=Math.max(-1,Math.min(FLOWS[name].length-1,pos[name]+d)); render(name); }
