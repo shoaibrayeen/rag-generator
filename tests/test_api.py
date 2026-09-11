@@ -66,16 +66,28 @@ def test_job_lifecycle_listing_and_filter(client):
     assert done["status"] == "COMPLETED", done
     assert done["counts"] == {"COMPLETED": 2, "EXTRACTION_NOT_SUPPORTED": 1}
     assert done["reason"].startswith("partially completed")
+    # job totals: documents in the job, pages/chunks summed over its COMPLETED documents
+    assert done["total_documents"] == 3 == done["files"]
+    completed = [d for d in done["documents"] if d["status"] == "COMPLETED"]
+    assert done["total_pages"] == sum(d["pages"] for d in completed) == 3  # policy.md has 2 pages, security.txt 1
+    assert done["total_chunks"] == sum(d["chunks"] for d in completed) > 0
 
-    jobs = client.get("/api/jobs", params={"collection": "col1"}).json()
+    page = client.get("/api/jobs", params={"collection": "col1"}).json()
+    assert page["page"] == 0 and page["size"] == 5 and page["total"] == 1 and page["pages"] == 1
+    assert page["has_next"] is False and page["has_prev"] is False
+    jobs = page["items"]
     assert [j["job_id"] for j in jobs] == [job["job_id"]]
-    assert {"job_id", "files", "status", "reason"} <= set(jobs[0])
+    assert {"job_id", "files", "total_documents", "total_pages", "total_chunks", "status", "reason"} <= set(jobs[0])
 
     # job -> document listing filter
-    docs = client.get("/api/documents", params={"job_id": job["job_id"]}).json()
+    docs = client.get("/api/documents", params={"job_id": job["job_id"]}).json()["items"]
     assert {d["filename"] for d in docs} == {"policy.md", "security.txt", "junk.xyz"}
-    assert client.get("/api/documents", params={"job_id": "nope"}).json() == []
+    empty = client.get("/api/documents", params={"job_id": "nope"}).json()
+    assert empty["items"] == [] and empty["total"] == 0 and empty["pages"] == 0
     assert client.get("/api/jobs/nope").status_code == 404
+
+    # hash is computed at upload time and kept on every record with content
+    assert all(d["sha256"] for d in docs if d["status"] != "EMPTY_FILE")
 
     # duplicate in a second job -> job COMPLETED (nothing new indexed), doc DUPLICATE linking original
     job2 = _upload(client, [("policy-copy.md", POLICY)], "col1")
@@ -83,13 +95,16 @@ def test_job_lifecycle_listing_and_filter(client):
     dup = done2["documents"][0]
     original = next(d for d in docs if d["filename"] == "policy.md")
     assert dup["status"] == "DUPLICATE" and dup["duplicate_of"] == original["doc_id"]
+    assert dup["sha256"] == original["sha256"]
     assert done2["status"] == "COMPLETED" and done2["counts"] == {"DUPLICATE": 1}
 
     # a job whose only file fails -> FAILED
     job3 = _upload(client, [("broken.pdf", b"not a pdf")], "col1")
     done3 = _wait_job(client, job3["job_id"])
     assert done3["status"] == "FAILED" and done3["reason"].startswith("no file could be indexed")
-    assert done3["documents"][0]["reason"].startswith("PROCESSING FAILED: Could not read this pdf")
+    reason = done3["documents"][0]["reason"]
+    assert reason.startswith("PROCESSING FAILED: Could not read 'broken.pdf': the pdf reader failed (FileDataError")
+    assert "/Users" not in reason and "tests/_data" not in reason  # no absolute paths leak into the reason
 
 
 def test_ask_scoped_by_docs_and_jobs_with_citations(client, monkeypatch):
@@ -168,7 +183,7 @@ def test_ask_scoped_by_docs_and_jobs_with_citations(client, monkeypatch):
     client.delete("/api/collections/t3")
     r = client.post("/api/ask", json={"question": "anything", "collection": "col2"})
     assert r.json()["sources"] == [] and "could not find" in r.json()["answer"]
-    assert client.get("/api/jobs", params={"collection": "col2"}).json() == []
+    assert client.get("/api/jobs", params={"collection": "col2"}).json()["items"] == []
 
 
 def test_rejections_become_records(client):
@@ -192,3 +207,153 @@ def test_llm_error_is_502(client, monkeypatch):
     r = client.post("/api/ask", json={"question": "capital of Freedonia?", "collection": "err"})
     assert r.status_code == 502 and "bad key" in r.json()["detail"]
     client.delete("/api/collections/err")
+
+
+def test_pagination_defaults_and_navigation(client):
+    # 7 single-file jobs -> 7 jobs and 7 documents; default page size is 5, page index is 0-based
+    for i in range(7):
+        _upload(client, [(f"f{i}.txt", f"document number {i} about pagination".encode())], "pag")
+    first = client.get("/api/jobs", params={"collection": "pag"}).json()
+    assert first["page"] == 0 and first["size"] == 5 and first["total"] == 7 and first["pages"] == 2
+    assert len(first["items"]) == 5 and first["has_next"] and not first["has_prev"]
+    second = client.get("/api/jobs", params={"collection": "pag", "page": 1}).json()
+    assert len(second["items"]) == 2 and second["has_prev"] and not second["has_next"]
+    assert {j["job_id"] for j in first["items"]}.isdisjoint({j["job_id"] for j in second["items"]})
+    # newest first: page 0 holds the most recent uploads
+    assert first["items"][0]["created_at"] >= second["items"][-1]["created_at"]
+    beyond = client.get("/api/jobs", params={"collection": "pag", "page": 5}).json()
+    assert beyond["items"] == [] and beyond["total"] == 7
+
+    docs = client.get("/api/documents", params={"collection": "pag", "size": 3, "page": 2}).json()
+    assert docs["pages"] == 3 and len(docs["items"]) == 1 and docs["has_prev"] and not docs["has_next"]
+    assert client.get("/api/documents", params={"collection": "pag", "size": 0}).status_code == 422
+    assert client.get("/api/documents", params={"collection": "pag", "page": -1}).status_code == 422
+    client.delete("/api/collections/pag")
+
+
+RTF_BYTES = (rb"{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard Credit Risk Assessment dated 17 December 2025."
+             rb"\par The borrower rating is BBB and the exposure limit is EUR 2 million.\par}")
+
+
+def test_rtf_in_docx_clothing_is_indexed_and_retry_works(client, monkeypatch):
+    job = _upload(client, [("2P CRA dated 17_12_2025.docx", RTF_BYTES)], "rtf")
+    done = _wait_job(client, job["job_id"])
+    doc = done["documents"][0]
+    assert doc["status"] == "COMPLETED", doc
+    assert "content is RTF" in doc["reason"] and doc["pages"] == 1
+
+    # retry: not for COMPLETED documents
+    r = client.post(f"/api/documents/{doc['doc_id']}/retry")
+    assert r.status_code == 409 and "COMPLETED" in r.json()["detail"]
+    job2 = _upload(client, [("old.docx", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 600)], "rtf")
+    failed = _wait_job(client, job2["job_id"])["documents"][0]
+    assert failed["status"] == "FAILED" and "legacy binary Word" in failed["reason"]
+    r = client.post(f"/api/documents/{failed['doc_id']}/retry")
+    assert r.status_code == 202 and r.json()["status"] == "QUEUED"
+    again = _wait_job(client, job2["job_id"])["documents"][0]
+    assert again["status"] == "FAILED"  # same file, same outcome, but processed again
+    assert client.post("/api/documents/nope/retry").status_code == 404
+    client.delete("/api/collections/rtf")
+
+
+def test_dedicated_pages_and_file_endpoint(client):
+    for path in ("/", "/jobs", "/documents", "/documents/anything"):
+        r = client.get(path)
+        assert r.status_code == 200 and "text/html" in r.headers["content-type"], path
+    assert "20" in client.get("/documents").text  # 20 per page on the dedicated listing
+    job = _upload(client, [("notes.txt", b"Plain text to view inline."), ("x.exe", b"MZ")], "pages")
+    _wait_job(client, job["job_id"])
+    ok = next(d for d in job["documents"] if d["filename"] == "notes.txt")
+    r = client.get(f"/api/documents/{ok['doc_id']}/file")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/plain") and b"inline" in r.content
+    assert "inline" in r.headers["content-disposition"]
+    r = client.get(f"/api/documents/{ok['doc_id']}/file", params={"download": "true"})
+    assert "attachment" in r.headers["content-disposition"]
+    rejected = next(d for d in job["documents"] if d["filename"] == "x.exe")
+    assert client.get(f"/api/documents/{rejected['doc_id']}/file").status_code == 200  # unsupported files are stored too
+    assert client.get("/api/documents/nope/file").status_code == 404
+    client.delete("/api/collections/pages")
+
+
+def test_pages_endpoint_stored_and_reconstructed(client):
+    from app.config import settings
+
+    body = (b"# Refund policy\nCustomers may request a refund within 30 days of purchase.\n\n"
+            b"# Shipping\nOrders ship within 2 business days.\n")
+    job = _upload(client, [("policy.md", body)], "pagesx")
+    doc = _wait_job(client, job["job_id"])["documents"][0]
+    assert doc["status"] == "COMPLETED"
+    pg = client.get(f"/api/documents/{doc['doc_id']}/pages").json()
+    assert pg["source"] == "stored" and [p["page"] for p in pg["pages"]] == [1, 2]
+    assert pg["pages"][0]["section"] == "Refund policy" and "30 days" in pg["pages"][0]["text"]
+    assert pg["pages"][0]["chunk_ids"] == [f"{doc['doc_id']}:0"]
+
+    # chunk offsets refer to the stored page text, so the viewer can highlight exactly
+    chunks = client.get("/api/chunks", params={"collection": "pagesx", "doc_id": doc["doc_id"]}).json()
+    for c in chunks:
+        page = next(p for p in pg["pages"] if p["page"] == c["page"])
+        assert page["text"][c["char_start"]:c["char_end"]].strip() == c["text"]
+
+    # documents indexed before page text was stored are reconstructed from chunk offsets
+    (settings.pages_dir / f"{doc['doc_id']}.json").unlink()
+    pg2 = client.get(f"/api/documents/{doc['doc_id']}/pages").json()
+    assert pg2["source"] == "reconstructed" and "30 days" in pg2["pages"][0]["text"]
+
+    # not applicable for non-COMPLETED documents / unknown ids
+    bad = _upload(client, [("x.exe", b"MZ")], "pagesx")["documents"][0]
+    assert client.get(f"/api/documents/{bad['doc_id']}/pages").status_code == 409
+    assert client.get("/api/documents/nope/pages").status_code == 404
+    # deleting the document removes its page text
+    client.delete(f"/api/documents/{doc['doc_id']}")
+    assert not (settings.pages_dir / f"{doc['doc_id']}.json").exists()
+    client.delete("/api/collections/pagesx")
+
+
+def test_retry_semantics_per_status(client):
+    job = _upload(client, [("junk.xyz", b"not recognisable"), ("empty.txt", b""), ("policy.md", POLICY),
+                           ("copy.md", POLICY)], "retry")
+    done = _wait_job(client, job["job_id"])
+    by = {d["filename"]: d for d in done["documents"]}
+    # unsupported: the file is stored, retry re-checks it and it stays unsupported with a "Retried" reason
+    r = client.post(f"/api/documents/{by['junk.xyz']['doc_id']}/retry")
+    assert r.status_code == 202 and r.json()["status"] == "EXTRACTION_NOT_SUPPORTED" and r.json()["reason"].startswith("Retried")
+    # empty: nothing stored -> 410
+    assert client.post(f"/api/documents/{by['empty.txt']['doc_id']}/retry").status_code == 410
+    # completed / duplicate -> 409
+    assert client.post(f"/api/documents/{by['policy.md']['doc_id']}/retry").status_code == 409
+    r = client.post(f"/api/documents/{by['copy.md']['doc_id']}/retry")
+    assert r.status_code == 409 and "DUPLICATE" in r.json()["detail"]
+    client.delete("/api/collections/retry")
+
+
+def test_unknown_extension_with_recognisable_content_is_processed(client):
+    import fitz
+
+    pdf = fitz.open(); page = pdf.new_page(); page.insert_text((72, 72), "Quarterly report: revenue grew 12 percent.")
+    data = pdf.tobytes(); pdf.close()
+    job = _upload(client, [("report.bin", data)], "sniff")
+    doc = _wait_job(client, job["job_id"])["documents"][0]
+    assert doc["status"] == "COMPLETED", doc
+    assert doc["file_type"] == "pdf" and "content is PDF" in doc["reason"]
+    client.delete("/api/collections/sniff")
+
+
+def test_retry_stale_queued(client, monkeypatch):
+    """A QUEUED record that has not moved for RETRY_STALE_SECONDS can be re-queued; a fresh one cannot."""
+    from app import jobs as registry
+    from app.config import settings
+
+    job = _upload(client, [("stuck.txt", b"some text that will be indexed")], "stale")
+    doc = _wait_job(client, job["job_id"])["documents"][0]
+    # simulate a stuck worker: force QUEUED with an old timestamp
+    registry.update(doc["doc_id"], status="QUEUED", stage=None)
+    assert client.post(f"/api/documents/{doc['doc_id']}/retry").status_code == 409  # too fresh
+    monkeypatch.setattr(settings, "RETRY_STALE_SECONDS", 0)
+    r = client.post(f"/api/documents/{doc['doc_id']}/retry")
+    assert r.status_code == 202 and r.json()["status"] == "QUEUED"
+    # the re-run re-indexes cleanly (old chunks are replaced, not duplicated)
+    d = _wait_job(client, job["job_id"])["documents"][0]
+    assert d["status"] == "COMPLETED"
+    chunks = client.get("/api/chunks", params={"collection": "stale", "doc_id": doc["doc_id"]}).json()
+    assert len(chunks) == d["chunks"]
+    client.delete("/api/collections/stale")

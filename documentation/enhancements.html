@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RAG Generator · Enhancements</title>
+<style>
+  body{margin:0;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1c1f26;background:#f6f7f9}
+  main{max-width:960px;margin:0 auto;padding:32px 24px}
+  article{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:26px 30px}
+  h1{font-size:26px;margin:0 0 12px} h2{font-size:20px;margin:28px 0 8px;padding-top:12px;border-top:1px solid #eef0f3} h3{font-size:16px;margin:18px 0 6px}
+  a{color:#2563eb;text-decoration:none} .nav{font-size:13px;margin-bottom:16px}
+  pre{background:#f8fafc;border:1px solid #e5e7eb;border-radius:6px;padding:12px;overflow:auto;font:12.5px/1.5 ui-monospace,Menlo,monospace}
+  code{background:#f1f5f9;padding:1px 5px;border-radius:4px;font:12.5px ui-monospace,Menlo,monospace} pre code{background:none;padding:0}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;margin:10px 0} th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #e5e7eb;vertical-align:top} th{color:#6b7280}
+  .src{color:#6b7280;font-size:12px;margin-top:18px}
+</style></head>
+<body><main>
+<div class="nav"><a href="/">← App</a> · <a href="/documentation/flow.html">How it works</a> · <a href="/documentation/architecture.html">Architecture</a> · <a href="/documentation/changelog.html">Changelog</a> · <a href="/documentation/readme.html">README</a> · <a href="/docs">API docs</a></div>
+<article>
+<h1 id="enhancements">Enhancements</h1>
+<p>Improvements that would make RAG Generator more capable or production-ready, in rough
+priority order. None are needed for the assessment scope; each is listed with why it matters
+and where it would plug in.</p>
+<h2 id="retrieval-quality">Retrieval quality</h2>
+<ol>
+<li><strong>Cross-encoder reranking</strong> after RRF (e.g. <code>BAAI/bge-reranker-base</code> via fastembed's rerankers)
+   to reorder the fused top-20 before taking <code>FUSED_TOP_K</code>. Plugs in at the end of <code>hybrid_retrieve</code>.</li>
+<li><strong>Query rewriting / HyDE</strong>: let the LLM expand or rephrase the question before retrieval
+   to close vocabulary gaps between question and documents.</li>
+<li><strong>Semantic chunking</strong> (embedding-similarity boundaries or heading-aware sizes) as an
+   alternative to the fixed character window; expose the strategy as a setting.</li>
+<li><strong>Parent-child chunks</strong>: retrieve on small chunks, hand the LLM the enclosing section
+   for more context without hurting recall.</li>
+<li><strong>Metadata filters in questions</strong>: allow <code>page</code>, <code>section</code>, <code>file_type</code> filters on
+   <code>/api/ask</code> (the store already carries this metadata).</li>
+<li><strong>Hybrid weighting</strong>: weighted RRF or per-collection tuning of <code>DENSE_TOP_K</code> / <code>BM25_TOP_K</code>
+   driven by the evaluation script.</li>
+</ol>
+<h2 id="answering">Answering</h2>
+<ol>
+<li><strong>Streaming answers</strong> (Server-Sent Events) so long answers appear progressively in the UI.</li>
+<li><strong>Conversational memory</strong>: multi-turn sessions with condensed history and follow-up questions.</li>
+<li><strong>Answer-level confidence</strong>: surface the RRF score spread or a judge-lite check to flag
+   weakly grounded answers.</li>
+<li><strong>Native Anthropic Messages API client</strong> as a second <code>LLM_PROVIDER</code> next to the
+    OpenAI-compatible one, with citations blocks mapped to the same <code>citations</code> payload.</li>
+</ol>
+<h2 id="ingestion">Ingestion</h2>
+<ol>
+<li><strong>Real job queue</strong> (Redis + a worker process, or Celery/RQ) so ingestion survives
+    restarts and scales past one process; the <code>jobs</code> / <code>documents</code> stores already model this.</li>
+<li><strong>More formats</strong>: PPTX, XLSX, EPUB, EML, JSON/JSONL, plus URL ingestion (fetch + HTML extractor).</li>
+<li><strong>Incremental re-index</strong>: re-upload replaces an existing document instead of being
+    a duplicate, with a version counter in the <code>documents</code> store.</li>
+<li><strong>OCR improvements</strong>: language auto-detection, table-aware OCR, image pre-processing
+    (deskew / binarise) before Tesseract; optional cloud OCR provider.</li>
+<li><strong>Per-file progress</strong>: percentage of pages processed exposed on the job record.</li>
+</ol>
+<h2 id="storage-and-scale">Storage and scale</h2>
+<ol>
+<li><strong>Persisted BM25</strong> (or SQLite FTS5 / Tantivy) instead of rebuilding in memory at startup.</li>
+<li><strong>Chroma server or pgvector</strong> deployment profile in <code>docker-compose.yml</code> for multi-replica setups.</li>
+<li><strong>SQLite for <code>jobs</code> / <code>documents</code></strong> instead of JSON files once listings grow large;
+    pagination is already API-level so the switch is internal.</li>
+</ol>
+<h2 id="operations">Operations</h2>
+<ol>
+<li><strong>Authentication and multi-tenancy</strong>: API keys or OIDC, collections owned by tenants.</li>
+<li><strong>Observability</strong>: structured logs, Prometheus metrics (ingest latency, retrieval hit
+    rate, LLM latency), request tracing.</li>
+<li><strong>Rate limiting and upload quotas</strong> per collection.</li>
+<li><strong>CI pipeline</strong>: GitHub Actions running <code>pytest</code>, <code>scripts/sync_rules.py --check</code>,
+    <code>scripts/build_docs.py</code> drift check, and a Docker build.</li>
+</ol>
+<h2 id="evaluation">Evaluation</h2>
+<ol>
+<li><strong>Retrieval-only metrics</strong> (recall@k, MRR against labelled chunks) alongside the judge,
+    so retrieval and generation regressions are separable.</li>
+<li><strong>Eval in CI</strong> with the mock LLM for retrieval and a nightly judged run with the real LLM.</li>
+<li><strong>Hill-climbing harness</strong>: sweep chunk size / top-k / RRF_K and report the judge scores per configuration.</li>
+</ol>
+<h2 id="ui">UI</h2>
+<ol>
+<li>Bulk selection helpers (select all COMPLETED on this page / in this job), status filter
+    dropdown, search box over the document listing.</li>
+<li>Highlight the cited passage inside the source chunk; show page thumbnails for PDFs.</li>
+<li>Dark mode and keyboard shortcuts.</li>
+</ol>
+<p class="src">Generated from <code>documentation/enhancements.md</code> by <code>scripts/build_docs.py</code>. Edit the Markdown, then re-run the script.</p>
+</article>
+</main></body></html>

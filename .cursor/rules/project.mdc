@@ -33,7 +33,8 @@ change**. Before finishing any task that touches code, check and update as neede
 1. `README.md` — setup, what is supported / not supported, API table, CLI usage, tech stack, tuning table.
 2. `documentation/changelog.html` — add an entry under the current (or a new) version with Added / Changed / Fixed / Docs tags. Bump the version in `app/main.py` (`FastAPI(version=...)`) for user-visible changes.
 3. `documentation/architecture.md` (then regenerate `architecture.html`) — if modules, flows, statuses, or data layout changed.
-4. `documentation/flow.html` — if the ingest or ask flow steps or status vocabulary changed.
+4. `documentation/flow.html` — if the ingest or ask flow steps, the pages/navigation, the show-page behaviour or the status vocabulary changed.
+4b. `documentation/demo.gif` — re-record with `python scripts/make_demo_gif.py` (needs the API running and Playwright + Chromium from `requirements-dev.txt`) whenever a UI flow shown in it changes.
 5. `memory.md` — record new decisions, gotchas, and conventions worth remembering.
 6. `.env.example` and the tuning table in the README — whenever a setting is added, renamed, or its default changes.
 7. Docstrings on public functions and the module header comment when behaviour changes.

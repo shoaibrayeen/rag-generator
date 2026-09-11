@@ -19,7 +19,7 @@ service at runtime. There are two flows: **ingest** (asynchronous) and **ask** (
 | LLM client | `app/llm/client.py` | OpenAI-compatible `chat/completions` over httpx |
 | Prompts | `app/llm/prompts.py` | grounded-answer system prompt, `[n]` context formatting |
 | Orchestrator | `app/rag.py` | `answer()` = retrieve → prompt → LLM → answer + sources |
-| UI | `app/static/index.html` | upload · listing · ask · sources |
+| UI | `app/static/index.html`, `jobs.html`, `documents.html`, `document.html` | workbench (upload · jobs · documents · ask · sources); dedicated listings (20/page); document show page = 55% page viewer + 45% per-document chat with page-number citations that jump and highlight |
 | CLI | `cli/rag_cli.py` | `rag ingest/status/job/ask/reset/serve` over HTTP |
 | Evaluation | `evaluation/` | Claude-as-judge scoring, dataset generation |
 | Config | `app/config.py` | every tunable, overridable from `.env` |
@@ -30,11 +30,12 @@ service at runtime. There are two flows: **ingest** (asynchronous) and **ask** (
 client ──POST /api/documents (multipart, collection)──► API creates ONE job (job_id)
                                                         │ per file (each becomes a document of that job):
                                                         │  read bytes ──fail──► UPLOAD_FAILED
-                                                        │  extension ∉ SUPPORTED_EXTENSIONS ──► EXTRACTION_NOT_SUPPORTED
+                                                        │  sha256 computed at upload time, kept on the record
                                                         │  0 bytes ──► EMPTY_FILE
                                                         │  > MAX_UPLOAD_MB ──► UPLOAD_FAILED
-                                                        │  sha256 already live in collection ──► DUPLICATE (links original)
-                                                        │  store to data/uploads/<doc_id>_<name> ──fail──► UPLOAD_FAILED
+                                                        │  upload step: store to data/uploads/<doc_id>_<name> ──fail──► UPLOAD_FAILED
+                                                        │  extension ∉ SUPPORTED_EXTENSIONS and content not sniffable ──► EXTRACTION_NOT_SUPPORTED (file kept for retry)
+                                                        │  duplicate check: sha256 already live in collection ──► DUPLICATE (links original)
                                                         │  else ──► QUEUED + background task
                                                         ▼
 client ◄── 202 {job_id, status, reason, counts, documents:[{doc_id, status, reason, …}]} ──┘
@@ -44,10 +45,13 @@ background worker (FastAPI BackgroundTasks, thread pool)
                       │                        │                       │
                       └──────── any exception ─┴───────────────────────┴──► FAILED ("PROCESSING FAILED: …")
 
-client ──GET /api/jobs──► job listing (JOB ID · FILES · STATUS · REASON)
+client ──GET /api/jobs?page=0&size=5──► paginated job listing (JOB ID · DOCUMENTS · PAGES · STATUS · REASON; total_documents/total_pages/total_chunks derived from its documents)
 client ──GET /api/jobs/{job_id}──► job + its documents
-client ──GET /api/documents?job_id=──► documents of one job (DOC ID · NAME · STATUS · REASON)
+client ──GET /api/documents?job_id=&page=0&size=5──► paginated documents of one job (DOC ID · NAME · PAGES · STATUS · REASON)
 ```
+
+Listings are paginated in the API layer (`_paginate` in `app/main.py`): 0-based `page`, `size`
+defaulting to `LIST_PAGE_SIZE` (5), envelope `{items, page, size, total, pages, has_next, has_prev}`.
 
 Job status is never stored; it is derived from the documents each time it is read:
 `PROCESSING` if any document is processing (or some are queued and others done), `QUEUED` if
@@ -60,14 +64,18 @@ on load with an explanatory reason.
 
 ### Extraction: primary tier, then fallback tier
 
-`extract()` runs the format's **primary** extractor. If it raises or returns no pages, the
-format's **fallback** runs. If that also yields nothing, an `ExtractionError` with a precise,
+`extract()` first decides the reader: `sniff_type()` inspects the leading bytes (PK zip with
+`word/` → docx, `{\rtf` → rtf, `%PDF` → pdf, OLE2 header → legacy `.doc` (unsupported, precise
+reason), `<html` → html, image magic → image) and overrides the extension when they disagree
+(`SNIFF_CONTENT`). Then it runs the format's **primary** extractor. If it raises or returns no
+pages, the format's **fallback** runs. If that also yields nothing, an `ExtractionError` with a precise,
 user-facing reason becomes the job's `FAILED` reason.
 
 | Format | Primary | Fallback (only when primary fails / finds no text) | "page" means | Section metadata |
 |---|---|---|---|---|
 | PDF | PyMuPDF `get_text` per page; a page with < `OCR_MIN_CHARS_PER_PAGE` chars is OCR'd in place | render every page with PyMuPDF → Tesseract | printed page | – |
-| DOCX | python-docx paragraphs + tables | OCR of embedded images (`word/media/*`) → Tesseract | one page per heading block | heading text |
+| DOCX | python-docx element tree walked in document order: paragraphs, content controls (`w:sdt`), hyperlinks, tables (`cell \| cell`) | OCR of embedded images (`word/media/*`) → Tesseract | one page per heading block | heading text |
+| RTF | striprtf | stdlib control-word stripping | one page per `\page` | first line when heading-like |
 | HTML | beautifulsoup4 + lxml | stdlib `html.parser` tag stripping | 1 | `<title>` |
 | MD | stdlib (multi-encoding decode) | – | one page per heading | heading text |
 | TXT | stdlib (multi-encoding decode) | – | 1 | – |
@@ -75,7 +83,34 @@ user-facing reason becomes the job's `FAILED` reason.
 | PNG/JPG/TIFF | Tesseract (there is no text layer) | – | one page per frame | – |
 
 Tesseract is therefore never the first choice for a document that has a text layer; it is
-the safety net for scanned, image-only or otherwise unreadable content.
+the safety net for scanned, image-only or otherwise unreadable content. Failure reasons name the
+primary reader's error (paths stripped, capped length) and what the fallback said.
+
+`POST /api/documents/{doc_id}/retry` re-processes any document that is not COMPLETED or DUPLICATE: FAILED and
+EXTRACTION_NOT_SUPPORTED re-check the stored file (extension, then content sniffing) and re-queue; QUEUED/PROCESSING
+only when stale for `RETRY_STALE_SECONDS`; EMPTY_FILE/UPLOAD_FAILED have no stored file (410). The pipeline deletes
+the document's previous chunks before storing new ones, so a retry replaces rather than duplicates.
+`GET /api/documents/{doc_id}/file` serves the stored original (inline where browsers can render it) for the show page.
+
+### Show page: viewer + chat + citation jump
+
+1. Ingest writes `data/pages/<doc_id>.json`: for each page the normalised text (exactly what
+   `chunk_pages()` measured `char_start` / `char_end` against), section, extraction and chunk ids.
+2. `GET /api/documents/{id}/pages` returns it (or reconstructs pages from chunk offsets for
+   documents indexed before v0.8.0).
+3. The chat posts `/api/ask` with `doc_ids=[id]`, so retrieval is restricted to that document.
+4. The answer's `[n]` chunk markers are rewritten to **page-number chips** using the `citations`
+   payload (several chunks on one page collapse into one chip). Clicking a chip switches to the
+   Text view, scrolls to that page and wraps the cited chunk text in `<mark>` (light blue; the
+   clicked page's passage darker). The text is located with `indexOf` on the page text and falls
+   back to the stored offsets.
+
+### Logging
+
+`app/logging_utils.py` configures the root logger (`LOG_LEVEL`) and provides `timed()` /
+`ctx()`. Each step logs `[step] … job=… doc=… file=…` with elapsed ms: upload decisions, extract
+(primary/fallback/sniff), chunk, embed, store, bm25-rebuild, pipeline outcome, and on the ask side
+retrieve-dense, retrieve-bm25, fuse, llm request/response and the final ask summary.
 
 Each chunk records: `doc_id, source, file_type, collection, page, section, extraction
 (text|ocr), chunk_index, char_start, char_end`.

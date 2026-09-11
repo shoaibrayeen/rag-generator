@@ -262,6 +262,14 @@ matches what was shipped.
 | 6 | **Tesseract strictly as fallback**; **PyMuPDF** replaces pypdf/pypdfium2 as the primary PDF extractor; fallback tier for PDF (OCR all pages), DOCX (OCR embedded images), HTML (stdlib stripping); `ExtractionError` gives precise FAILED reasons | `app/ingest/extractors.py`, `app/ingest/pipeline.py` |
 | 7 | **Jobs as first-class objects**: one upload request = one job with derived status (`QUEUED/PROCESSING/COMPLETED/FAILED`), `GET /api/jobs`, job → documents filter, and **scoped asking** by selected documents and/or jobs with validated `citations` in the answer | `app/jobs.py`, `app/main.py`, `app/rag.py`, `app/retrieval/*`, UI, CLI `jobs`/`job`/`ask --doc/--job` |
 | 8 | This plan committed inside the repo under `plans/` | `plans/` |
+| 9 | Three named stores: `jobs`, `documents`, `document_chunks` (single Chroma collection with `collection`/`doc_id`/`job_id` metadata) | `app/config.py`, `app/retrieval/vector_store.py` |
+| 11 | **Step logging** on every stage; **content sniffing** (RTF-as-.docx incident) with RTF support and precise failure reasons; **retry** for FAILED documents; upload order store → hash → duplicate check | `app/logging_utils.py`, `app/ingest/extractors.py`, `app/main.py` |
+| 12 | Dedicated `/jobs` and `/documents` pages (20 per page) and `/documents/{id}` show page with viewer / not-applicable explanation / duplicate link | `app/static/jobs.html`, `documents.html`, `document.html`, `app/main.py` |
+| 13 | Show page as viewer (55%) + per-document chat (45%); page-number citations that jump to the page and highlight the passage; page text stored at ingest (`/api/documents/{id}/pages`) | `app/static/document.html`, `app/ingest/pipeline.py`, `app/main.py` |
+| 14 | Listings show total pages per document and total documents / pages per job, on the home page and the dedicated pages | `app/jobs.py`, `app/static/*.html`, `cli/rag_cli.py` |
+| 15 | Interactive flow covers all pages and the show-page chat/highlighting; animated GIF walkthrough recorded from the real UI | `documentation/flow.html`, `documentation/demo.gif`, `scripts/make_demo_gif.py` |
+| 16 | Retry on every document that is not COMPLETED/DUPLICATE (home page, /documents, show page) with per-status rules; unsupported files stored; flow + GIF updated | `app/main.py`, `app/static/*.html`, `documentation/flow.html`, `scripts/make_demo_gif.py` |
+| 10 | **Pagination** for job and document listings (0-based `page`, default `size` 5) in API, UI and CLI; `documentation/enhancements.md` | `app/main.py`, `app/static/index.html`, `cli/rag_cli.py`, `documentation/enhancements.md` |
 
 Verification performed locally (no Docker/Tesseract on the dev machine): `pytest` suite,
 `rag ingest` of the full sample corpus (duplicate, unsupported, empty and OCR-only cases

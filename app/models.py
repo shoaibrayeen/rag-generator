@@ -48,7 +48,10 @@ class JobInfo(BaseModel):
     collection: str
     status: JobStatus
     reason: str
-    files: int
+    files: int                       # number of files in the upload request (== total_documents)
+    total_documents: int             # documents belonging to this job
+    total_pages: int                 # pages indexed across its COMPLETED documents
+    total_chunks: int
     counts: dict[str, int]           # documents per status, e.g. {"COMPLETED": 2, "DUPLICATE": 1}
     doc_ids: list[str]
     created_at: str
@@ -57,6 +60,23 @@ class JobInfo(BaseModel):
 
 class JobDetail(JobInfo):
     documents: list[DocumentInfo]
+
+
+class PageMeta(BaseModel):
+    page: int                        # 0-based page index
+    size: int                        # requested page size
+    total: int                       # total matching items
+    pages: int                       # total number of pages (0 when total == 0)
+    has_next: bool
+    has_prev: bool
+
+
+class JobPage(PageMeta):
+    items: list[JobInfo]
+
+
+class DocumentPage(PageMeta):
+    items: list[DocumentInfo]
 
 
 UploadResponse = JobDetail
@@ -112,7 +132,26 @@ class ChunkOut(BaseModel):
     source: str
     page: int
     section: Optional[str] = None
+    chunk_index: int = 0
+    char_start: int = 0              # offsets into the page text (see /api/documents/{id}/pages)
+    char_end: int = 0
+    extraction: str = "text"
     text: str
+
+
+class PageOut(BaseModel):
+    page: int
+    section: Optional[str] = None
+    extraction: str = "text"
+    text: str
+    chunk_ids: list[str] = Field(default_factory=list)
+
+
+class DocumentPages(BaseModel):
+    doc_id: str
+    filename: str
+    pages: list[PageOut]
+    source: Literal["stored", "reconstructed"]   # stored at ingest, or rebuilt from chunk offsets
 
 
 class HealthResponse(BaseModel):
@@ -123,6 +162,7 @@ class HealthResponse(BaseModel):
     supported_extensions: list[str]
     ocr_enabled: bool
     ocr_available: bool
+    tesseract_cmd: Optional[str] = None
     collections: list[str]
     statuses: list[str]
     settings: dict

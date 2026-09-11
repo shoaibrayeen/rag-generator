@@ -21,21 +21,32 @@ from fastapi.staticfiles import StaticFiles
 from app import jobs
 from app.config import SUPPORTED_EXTENSIONS, settings
 from app.ingest import pipeline
-from app.ingest.extractors import file_type_for, ocr_available
+from app.ingest.extractors import EXTRACTORS, file_type_for, ocr_available, sniff_type, tesseract_cmd
 from app.llm.client import LLMError
 from app.models import (TERMINAL_STATUSES, AskRequest, AskResponse, ChunkOut, DocStatus, DocumentInfo,
-                        HealthResponse, JobDetail, JobInfo, UploadResponse)
+                        DocumentPage, DocumentPages, HealthResponse, JobDetail, JobPage, PageOut, UploadResponse)
 from app.rag import answer
 from app.retrieval import bm25_index, embedder, vector_store
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-log = logging.getLogger("rag")
+from app.logging_utils import configure_logging, ctx
+
+configure_logging()
+log = logging.getLogger("rag.api")
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = Path(__file__).parent / "static"
 DOCS_DIR = ROOT / "documentation"
 # Mirrors ChromaDB's collection-name rule: 3-63 chars, [a-zA-Z0-9._-], alphanumeric at both ends.
 _COLLECTION_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{1,61}[a-zA-Z0-9]$")
+
+
+def _paginate(items: list, page: int, size: int) -> dict:
+    """0-based page slicing shared by the job and document listings."""
+    total = len(items)
+    pages = (total + size - 1) // size if total else 0
+    start = page * size
+    return {"items": items[start:start + size], "page": page, "size": size, "total": total, "pages": pages,
+            "has_next": start + size < total, "has_prev": page > 0 and total > 0}
 
 
 def _collection(name: str | None) -> str:
@@ -53,11 +64,12 @@ async def lifespan(_: FastAPI):
     for col in vector_store.list_collections():
         n = bm25_index.rebuild(col)
         log.info("BM25 rebuilt for '%s' (%d chunks)", col, n)
-    log.info("OCR available: %s | LLM: %s @ %s", ocr_available(), settings.LLM_MODEL, settings.LLM_API_URL)
+    log.info("OCR available: %s (%s) | LLM: %s @ %s", ocr_available(), tesseract_cmd() or "tesseract not found",
+             settings.LLM_MODEL, settings.LLM_API_URL)
     yield
 
 
-app = FastAPI(title="RAG Generator", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="RAG Generator", version="0.10.2", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 if DOCS_DIR.exists():
     app.mount("/documentation", StaticFiles(directory=DOCS_DIR), name="documentation")
@@ -68,6 +80,24 @@ def index():
     return FileResponse(STATIC_DIR / "index.html")
 
 
+@app.get("/jobs", include_in_schema=False)
+def jobs_page():
+    """Dedicated job listing page (20 per page)."""
+    return FileResponse(STATIC_DIR / "jobs.html")
+
+
+@app.get("/documents", include_in_schema=False)
+def documents_page():
+    """Dedicated document listing page (20 per page, filter by ?job_id=&status=&collection=)."""
+    return FileResponse(STATIC_DIR / "documents.html")
+
+
+@app.get("/documents/{doc_id}", include_in_schema=False)
+def document_show_page(doc_id: str):
+    """Show page for one document: viewer for COMPLETED, explanation otherwise."""
+    return FileResponse(STATIC_DIR / "document.html")
+
+
 @app.get("/api/health", response_model=HealthResponse)
 def health():
     public = {k: v for k, v in settings.model_dump().items() if "KEY" not in k}
@@ -75,7 +105,7 @@ def health():
     return HealthResponse(
         status="ok", llm_model=settings.LLM_MODEL, llm_api_url=settings.LLM_API_URL,
         embedding_model=settings.EMBEDDING_MODEL, supported_extensions=sorted(SUPPORTED_EXTENSIONS),
-        ocr_enabled=settings.OCR_ENABLED, ocr_available=ocr_available(),
+        ocr_enabled=settings.OCR_ENABLED, ocr_available=ocr_available(), tesseract_cmd=tesseract_cmd(),
         collections=sorted(set(vector_store.list_collections()) | set(jobs.collections())),
         statuses=list(get_args(DocStatus)), settings=public,
     )
@@ -88,16 +118,21 @@ async def upload(background: BackgroundTasks, files: list[UploadFile] = File(...
                  collection: str | None = Form(default=None)):
     """Accept files as ONE job; return the job (with a record per file) immediately.
 
-    Indexing happens in the background. Every file gets a document record, even rejected
-    ones, so the listing explains what happened: EXTRACTION_NOT_SUPPORTED, EMPTY_FILE,
-    UPLOAD_FAILED, DUPLICATE, or QUEUED. Poll GET /api/jobs/{job_id}.
+    Per file: validate (extension, size) -> upload step: store the file and compute its SHA-256
+    -> duplicate check against live documents of the same collection -> QUEUED. Every file gets a
+    document record, even rejected ones (EXTRACTION_NOT_SUPPORTED, EMPTY_FILE, UPLOAD_FAILED,
+    DUPLICATE), so the listing explains what happened. Poll GET /api/jobs/{job_id}.
     """
     col = _collection(collection)
     limit = settings.MAX_UPLOAD_MB * 1024 * 1024
     job_id = uuid.uuid4().hex[:12]
     jobs.create_job(job_id, col)
 
+    log.info("[upload] job=%s collection=%s files=%d", job_id, col, len(files))
+
     def record(doc_id: str, name: str, status: str, **kw) -> DocumentInfo:
+        log.info("[upload] %s -> %s%s", ctx(job=job_id, doc=doc_id, file=name), status,
+                 f" ({kw['reason']})" if status != "QUEUED" and kw.get("reason") else "")
         return jobs.create(doc_id, name, col, status, job_id=job_id, **kw)
 
     for f in files:
@@ -112,26 +147,17 @@ async def upload(background: BackgroundTasks, files: list[UploadFile] = File(...
                    reason=f"UPLOAD FAILED: could not read upload stream ({exc})")
             continue
 
-        if kind is None:
-            record(doc_id, name, "EXTRACTION_NOT_SUPPORTED",
-                   reason=f"Extension '{Path(name).suffix or '(none)'}' is not supported. "
-                          f"Supported: {' '.join(sorted(SUPPORTED_EXTENSIONS))}")
-            continue
+        sha = hashlib.sha256(data).hexdigest() if data else None  # computed at upload time, kept on every record
+
         if not data:
             record(doc_id, name, "EMPTY_FILE", file_type=kind, reason="The uploaded file is 0 bytes")
             continue
         if len(data) > limit:
-            record(doc_id, name, "UPLOAD_FAILED", file_type=kind,
+            record(doc_id, name, "UPLOAD_FAILED", file_type=kind, sha256=sha,
                    reason=f"UPLOAD FAILED: file is larger than {settings.MAX_UPLOAD_MB} MB")
             continue
 
-        sha = hashlib.sha256(data).hexdigest()
-        original = jobs.find_by_hash(col, sha)
-        if original is not None:
-            record(doc_id, name, "DUPLICATE", file_type=kind, sha256=sha, duplicate_of=original,
-                   reason=f"Same content as '{original.filename}' ({original.doc_id}); not processed again")
-            continue
-
+        # 1. upload step: store the file (also for unsupported types, so a retry can re-check them later)
         path = settings.uploads_dir / f"{doc_id}_{name}"
         try:
             path.write_bytes(data)
@@ -139,7 +165,26 @@ async def upload(background: BackgroundTasks, files: list[UploadFile] = File(...
             record(doc_id, name, "UPLOAD_FAILED", file_type=kind, sha256=sha,
                    reason=f"UPLOAD FAILED: could not store file ({exc})")
             continue
+        log.debug("[upload] stored %s bytes=%d sha256=%s", ctx(job=job_id, doc=doc_id, file=name), len(data), sha)
 
+        if kind is None:
+            sniffed = sniff_type(path) if settings.SNIFF_CONTENT else None
+            if sniffed in EXTRACTORS:
+                kind = sniffed  # unknown extension, recognisable content: process it
+            else:
+                record(doc_id, name, "EXTRACTION_NOT_SUPPORTED", sha256=sha,
+                       reason=f"Extension '{Path(name).suffix or '(none)'}' is not supported and the content was not "
+                              f"recognised. Supported: {' '.join(sorted(SUPPORTED_EXTENSIONS))}")
+                continue
+
+        # 2. duplicate check on the stored file's hash (same collection, live original)
+        original = jobs.find_by_hash(col, sha)
+        if original is not None:
+            record(doc_id, name, "DUPLICATE", file_type=kind, sha256=sha, duplicate_of=original,
+                   reason=f"Same content as '{original.filename}' ({original.doc_id}); not processed again")
+            continue
+
+        # 3. queue for processing
         record(doc_id, name, "QUEUED", file_type=kind, sha256=sha, reason="Waiting for the background worker")
         background.add_task(pipeline.run, doc_id, path)
     return jobs.get_job(job_id)
@@ -147,10 +192,12 @@ async def upload(background: BackgroundTasks, files: list[UploadFile] = File(...
 
 # ----------------------------------------------------------------------- jobs
 
-@app.get("/api/jobs", response_model=list[JobInfo])
-def list_jobs(collection: str | None = Query(default=None)):
-    """Job listing: JOB ID, FILES, STATUS, REASON. Status is derived from the job's documents."""
-    return jobs.list_jobs(collection)
+@app.get("/api/jobs", response_model=JobPage)
+def list_jobs(collection: str | None = Query(default=None),
+              page: int = Query(default=0, ge=0, description="0-based page index"),
+              size: int = Query(default=settings.LIST_PAGE_SIZE, ge=1, le=settings.LIST_MAX_PAGE_SIZE)):
+    """Paginated job listing (newest first): JOB ID, FILES, STATUS, REASON. Defaults: page=0, size=5."""
+    return _paginate(jobs.list_jobs(collection), page, size)
 
 
 @app.get("/api/jobs/{job_id}", response_model=JobDetail)
@@ -164,14 +211,16 @@ def job_status(job_id: str):
 
 # ----------------------------------------------------------------------- documents
 
-@app.get("/api/documents", response_model=list[DocumentInfo])
+@app.get("/api/documents", response_model=DocumentPage)
 def list_documents(collection: str | None = Query(default=None),
                    job_id: str | None = Query(default=None),
-                   status: DocStatus | None = Query(default=None)):
-    """Listing of every uploaded file: DOC ID, NAME, STATUS, REASON (+ duplicate link).
-    Filter by job_id to see only the files of one upload request."""
+                   status: DocStatus | None = Query(default=None),
+                   page: int = Query(default=0, ge=0, description="0-based page index"),
+                   size: int = Query(default=settings.LIST_PAGE_SIZE, ge=1, le=settings.LIST_MAX_PAGE_SIZE)):
+    """Paginated listing of every uploaded file (newest first): DOC ID, NAME, STATUS, REASON
+    (+ duplicate link). Filter by job_id and/or status. Defaults: page=0, size=5."""
     docs = jobs.list_docs(collection, job_id)
-    return [d for d in docs if status is None or d.status == status]
+    return _paginate([d for d in docs if status is None or d.status == status], page, size)
 
 
 @app.get("/api/documents/{doc_id}", response_model=DocumentInfo)
@@ -179,6 +228,74 @@ def get_document(doc_id: str):
     doc = jobs.get(doc_id)
     if doc is None:
         raise HTTPException(404, "document not found")
+    return doc
+
+
+_INLINE_TYPES = {"pdf": "application/pdf", "html": "text/html; charset=utf-8", "text": "text/plain; charset=utf-8",
+                 "csv": "text/csv; charset=utf-8"}
+
+
+@app.get("/api/documents/{doc_id}/file")
+def document_file(doc_id: str, download: bool = Query(default=False)):
+    """The stored original file. PDFs, HTML, text, CSV and images render inline in the browser;
+    other types (DOCX, RTF) are served as downloads."""
+    doc = jobs.get(doc_id)
+    if doc is None:
+        raise HTTPException(404, "document not found")
+    path = next(iter(settings.uploads_dir.glob(f"{doc_id}_*")), None)
+    if path is None:
+        raise HTTPException(410, "the uploaded file is no longer stored")
+    if doc.file_type == "image":
+        import mimetypes
+        media = mimetypes.guess_type(doc.filename)[0] or "application/octet-stream"
+    else:
+        media = _INLINE_TYPES.get(doc.file_type or "", "application/octet-stream")
+    disposition = "attachment" if download or media == "application/octet-stream" else "inline"
+    return FileResponse(path, media_type=media, filename=doc.filename if disposition == "attachment" else None,
+                        headers={"Content-Disposition": f'{disposition}; filename="{doc.filename}"'})
+
+
+@app.post("/api/documents/{doc_id}/retry", response_model=DocumentInfo, status_code=202)
+def retry_document(doc_id: str, background: BackgroundTasks):
+    """Re-process a document that is neither COMPLETED nor DUPLICATE.
+
+    FAILED / EXTRACTION_NOT_SUPPORTED: the stored file is checked again (extension + content sniffing)
+    and re-queued. QUEUED / PROCESSING: only if the record has not moved for RETRY_STALE_SECONDS
+    (stuck worker), otherwise 409. EMPTY_FILE / UPLOAD_FAILED: nothing was stored → 410, upload again.
+    """
+    from datetime import datetime, timezone
+
+    doc = jobs.get(doc_id)
+    if doc is None:
+        raise HTTPException(404, "document not found")
+    if doc.status == "COMPLETED":
+        raise HTTPException(409, "document is already COMPLETED; nothing to retry")
+    if doc.status == "DUPLICATE":
+        raise HTTPException(409, f"document is a DUPLICATE of {doc.duplicate_of}; ask that document instead")
+    if doc.status in ("QUEUED", "PROCESSING"):
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(doc.updated_at)).total_seconds()
+        if age < settings.RETRY_STALE_SECONDS:
+            raise HTTPException(409, f"document is {doc.status} (updated {int(age)}s ago); wait for it to finish "
+                                     f"or retry after {settings.RETRY_STALE_SECONDS}s of no progress")
+    path = next(iter(settings.uploads_dir.glob(f"{doc_id}_*")), None)
+    if path is None:
+        raise HTTPException(410, "the file was not stored (empty or failed upload); upload it again")
+
+    kind = file_type_for(doc.filename)
+    if kind is None:
+        sniffed = sniff_type(path) if settings.SNIFF_CONTENT else None
+        if sniffed in EXTRACTORS:
+            kind = sniffed
+    log.info("[retry] %s previous=%s type=%s", ctx(job=doc.job_id, doc=doc_id, file=doc.filename), doc.status, kind)
+    if kind is None:
+        return jobs.update(doc_id, status="EXTRACTION_NOT_SUPPORTED", stage=None,
+                           reason=f"Retried: extension '{Path(doc.filename).suffix or '(none)'}' is still not supported "
+                                  f"and the content was not recognised. Supported: {' '.join(sorted(SUPPORTED_EXTENSIONS))}")
+    if doc.status == "COMPLETED":  # defensive: never re-index twice
+        raise HTTPException(409, "already indexed")
+    doc = jobs.update(doc_id, status="QUEUED", stage=None, file_type=kind, pages=0, chunks=0, ocr_pages=0,
+                      reason=f"Retry requested (was {doc.status}); waiting for the background worker")
+    background.add_task(pipeline.run, doc_id, path)
     return doc
 
 
@@ -194,17 +311,21 @@ def delete_document(doc_id: str):
         bm25_index.rebuild(doc.collection)
     for p in settings.uploads_dir.glob(f"{doc_id}_*"):
         p.unlink(missing_ok=True)
+    (settings.pages_dir / f"{doc_id}.json").unlink(missing_ok=True)
     jobs.delete(doc_id)
+    log.info("[delete] %s", ctx(job=doc.job_id, doc=doc_id, file=doc.filename))
 
 
 @app.delete("/api/collections/{name}", status_code=204)
 def reset_collection(name: str):
     col = _collection(name)
+    log.info("[reset] collection=%s", col)
     vector_store.delete_collection(col)
     bm25_index.drop(col)
     for doc in jobs.list_docs(col):
         for p in settings.uploads_dir.glob(f"{doc.doc_id}_*"):
             p.unlink(missing_ok=True)
+        (settings.pages_dir / f"{doc.doc_id}.json").unlink(missing_ok=True)
         jobs.delete(doc.doc_id)
     for job in jobs.list_jobs(col):
         jobs.delete_job(job.job_id)
@@ -217,10 +338,51 @@ def list_chunks(collection: str | None = Query(default=None),
     """Inspect the document_chunks store; filter by document set, document and/or upload job."""
     col = _collection(collection)
     chunks = vector_store.get_all_chunks(col, [doc_id] if doc_id else None, job_id)[offset:offset + limit]
-    return [ChunkOut(chunk_id=c["chunk_id"], doc_id=c["metadata"].get("doc_id", ""),
-                     job_id=c["metadata"].get("job_id", ""), collection=c["metadata"].get("collection", col),
-                     source=c["metadata"].get("source", ""), page=int(c["metadata"].get("page", 0)),
-                     section=c["metadata"].get("section") or None, text=c["text"]) for c in chunks]
+    return [_chunk_out(c, col) for c in chunks]
+
+
+def _chunk_out(c: dict, col: str) -> ChunkOut:
+    m = c["metadata"]
+    return ChunkOut(chunk_id=c["chunk_id"], doc_id=m.get("doc_id", ""), job_id=m.get("job_id", ""),
+                    collection=m.get("collection", col), source=m.get("source", ""), page=int(m.get("page", 0)),
+                    section=m.get("section") or None, chunk_index=int(m.get("chunk_index", 0)),
+                    char_start=int(m.get("char_start", 0)), char_end=int(m.get("char_end", 0)),
+                    extraction=m.get("extraction", "text"), text=c["text"])
+
+
+@app.get("/api/documents/{doc_id}/pages", response_model=DocumentPages)
+def document_pages(doc_id: str):
+    """Page text of a COMPLETED document for the show-page viewer, with the chunk ids per page.
+
+    Uses the page text stored at ingest; documents indexed before that existed are reconstructed
+    from chunk offsets (`source: "reconstructed"`)."""
+    import json
+
+    doc = jobs.get(doc_id)
+    if doc is None:
+        raise HTTPException(404, "document not found")
+    if doc.status != "COMPLETED":
+        raise HTTPException(409, f"document is {doc.status}, not COMPLETED")
+    stored = settings.pages_dir / f"{doc_id}.json"
+    if stored.exists():
+        pages = [PageOut(**pg) for pg in json.loads(stored.read_text())]
+        return DocumentPages(doc_id=doc_id, filename=doc.filename, pages=pages, source="stored")
+    # Reconstruct: lay every chunk's text at its char_start; overlaps carry identical text.
+    by_page: dict[int, list[ChunkOut]] = {}
+    for c in vector_store.get_all_chunks(doc.collection, [doc_id]):
+        out = _chunk_out(c, doc.collection)
+        by_page.setdefault(out.page, []).append(out)
+    pages = []
+    for page_no in sorted(by_page):
+        cs = sorted(by_page[page_no], key=lambda x: x.chunk_index)
+        buf: list[str] = []
+        for x in cs:
+            while len(buf) < x.char_start:
+                buf.append(" ")
+            buf[x.char_start:x.char_start + len(x.text)] = list(x.text)
+        pages.append(PageOut(page=page_no, section=cs[0].section, extraction=cs[0].extraction,
+                             text="".join(buf), chunk_ids=[x.chunk_id for x in cs]))
+    return DocumentPages(doc_id=doc_id, filename=doc.filename, pages=pages, source="reconstructed")
 
 
 # ----------------------------------------------------------------------- ask

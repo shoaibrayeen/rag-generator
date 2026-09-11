@@ -1,12 +1,16 @@
 """rank-bm25 lexical index, one per document set (collection), rebuilt from the document_chunks store."""
 from __future__ import annotations
 
+import logging
 import re
 import threading
+import time
 
 from rank_bm25 import BM25Okapi
 
 from app.retrieval import vector_store
+
+log = logging.getLogger("rag.bm25")
 
 _WORD = re.compile(r"[a-z0-9]+(?:'[a-z]+)?")
 _STOP = {
@@ -51,9 +55,12 @@ _lock = threading.Lock()
 
 
 def rebuild(collection: str) -> int:
+    t0 = time.perf_counter()
     chunks = vector_store.get_all_chunks(collection)
     with _lock:
         _indexes[collection] = _Index(chunks)
+    log.info("[bm25] rebuilt collection=%s chunks=%d in %d ms", collection, len(chunks),
+             (time.perf_counter() - t0) * 1000)
     return len(chunks)
 
 
@@ -67,4 +74,7 @@ def search(collection: str, query: str, top_k: int, doc_ids: set[str] | None = N
     if idx is None:
         rebuild(collection)
         idx = _indexes.get(collection)
-    return idx.search(query, top_k, doc_ids) if idx else []
+    hits = idx.search(query, top_k, doc_ids) if idx else []
+    log.info("[retrieve-bm25] collection=%s scope_docs=%s hits=%d", collection,
+             len(doc_ids) if doc_ids is not None else "all", len(hits))
+    return hits

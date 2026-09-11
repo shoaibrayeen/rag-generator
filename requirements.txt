@@ -271,6 +271,8 @@ soupsieve==2.9.2
     # via beautifulsoup4
 starlette==1.6.0
     # via fastapi
+striprtf==0.0.33
+    # via -r requirements.in
 tenacity==9.1.4
     # via chromadb
 tokenizers==0.23.2

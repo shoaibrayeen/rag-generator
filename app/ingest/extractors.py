@@ -12,8 +12,11 @@ Two-tier design:
      Inside the PDF primary path, individual pages with fewer than OCR_MIN_CHARS_PER_PAGE
      characters (scanned pages in an otherwise digital PDF) are OCR'd page by page.
 
-Dispatch is driven by `app.config.SUPPORTED_EXTENSIONS`; each extractor name there must exist
-in `EXTRACTORS`. To support a new format add a primary function (and optionally a fallback),
+Dispatch is driven by `app.config.SUPPORTED_EXTENSIONS`, but the *content* wins over the
+extension: `sniff_type()` looks at the first bytes (PK zip → docx, `{\\rtf` → rtf, `%PDF` → pdf,
+OLE header → legacy .doc, `<html` → html, image magic → image). A file named `.docx` that is
+really RTF is therefore read by the RTF extractor instead of failing. Each extractor name must
+exist in `EXTRACTORS`. To support a new format add a primary function (and optionally a fallback),
 register both, and add the extension.
 
 If no text can be obtained at all, `extract()` raises `ExtractionError` with a precise reason
@@ -53,10 +56,73 @@ class ExtractionError(ValueError):
     """Primary and fallback extraction both failed; the message is user-facing."""
 
 
+# ------------------------------------------------------------------- sniffing
+
+_IMAGE_MAGIC = (b"\x89PNG", b"\xff\xd8\xff", b"II*\x00", b"MM\x00*", b"GIF8", b"BM")
+
+
+def sniff_type(path: Path) -> str | None:
+    """Detect the real format from the first bytes. Returns an extractor name, "doc" for legacy
+    binary Word files (not supported), or None when the bytes are not conclusive."""
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(2048)
+    except OSError:
+        return None
+    if head.startswith(b"%PDF"):
+        return "pdf"
+    if head.lstrip().startswith(b"{\\rtf"):
+        return "rtf"
+    if head.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
+        return "doc"  # OLE2 compound file: legacy .doc / .xls / .ppt
+    if head.startswith(b"PK\x03\x04"):
+        try:
+            with zipfile.ZipFile(path) as zf:
+                names = zf.namelist()
+            if any(n.startswith("word/") for n in names):
+                return "docx"
+        except zipfile.BadZipFile:
+            return None
+        return None
+    if head.startswith(_IMAGE_MAGIC):
+        return "image"
+    low = head.lstrip().lower()
+    if low.startswith((b"<!doctype html", b"<html")):
+        return "html"
+    return None
+
+
 # --------------------------------------------------------------------------- OCR
 
+_TESSERACT_CANDIDATES = (
+    "/opt/homebrew/bin/tesseract",      # Homebrew on Apple silicon (often not on a service's PATH)
+    "/usr/local/bin/tesseract",         # Homebrew on Intel macs / manual installs
+    "/opt/local/bin/tesseract",         # MacPorts
+    "/usr/bin/tesseract",               # apt / Docker image
+    "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
+)
+
+
+def tesseract_cmd() -> str | None:
+    """Resolve the tesseract binary: TESSERACT_CMD, then PATH, then common install locations.
+    Also points pytesseract at it, so a binary outside PATH works."""
+    found: str | None = None
+    if settings.TESSERACT_CMD:
+        found = settings.TESSERACT_CMD if Path(settings.TESSERACT_CMD).is_file() else None
+    else:
+        found = shutil.which("tesseract") or next((c for c in _TESSERACT_CANDIDATES if Path(c).is_file()), None)
+    if found:
+        try:
+            import pytesseract
+
+            pytesseract.pytesseract.tesseract_cmd = found
+        except ImportError:  # pragma: no cover
+            return None
+    return found
+
+
 def ocr_available() -> bool:
-    return shutil.which("tesseract") is not None
+    return tesseract_cmd() is not None
 
 
 def _require_ocr(what: str) -> None:
@@ -100,7 +166,7 @@ def extract_pdf(path: Path) -> list[Page]:
             extraction = "text"
             if len(text) < settings.OCR_MIN_CHARS_PER_PAGE and can_ocr:
                 ocr_text = _ocr_pdf_page(page)
-                if ocr_text:
+                if len(ocr_text) > len(text):  # keep the real text layer when OCR finds nothing better
                     text, extraction = ocr_text, "ocr"
             if text:
                 pages.append(Page(text=text, page_no=i + 1, extraction=extraction))
@@ -139,8 +205,43 @@ def extract_image(path: Path) -> list[Page]:
 
 # ------------------------------------------------------------------------- DOCX
 
+_W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+def _docx_blocks(container):
+    """Yield ("heading"|"para"|"row", text) for a DOCX body in document order, descending into
+    content controls (w:sdt / w:sdtContent) and tables — python-docx's `document.paragraphs`
+    ignores both, which makes contract templates built from content controls come out empty."""
+    for child in container:
+        tag = child.tag
+        if tag == f"{_W}p":
+            text = "".join(t.text or "" for t in child.iter(f"{_W}t", f"{_W}tab", f"{_W}br"))
+            text = "".join(("\t" if t.tag == f"{_W}tab" else "\n" if t.tag == f"{_W}br" else (t.text or ""))
+                           for t in child.iter(f"{_W}t", f"{_W}tab", f"{_W}br")).strip()
+            if not text:
+                continue
+            style = child.find(f"{_W}pPr/{_W}pStyle")
+            val = (style.get(f"{_W}val") if style is not None else "") or ""
+            yield ("heading" if val.lower().startswith(("heading", "title")) else "para"), text
+        elif tag == f"{_W}tbl":
+            for row in child.iter(f"{_W}tr"):
+                cells = []
+                for cell in row.findall(f"{_W}tc"):
+                    cells.append(" ".join(t for _, t in _docx_blocks(cell)))
+                if any(cells):
+                    yield "row", " | ".join(cells)
+        elif tag in (f"{_W}sdt", f"{_W}sdtContent", f"{_W}smartTag", f"{_W}ins", f"{_W}hyperlink",
+                     f"{_W}customXml", f"{_W}fldSimple"):
+            yield from _docx_blocks(child)
+        elif tag == f"{_W}sectPr":
+            continue
+        elif len(child):
+            yield from _docx_blocks(child)
+
+
 def extract_docx(path: Path) -> list[Page]:
-    """DOCX has no real pages: each heading starts a new 'page' (section)."""
+    """DOCX has no real pages: each heading starts a new 'page' (section). Walks the body XML in
+    order (including content controls and tables) via python-docx's element tree."""
     import docx
 
     document = docx.Document(str(path))
@@ -157,18 +258,11 @@ def extract_docx(path: Path) -> list[Page]:
             page_no += 1
         buffer = []
 
-    for para in document.paragraphs:
-        txt = para.text.strip()
-        if not txt:
-            continue
-        if para.style is not None and para.style.name.lower().startswith("heading"):
+    for kind, text in _docx_blocks(document.element.body):
+        if kind == "heading":
             flush()
-            section_title = txt
-        buffer.append(txt)
-    for table in document.tables:
-        rows = [" | ".join(c.text.strip() for c in row.cells) for row in table.rows]
-        if rows:
-            buffer.append("\n".join(rows))
+            section_title = text
+        buffer.append(text)
     flush()
     return pages
 
@@ -234,6 +328,44 @@ def fallback_html(path: Path) -> list[Page]:
     return [Page(text=text, page_no=1)] if text else []
 
 
+# -------------------------------------------------------------------------- RTF
+
+def extract_rtf(path: Path) -> list[Page]:
+    """RTF via striprtf. \\page control words become page breaks; the first line of each page
+    is used as its section label when it looks like a heading."""
+    import re
+
+    from striprtf.striprtf import rtf_to_text
+
+    raw = path.read_bytes().decode("latin-1", errors="replace")
+    # striprtf drops \page silently; turn it into a text marker first so we can split on it.
+    marker = "RAGPAGEBREAK7F3A"
+    raw = re.sub(r"\\page\b", lambda m: "\\par " + marker + "\\par ", raw)  # lambda: no re-escaping of \p
+    text = rtf_to_text(raw, errors="ignore")
+    pages: list[Page] = []
+    for i, block in enumerate(text.split(marker)):
+        block = "\n".join(ln.rstrip() for ln in block.splitlines()).strip()
+        if block:
+            first = block.splitlines()[0].strip()
+            section = first if 0 < len(first) <= 80 and len(block.splitlines()) > 1 else None
+            pages.append(Page(text=block, page_no=i + 1, section=section))
+    return pages
+
+
+def fallback_rtf(path: Path) -> list[Page]:
+    """striprtf choked: crude control-word stripping with the stdlib."""
+    import re
+
+    raw = path.read_bytes().decode("latin-1", errors="replace")
+    raw = re.sub(r"\\'[0-9a-f]{2}", " ", raw)                 # hex escapes
+    raw = re.sub(r"{\\\*[^{}]*}", " ", raw)                        # destinations
+    raw = re.sub(r"\\[a-zA-Z]+-?\d* ?", " ", raw)                # control words
+    raw = re.sub(r"[{}]", " ", raw)
+    text = re.sub(r"[ \t]+", " ", raw)
+    text = "\n".join(ln.strip() for ln in text.splitlines() if ln.strip())
+    return [Page(text=text, page_no=1)] if len(text) > 20 else []
+
+
 # ------------------------------------------------------------------- TXT / MD / CSV
 
 def _read_text(path: Path) -> str:
@@ -296,6 +428,7 @@ EXTRACTORS: dict[str, Callable[[Path], list[Page]]] = {
     "html": extract_html,
     "text": extract_text,
     "csv": extract_csv,
+    "rtf": extract_rtf,
     "image": extract_image,
 }
 
@@ -303,6 +436,13 @@ FALLBACKS: dict[str, Callable[[Path], list[Page]]] = {
     "pdf": fallback_pdf,
     "docx": fallback_docx,
     "html": fallback_html,
+    "rtf": fallback_rtf,
+}
+
+# Formats we can recognise from the bytes but cannot read, with the advice to show the user.
+_UNREADABLE = {
+    "doc": "This is a legacy binary Word file (.doc / OLE2), not a DOCX package. Open it in Word or "
+           "LibreOffice and save as .docx (or export to PDF), then upload again.",
 }
 
 
@@ -310,39 +450,84 @@ def file_type_for(filename: str) -> str | None:
     return SUPPORTED_EXTENSIONS.get(Path(filename).suffix.lower())
 
 
-def extract(path: Path) -> list[Page]:
-    """Primary extractor first; on exception or empty result, the format's fallback."""
-    kind = file_type_for(path.name)
-    if kind is None or kind not in EXTRACTORS:
+def resolve_type(path: Path) -> tuple[str, str | None]:
+    """(extractor to use, note) — the sniffed content type overrides the extension when they differ."""
+    by_ext = file_type_for(path.name)
+    sniffed = sniff_type(path) if settings.SNIFF_CONTENT else None
+    if by_ext is None or by_ext not in EXTRACTORS:
+        if sniffed in EXTRACTORS:  # unknown extension but recognisable content (e.g. a PDF named .bin)
+            note = f"extension '{path.suffix or '(none)'}' is not registered but content is {sniffed.upper()}; read as {sniffed}"
+            log.info("[extract] %s: %s", path.name, note)
+            return sniffed, note
         raise UnsupportedFormat(
             f"Unsupported file type '{path.suffix}'. Supported: {sorted(SUPPORTED_EXTENSIONS)}")
+    if not settings.SNIFF_CONTENT:
+        return by_ext, None
+    if sniffed in _UNREADABLE:
+        raise ExtractionError(f"File '{_display_name(path)}' has extension '{path.suffix}' but its content is a legacy "
+                              f"binary Word document. {_UNREADABLE[sniffed]}")
+    if sniffed and sniffed != by_ext and sniffed in EXTRACTORS:
+        note = f"extension '{path.suffix}' but content is {sniffed.upper()}; read as {sniffed}"
+        log.info("[extract] %s: %s", path.name, note)
+        return sniffed, note
+    return by_ext, None
+
+
+def _brief(exc: BaseException, path: Path, limit: int = 160) -> str:
+    """`TypeName: message` with absolute paths replaced by the file name and the length capped."""
+    msg = str(exc).replace(str(path.resolve()), path.name).replace(str(path), path.name).strip()
+    msg = " ".join(msg.split())
+    if len(msg) > limit:
+        msg = msg[:limit].rstrip() + "…"
+    return f"{type(exc).__name__}: {msg}" if msg else type(exc).__name__
+
+
+def _display_name(path: Path) -> str:
+    """Uploaded files are stored as <doc_id>_<original name>; show the original name."""
+    stem, sep, rest = path.name.partition("_")
+    return rest if sep and len(stem) == 12 and all(c in "0123456789abcdef" for c in stem) else path.name
+
+
+def extract(path: Path) -> list[Page]:
+    """Primary extractor first (chosen by content, then extension); on exception or empty result,
+    the format's fallback. Raises ExtractionError with a user-facing reason when nothing works."""
+    kind, note = resolve_type(path)
+    shown = _display_name(path)
 
     primary_error: Exception | None = None
     pages: list[Page] = []
     try:
+        log.info("[extract] primary=%s file=%s", kind, path.name)
         pages = EXTRACTORS[kind](path)
+        log.info("[extract] primary=%s file=%s pages=%d", kind, path.name, len(pages))
     except ExtractionError:
         raise
     except Exception as exc:
         primary_error = exc
-        log.warning("primary extractor for %s failed on %s: %s", kind, path.name, exc)
+        log.warning("[extract] primary=%s file=%s FAILED: %s: %s", kind, path.name, type(exc).__name__, exc)
     if pages:
+        if note:
+            for pg in pages:
+                pg.meta["format_note"] = note
         return pages
 
     fallback = FALLBACKS.get(kind)
+    why = (f"the {kind} reader failed ({_brief(primary_error, path)})" if primary_error
+           else f"the {kind} reader found no text")
     if fallback is None:
-        if primary_error is not None:
-            raise ExtractionError(f"Could not read this {kind} file: {primary_error}") from primary_error
-        raise ExtractionError("The file contains no extractable text.")
+        raise ExtractionError(f"Could not read '{shown}': {why}.")
 
-    log.info("using fallback extractor for %s (%s)", path.name, kind)
+    log.info("[extract] fallback=%s file=%s because %s", kind, path.name, why)
     try:
         pages = fallback(path)
-    except ExtractionError:
-        raise
+    except ExtractionError as exc:
+        # keep the OCR / configuration message but say what went wrong first
+        raise ExtractionError(f"{why[0].upper() + why[1:]}. Fallback: {exc}") from exc
     except Exception as exc:
-        cause = primary_error or exc
-        raise ExtractionError(f"Could not read this {kind} file: {cause}") from exc
+        same = primary_error is not None and str(exc) == str(primary_error)
+        tail = "the fallback could not open the file either" if same else f"fallback also failed ({_brief(exc, path)})"
+        raise ExtractionError(f"Could not read '{shown}': {why}; {tail}.") from exc
     if not pages:
-        raise ExtractionError("The file contains no extractable text, even after the fallback extractor.")
+        raise ExtractionError(f"Could not read '{shown}': {why}, and the fallback extractor found no text either.")
+    log.info("[extract] fallback=%s file=%s pages=%d", kind, path.name, len(pages))
     return pages

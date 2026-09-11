@@ -36,11 +36,37 @@ evaluation script.
 - **PyMuPDF replaced pypdf + pypdfium2** — one library for text and page rendering.
 - **Server-side refusal-fallback beta not used on the judge** — benign prompts, simpler script.
 
+- **Content sniffing beats extensions** (2026-09-06 incident: `2P CRA dated 17_12_2025.docx` was RTF;
+  python-docx raised PackageNotFoundError and the fallback message blamed missing OCR). `sniff_type()`
+  now routes by magic bytes; RTF is supported; legacy OLE `.doc` gets a "convert to .docx" reason.
+- **Upload order is fixed by the user**: validate → store file + compute SHA-256 → duplicate check → QUEUED.
+- **Failure reasons must name the primary reader's error** (paths stripped) before the fallback's text.
+- **Every step logs `[step] … job= doc=`** via `app/logging_utils.py`; `grep doc=<id>` tells the story of a file.
+
+- UI pages: `/` workbench keeps 5-per-page panels (user asked to keep it); `/jobs` and `/documents` are 20-per-page;
+  show page is `/documents/{doc_id}` (static HTML reads the id from the path).
+
+- Show-page highlighting depends on `data/pages/<doc_id>.json` holding the *normalised* page text
+  (`chunker.normalise`) so `char_start/char_end` line up; the viewer also tries `indexOf(chunk.text)`.
+  Citations shown to the user on that page are **page numbers**, not chunk numbers.
+
+- `scripts/make_demo_gif.py` needs the API running and a real or mock LLM in `.env`; it records against a
+  throw-away `demo` collection and deletes it. Playwright + Chromium come from `requirements-dev.txt`.
+
+- **Retry rules** (user requirement: retry on every non-completed, non-duplicate doc): FAILED/EXTRACTION_NOT_SUPPORTED
+  re-check the stored file; QUEUED/PROCESSING only if stale (`RETRY_STALE_SECONDS`); EMPTY_FILE/UPLOAD_FAILED → 410.
+  Pipeline deletes a doc's chunks before re-adding so retries never duplicate vectors.
+
+- **DOCX content controls**: `document.paragraphs` in python-docx skips `w:sdt`-wrapped paragraphs and tables
+  (a real client contract came out empty). `_docx_blocks()` walks `document.element.body` in order instead.
+
 ## Environment gotchas
-- The dev Mac has no Docker, Homebrew or Tesseract; Python is 3.9 system-wide. Use
-  `uv venv --python 3.11 .venv`. Docker image must be built/verified elsewhere.
-- Locally OCR is therefore unavailable: `scanned_memo.pdf` and `whiteboard.png` end `FAILED` with
-  "…Tesseract OCR is not installed on this host…" — expected; they succeed inside Docker.
+- The dev Mac has no Docker; Python is 3.9 system-wide. Use `uv venv --python 3.11 .venv`. Docker image
+  must be built/verified elsewhere. Homebrew + Tesseract (with `tesseract-lang`) were installed on 2026-09-06 at
+  `/opt/homebrew/bin`, which is NOT on the PATH of the Claude Code shell or the preview server — hence the
+  `tesseract_cmd()` auto-detection in `app/ingest/extractors.py`.
+- OCR works locally since v0.10.1 (auto-detected Homebrew binary); the real-OCR test in `tests/test_extractors.py`
+  is skipped automatically on hosts without a binary.
 - `scripts/mock_llm.py` (port 8001) is an extractive stand-in for demos/CI. It is not a model.
 - First embedding-model load downloads ~130 MB; the Dockerfile pre-downloads it.
 - fastembed + chromadb pin numpy/onnxruntime jointly; regenerate `requirements.txt` with
@@ -54,6 +80,8 @@ evaluation script.
 - Scoped ask: `doc_ids`/`job_ids` → concrete COMPLETED doc set in one collection; Chroma `where`
   `{doc_id: {$in: [...]}}` + BM25 candidate filter. Citations are validated in `app/rag.py`
   (`extract_citations`); bogus `[n]` markers are stripped and reported.
+- Listings are paginated: 0-based `page`, default `size` 5 (`LIST_PAGE_SIZE`), envelope with
+  `items/total/pages/has_next/has_prev`. Clients must read `.items`.
 - Collection names follow Chroma's rule (3-63 chars, alnum at both ends) — 2-char names fail in Chroma.
 - Tests mock `app.rag.llm.chat`; no network needed.
 - Version lives in `app/main.py` (`FastAPI(version=…)`) and `documentation/changelog.html`.
@@ -63,4 +91,13 @@ evaluation script.
 ## History
 - 2026-09-06 — v0.1.0 initial build; v0.2.0 async job model with fixed statuses, dedupe, docs set;
   v0.3.0 PyMuPDF primary + Tesseract-as-fallback tiering, transcript/rules/docs scripts;
-  v0.4.0 jobs as first-class objects, job→document filter, scoped ask, validated citations, `plans/`.
+  v0.4.0 jobs as first-class objects, job→document filter, scoped ask, validated citations, `plans/`;
+  v0.5.0 paginated listings (page 0, size 5), `documentation/enhancements.md`;
+  v0.6.0 content sniffing + RTF, precise failure reasons, retry endpoint, store-then-hash upload order, step logging;
+  v0.7.0 `/jobs`, `/documents` (20/page) and `/documents/{id}` show page (+ `/api/documents/{id}/file`);
+  v0.8.0 show page = 55% text viewer + 45% per-document chat, page-number citations that jump + highlight, `data/pages/`;
+  v0.9.0 listings show pages per document and documents/pages per job (home page and dedicated pages);
+  v0.9.1 flow.html tabs for pages + show page, `documentation/demo.gif` recorded by `scripts/make_demo_gif.py` (Playwright);
+  v0.10.0 retry for every non-COMPLETED/non-DUPLICATE document (per-status rules), unsupported files stored, sniffing rescues unknown extensions;
+  v0.10.1 `TESSERACT_CMD` + binary auto-detection (Homebrew path not on PATH), real-OCR test;
+  v0.10.2 DOCX body walk (content controls + tables).

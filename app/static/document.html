@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAG Generator · Document</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c1f26; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --ok:#15803d; --bad:#b91c1c; --warn:#b45309; --info:#0369a1; --hl:#bfdbfe; --hl2:#dbeafe; }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; font:14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--ink); display:flex; flex-direction:column; }
+  header { padding:10px 22px; background:var(--card); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:17px; } header h1 a { color:inherit; text-decoration:none; }
+  header nav { margin-left:auto; font-size:13px; } header nav a { color:var(--accent); text-decoration:none; margin-left:12px; }
+  .crumb { font-size:12px; color:var(--muted); } .crumb a { color:var(--accent); text-decoration:none; }
+  main { flex:1; display:grid; grid-template-columns:minmax(0,55fr) minmax(0,45fr); gap:0; min-height:0; min-width:0; }
+  @media (max-width:900px) { main { grid-template-columns:1fr; } }
+  .pane { min-height:0; min-width:0; display:flex; flex-direction:column; overflow:hidden; }
+  .pane.left { border-right:1px solid var(--line); background:var(--card); }
+  .pane-head { padding:8px 14px; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:12px; color:var(--muted); background:#fafafa; }
+  .pane-head b { color:var(--ink); }
+  .tabs button { padding:4px 10px; border:1px solid var(--line); background:var(--card); border-radius:6px; font:inherit; font-size:12px; cursor:pointer; }
+  .tabs button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:600; background:#eef2ff; color:var(--accent); white-space:nowrap; }
+  .pill.COMPLETED { background:#dcfce7; color:var(--ok); } .pill.DUPLICATE { background:#fef3c7; color:var(--warn); } .pill.PROCESSING { background:#e0f2fe; color:var(--info); }
+  .pill.FAILED, .pill.UPLOAD_FAILED, .pill.EXTRACTION_NOT_SUPPORTED, .pill.EMPTY_FILE { background:#fee2e2; color:var(--bad); } .pill.ocr { background:#fef3c7; color:var(--warn); }
+  code.id { font:12px ui-monospace, Menlo, monospace; color:var(--muted); }
+  button { padding:7px 12px; border:0; border-radius:6px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; } button.secondary { background:#eef2ff; color:var(--accent); } button.small { padding:3px 8px; font-size:12px; } button:disabled { opacity:.5; cursor:default; }
+  .muted { color:var(--muted); font-size:12px; } .err { color:var(--bad); font-size:13px; white-space:pre-wrap; }
+  .banner { border-radius:8px; padding:12px 14px; margin:14px; font-size:13px; }
+  .banner.warn { background:#fef3c7; color:#78350f; } .banner.bad { background:#fee2e2; color:#7f1d1d; } .banner.info { background:#e0f2fe; color:#0c4a6e; }
+  dl { display:grid; grid-template-columns:130px 1fr; gap:4px 10px; margin:12px 14px; font-size:12.5px; } dt { color:var(--muted); } dd { margin:0; word-break:break-all; }
+  /* viewer */
+  .viewer { flex:1; overflow:auto; padding:14px 18px; scroll-behavior:smooth; }
+  .vpage { border:1px solid var(--line); border-radius:8px; margin-bottom:14px; background:#fff; }
+  .vpage.target { box-shadow:0 0 0 3px var(--hl2); border-color:var(--accent); }
+  .vpage-head { padding:6px 12px; border-bottom:1px solid var(--line); background:#f8fafc; font-size:12px; color:var(--muted); display:flex; gap:10px; align-items:center; border-radius:8px 8px 0 0; }
+  .vpage-head b { color:var(--ink); }
+  .vtext { padding:12px 14px; white-space:pre-wrap; font:13px/1.65 Georgia, "Times New Roman", serif; }
+  mark.cite { background:var(--hl); color:var(--ink); border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-box-decoration-break:clone; }
+  mark.cite.strong { background:#93c5fd; }
+  iframe.orig { flex:1; width:100%; border:0; background:#fff; } img.orig { max-width:100%; padding:14px; }
+  /* chat */
+  .chat { flex:1; overflow:auto; padding:14px 16px; display:flex; flex-direction:column; gap:12px; }
+  .msg { max-width:92%; min-width:0; overflow-wrap:anywhere; padding:10px 14px; border-radius:14px; font-size:13.5px; line-height:1.55; white-space:pre-wrap; word-wrap:break-word; }
+  .msg.user { align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:4px; }
+  .msg.bot { align-self:flex-start; background:var(--card); border:1px solid var(--line); border-bottom-left-radius:4px; }
+  .msg.bot.notfound { background:#fffbeb; border-color:#fde68a; }
+  .msg.sys { align-self:center; background:transparent; color:var(--muted); font-size:12px; text-align:center; max-width:100%; }
+  .msg .meta { font-size:11px; color:var(--muted); margin-top:6px; }
+  .msg .err { margin-top:4px; }
+  cite.c { display:inline-block; font-style:normal; font-weight:700; color:var(--accent); background:var(--hl2); border-radius:5px; padding:0 6px; margin:0 1px; cursor:pointer; font-size:12px; line-height:1.4; vertical-align:baseline; }
+  cite.c:hover { background:var(--hl); } cite.c.active { background:#93c5fd; }
+  .cites { margin-top:8px; display:flex; flex-direction:column; gap:4px; }
+  .cites .row { font-size:12px; color:var(--muted); display:flex; gap:8px; align-items:flex-start; }
+  .cites .row span.q { flex:1; font-style:italic; color:#374151; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .typing { display:inline-flex; gap:4px; align-items:center; } .typing i { width:6px; height:6px; border-radius:50%; background:var(--muted); animation:b 1s infinite; } .typing i:nth-child(2) { animation-delay:.2s } .typing i:nth-child(3) { animation-delay:.4s }
+  @keyframes b { 0%,80%,100% { opacity:.2 } 40% { opacity:1 } }
+  .composer { border-top:1px solid var(--line); padding:10px 14px; background:var(--card); }
+  .composer .box { display:flex; gap:8px; align-items:flex-end; }
+  .composer textarea { flex:1; resize:none; min-height:42px; max-height:140px; padding:9px 11px; border:1px solid var(--line); border-radius:10px; font:inherit; }
+  .composer .hint { font-size:11px; color:var(--muted); margin-top:6px; }
+  .help { margin:12px 14px 0; padding:10px 12px; border:1px dashed var(--line); border-radius:8px; font-size:12px; color:#374151; background:#fafafa; }
+  .help ol { margin:6px 0 0; padding-left:18px; } .help li { margin:2px 0; }
+</style></head>
+<body>
+<header>
+  <h1><a href="/">RAG Generator</a></h1>
+  <span class="crumb" id="crumb"></span>
+  <nav><a href="/">Home</a><a href="/jobs">Jobs</a><a href="/documents">Documents</a><a href="/documentation/flow.html" target="_blank">How it works</a></nav>
+</header>
+<main>
+  <section class="pane left">
+    <div class="pane-head">
+      <b id="fname">Loading…</b> <span id="status"></span>
+      <span class="tabs" id="tabs" style="margin-left:auto"><button class="on" data-tab="text">Text view</button><button data-tab="original">Original file</button><button data-tab="details">Details</button></span>
+    </div>
+    <div id="banner"></div>
+    <div class="viewer" id="viewer"></div>
+    <div id="original" class="pane" style="display:none;flex:1;min-height:0"></div>
+    <div id="details" style="display:none;overflow:auto"></div>
+  </section>
+  <section class="pane right">
+    <div class="pane-head"><b>Ask this document</b> <span class="muted" id="scope"></span><span class="muted" style="margin-left:auto" id="model"></span></div>
+    <div class="chat" id="chat"></div>
+    <div class="composer">
+      <div class="box"><textarea id="q" placeholder="Ask a question about this document…" rows="1"></textarea><button id="send">Ask</button></div>
+      <div class="hint">Answers use only this document. Citations like <cite class="c">2</cite> are <b>page numbers</b> — click one to jump to the page and highlight the passage in blue. Enter to send, Shift+Enter for a new line.</div>
+    </div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const TERMINAL = ['DUPLICATE','COMPLETED','FAILED','EMPTY_FILE','EXTRACTION_NOT_SUPPORTED','UPLOAD_FAILED'];
+const BAD = ['FAILED','UPLOAD_FAILED','EXTRACTION_NOT_SUPPORTED','EMPTY_FILE'];
+const INLINE = ['pdf', 'html', 'text', 'csv', 'image'];
+const docId = location.pathname.split('/').filter(Boolean).pop();
+const NOT_APPLICABLE = {
+  QUEUED: 'The document is waiting for the background worker; nothing has been indexed yet. This page refreshes automatically.',
+  PROCESSING: 'The document is being processed; the viewer and chat become available when it is COMPLETED. This page refreshes automatically.',
+  FAILED: 'Processing failed, so there is no indexed content to show or ask about. Fix the cause described in the reason, then retry.',
+  DUPLICATE: 'This file has the same content as an already indexed document, so it was not processed. Use the original document\'s show page instead.',
+  EMPTY_FILE: 'The uploaded file was empty; there is nothing to show.',
+  EXTRACTION_NOT_SUPPORTED: 'This file type is not supported, so it was never processed.',
+  UPLOAD_FAILED: 'The upload itself failed; the file was not stored or processed.',
+};
+let doc = null, pages = [], chunksById = new Map(), timer = null, turn = 0;
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, opts);
+  if (r.status === 204) return null;
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail || body));
+  return body;
+}
+
+/* ---------------- tabs ---------------- */
+document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+function showTab(name) {
+  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x.dataset.tab === name));
+  $('viewer').style.display = name === 'text' ? '' : 'none';
+  $('original').style.display = name === 'original' ? 'flex' : 'none';
+  $('details').style.display = name === 'details' ? 'block' : 'none';
+}
+
+/* ---------------- load document ---------------- */
+async function load() {
+  clearTimeout(timer);
+  try { doc = await api(`/api/documents/${docId}`); }
+  catch (e) { $('banner').innerHTML = `<div class="banner bad">Document <code>${esc(docId)}</code> not found.</div>`; $('fname').textContent = 'Not found'; disableChat('No document.'); return; }
+  document.title = `RAG Generator · ${doc.filename}`;
+  $('fname').textContent = doc.filename;
+  $('status').innerHTML = `<span class="pill ${doc.status}">${doc.status}</span>${doc.ocr_pages ? ` <span class="pill ocr">OCR ×${doc.ocr_pages}</span>` : ''}`;
+  $('crumb').innerHTML = `<a href="/documents">Documents</a> › <a href="/documents?job_id=${doc.job_id}">job ${esc(doc.job_id)}</a> › <code class="id">${esc(doc.doc_id)}</code>`;
+  $('scope').textContent = `scope: only "${doc.filename}" (doc ${doc.doc_id})`;
+  renderDetails();
+
+  if (doc.status !== 'COMPLETED') {
+    const cls = doc.status === 'DUPLICATE' ? 'warn' : (BAD.includes(doc.status) ? 'bad' : 'info');
+    let extra = '';
+    if (doc.status === 'DUPLICATE' && doc.duplicate_of) extra = `<br><b>Original document:</b> <a href="/documents/${doc.duplicate_of}">${location.origin}/documents/${esc(doc.duplicate_of)}</a> (${esc(doc.duplicate_of_name || '')}) — ask your questions there.`;
+    if (!['DUPLICATE', 'COMPLETED'].includes(doc.status)) extra += `<br><button class="small" id="retry">Retry processing</button> <span class="muted" id="retryMsg">${doc.status === 'FAILED' || doc.status === 'EXTRACTION_NOT_SUPPORTED' ? 'Re-checks the stored file with the current extractors.' : (doc.status === 'QUEUED' || doc.status === 'PROCESSING') ? 'Only if the worker has stalled.' : 'Nothing was stored for this file; you will be asked to upload it again.'}</span>`;
+    $('banner').innerHTML = `<div class="banner ${cls}"><b>Show page not applicable — status ${doc.status}.</b> ${esc(NOT_APPLICABLE[doc.status] || '')}<br><span class="muted">Reason: ${esc(doc.reason || '–')}</span>${extra}</div>`;
+    const rb = $('retry'); if (rb) rb.onclick = async () => { try { const d = await api(`/api/documents/${docId}/retry`, {method: 'POST'}); if (d.status !== 'QUEUED') $('retryMsg').textContent = d.reason; load(); } catch (e) { $('retryMsg').textContent = `Retry not possible: ${e.message}`; } };
+    $('viewer').innerHTML = '';
+    disableChat(`Chat is available only for COMPLETED documents (this one is ${doc.status}).`);
+    if (!TERMINAL.includes(doc.status)) timer = setTimeout(load, 2000);
+    return;
+  }
+  $('banner').innerHTML = '';
+  enableChat();
+  try {
+    const [pg, ch] = await Promise.all([
+      api(`/api/documents/${docId}/pages`),
+      api(`/api/chunks?collection=${encodeURIComponent(doc.collection)}&doc_id=${docId}&limit=1000`),
+    ]);
+    pages = pg.pages; ch.forEach(c => chunksById.set(c.chunk_id, c));
+    renderViewer(pg.source);
+  } catch (e) { $('viewer').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+  renderOriginal();
+  if (!$('chat').children.length) sysMsg(`Ready. ${pages.length} page(s) indexed from "${doc.filename}". Ask anything about this document — I will only use its content and cite the pages I used.`);
+}
+
+function renderDetails() {
+  $('details').innerHTML = `<dl>
+    <dt>Doc ID</dt><dd><code class="id">${esc(doc.doc_id)}</code></dd><dt>File</dt><dd>${esc(doc.filename)}</dd><dt>Type</dt><dd>${esc(doc.file_type || '–')}</dd>
+    <dt>Collection</dt><dd>${esc(doc.collection)}</dd><dt>Job</dt><dd><a href="/documents?job_id=${doc.job_id}"><code class="id">${esc(doc.job_id)}</code></a></dd>
+    <dt>Status</dt><dd><span class="pill ${doc.status}">${doc.status}</span></dd><dt>Reason</dt><dd>${esc(doc.reason || '–')}</dd>
+    <dt>SHA-256</dt><dd><code class="id">${esc(doc.sha256 || '–')}</code></dd>
+    <dt>Pages / chunks</dt><dd>${doc.status === 'COMPLETED' ? `${doc.pages} pages${doc.ocr_pages ? ` (${doc.ocr_pages} via OCR)` : ''} · ${doc.chunks} chunks` : '–'}</dd>
+    <dt>Created / updated</dt><dd>${esc(doc.created_at)} · ${esc(doc.updated_at)}</dd></dl>
+    <div style="margin:0 14px 14px"><a href="/api/documents/${doc.doc_id}/file?download=true"><button class="secondary small">Download original</button></a></div>`;
+}
+
+/* ---------------- viewer ---------------- */
+function renderViewer(source, highlights = new Map()) {
+  // highlights: Map<page, [{start,end,strong}]>
+  $('viewer').innerHTML = pages.map(p => {
+    const hs = (highlights.get(p.page) || []).sort((a, b) => a.start - b.start);
+    return `<div class="vpage" id="vpage-${p.page}"><div class="vpage-head"><b>Page ${p.page}</b>${p.section ? `<span>· ${esc(p.section)}</span>` : ''}${p.extraction === 'ocr' ? '<span class="pill ocr">OCR</span>' : ''}<span style="margin-left:auto">${p.chunk_ids.length} chunk(s)</span></div><div class="vtext">${markup(p.text, hs)}</div></div>`;
+  }).join('') + (source === 'reconstructed' ? `<div class="muted" style="margin:6px 2px">Page text reconstructed from indexed chunks (document was indexed before page text was stored).</div>` : '');
+}
+function markup(text, hs) {
+  if (!hs.length) return esc(text);
+  let out = '', pos = 0;
+  for (const h of hs) {
+    const s = Math.max(h.start, pos), e = Math.min(h.end, text.length);
+    if (s >= e) continue;
+    out += esc(text.slice(pos, s)) + `<mark class="cite ${h.strong ? 'strong' : ''}" ${h.strong ? 'id="hl-target"' : ''}>${esc(text.slice(s, e))}</mark>`;
+    pos = e;
+  }
+  return out + esc(text.slice(pos));
+}
+function locate(chunk) {
+  // Find the chunk text inside the page text (exact, else offsets) -> {start,end}
+  const page = pages.find(p => p.page === chunk.page);
+  if (!page) return null;
+  const i = page.text.indexOf(chunk.text);
+  if (i >= 0) return {start: i, end: i + chunk.text.length};
+  return {start: chunk.char_start, end: Math.min(chunk.char_end, page.text.length)};
+}
+function jumpTo(pageNo, chunkIds, turnId) {
+  showTab('text');
+  const hl = new Map();
+  chunkIds.forEach(id => { const c = chunksById.get(id); if (!c) return; const loc = locate(c); if (loc) { if (!hl.has(c.page)) hl.set(c.page, []); hl.get(c.page).push({...loc, strong: c.page === pageNo}); } });
+  renderViewer(null, hl);
+  document.querySelectorAll('.vpage').forEach(el => el.classList.toggle('target', el.id === `vpage-${pageNo}`));
+  document.querySelectorAll('cite.c').forEach(el => el.classList.toggle('active', el.dataset.turn == turnId && +el.dataset.page === pageNo));
+  const viewer = $('viewer');
+  const target = document.getElementById('hl-target') || document.getElementById(`vpage-${pageNo}`);
+  if (target) {
+    // scroll the viewer pane itself (robust even when scrollIntoView is a no-op, e.g. hidden tab)
+    const top = target.getBoundingClientRect().top - viewer.getBoundingClientRect().top + viewer.scrollTop;
+    viewer.scrollTo({top: Math.max(0, top - viewer.clientHeight / 3), behavior: 'smooth'});
+  }
+}
+window.jumpTo = jumpTo;
+
+function renderOriginal() {
+  const url = `/api/documents/${docId}/file`;
+  $('original').innerHTML = doc.file_type === 'image' ? `<div style="overflow:auto"><img class="orig" src="${url}" alt="${esc(doc.filename)}"></div>`
+    : INLINE.includes(doc.file_type) ? `<iframe class="orig" src="${url}" title="${esc(doc.filename)}"></iframe>`
+    : `<div class="banner info">Browsers cannot render <b>${esc(doc.file_type)}</b> files inline. <a href="${url}?download=true">Download the original</a>, or use the Text view, which shows exactly the content that was indexed.</div>`;
+}
+
+/* ---------------- chat ---------------- */
+function disableChat(why) { $('q').disabled = true; $('send').disabled = true; $('q').placeholder = why; }
+function enableChat() { $('q').disabled = false; $('send').disabled = false; $('q').placeholder = 'Ask a question about this document…'; }
+function sysMsg(text) { const el = document.createElement('div'); el.className = 'msg sys'; el.textContent = text; $('chat').appendChild(el); scrollChat(); }
+function scrollChat() { $('chat').scrollTop = $('chat').scrollHeight; }
+$('send').onclick = ask;
+$('q').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); } };
+$('q').oninput = () => { $('q').style.height = 'auto'; $('q').style.height = Math.min($('q').scrollHeight, 140) + 'px'; };
+
+async function ask() {
+  const q = $('q').value.trim();
+  if (!q || !doc || doc.status !== 'COMPLETED') return;
+  $('q').value = ''; $('q').style.height = 'auto';
+  const t = ++turn;
+  const u = document.createElement('div'); u.className = 'msg user'; u.textContent = q; $('chat').appendChild(u);
+  const b = document.createElement('div'); b.className = 'msg bot'; b.innerHTML = '<span class="typing"><i></i><i></i><i></i></span>'; $('chat').appendChild(b); scrollChat();
+  $('send').disabled = true;
+  try {
+    const res = await api('/api/ask', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({question: q, doc_ids: [docId]})});
+    renderAnswer(b, res, t);
+  } catch (e) { b.innerHTML = `<div class="err">Could not get an answer: ${esc(e.message)}</div>`; }
+  $('send').disabled = false; scrollChat(); $('q').focus();
+}
+
+function renderAnswer(el, res, t) {
+  const byN = new Map(res.sources.map(s => [s.n, s]));
+  // [n] chunk markers -> [page] markers; group the chunks cited per page
+  const perPage = new Map();
+  res.citations.forEach(s => { if (!perPage.has(s.page)) perPage.set(s.page, []); perPage.get(s.page).push(s); });
+  let html = esc(res.answer).replace(/((?:\[\d+\])+)/g, (run) => {
+    const pagesInRun = [];
+    run.match(/\d+/g).forEach(n => { const s = byN.get(+n); if (s && !pagesInRun.includes(s.page)) pagesInRun.push(s.page); });
+    return pagesInRun.map(p => citeTag(p, perPage.get(p) || [], t)).join('');
+  });
+  const notFound = res.answer.startsWith('I could not find');
+  el.classList.toggle('notfound', notFound);
+  const cites = [...perPage.entries()].sort((a, b) => a[0] - b[0]).map(([p, ss]) =>
+    `<div class="row">${citeTag(p, ss, t)}<span class="q" title="${esc(ss[0].text)}">${esc(ss[0].text.slice(0, 140))}${ss[0].text.length > 140 ? '…' : ''}</span><span class="muted">${ss.length > 1 ? `${ss.length} passages` : ''}</span></div>`).join('');
+  el.innerHTML = html + (cites ? `<div class="cites">${cites}</div>` : '') +
+    `<div class="meta">${esc(res.model)} · ${res.latency_ms} ms · ${res.citations.length} cited passage(s) on ${perPage.size} page(s) · ${res.sources.length} chunks retrieved from this document only${res.unresolved_citations.length ? ` · removed unmatched markers ${res.unresolved_citations.map(n => '[' + n + ']').join('')}` : ''}</div>`;
+  el.querySelectorAll('cite.c').forEach(c => c.onclick = () => jumpTo(+c.dataset.page, c.dataset.chunks.split(','), c.dataset.turn));
+  // auto-focus the first cited page so the user immediately sees where the answer came from
+  const first = [...perPage.keys()].sort((a, b) => a - b)[0];
+  if (first !== undefined) jumpTo(first, perPage.get(first).map(s => s.chunk_id), t);
+}
+function citeTag(page, sources, t) {
+  return `<cite class="c" title="Jump to page ${page} and highlight the passage" data-page="${page}" data-turn="${t}" data-chunks="${sources.map(s => s.chunk_id).join(',')}">${page}</cite>`;
+}
+api('/api/health').then(h => $('model').textContent = `LLM: ${h.llm_model}`).catch(() => {});
+load();
+</script>
+</body></html>

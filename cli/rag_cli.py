@@ -72,23 +72,28 @@ def ingest(files: list[Path] = typer.Argument(..., exists=True, readable=True),
 @app.command()
 def status(collection: Optional[str] = COL, api: Optional[str] = API,
            job: Optional[str] = typer.Option(None, "--job", "-j", help="Only documents of this job"),
+           page: int = typer.Option(0, help="0-based page"), size: int = typer.Option(5, help="page size"),
            watch: bool = typer.Option(False, help="Refresh every second until nothing is processing")):
-    """List documents (DOC ID · NAME · STATUS · REASON), optionally filtered by job."""
+    """List documents (DOC ID · NAME · STATUS · REASON), paginated, optionally filtered by job."""
     with _client(api) as c:
         while True:
             params = {k: v for k, v in {"collection": collection, "job_id": job}.items() if v}
-            r = c.get("/api/documents", params=params or None)
+            params.update({"page": page, "size": size})
+            r = c.get("/api/documents", params=params)
             if r.status_code >= 400:
                 _die(r)
-            docs = r.json()
+            body = r.json()
+            docs = body["items"]
             if not docs:
                 typer.echo("no documents")
             else:
-                typer.secho(f"{'DOC ID':12} {'NAME':32} {'STATUS':26} REASON", fg="bright_black")
+                typer.secho(f"page {body['page'] + 1}/{body['pages']} · {body['total']} document(s) · size {body['size']}", fg="bright_black")
+                typer.secho(f"{'DOC ID':12} {'NAME':32} {'PAGES':5} {'STATUS':26} REASON", fg="bright_black")
             for d in docs:
                 dup = f" -> original {d['duplicate_of']}" if d.get("duplicate_of") else ""
                 stage = f" ({d['stage']})" if d.get("stage") else ""
-                typer.echo(f"{d['doc_id']:12} {d['filename'][:32]:32} {d['status'] + stage:26} "
+                pages = str(d["pages"]) if d.get("pages") else "-"
+                typer.echo(f"{d['doc_id']:12} {d['filename'][:32]:32} {pages:5} {d['status'] + stage:26} "
                            f"{d.get('reason') or ''}{dup}")
             busy = any(d["status"] not in TERMINAL for d in docs)
             if not watch or not busy:
@@ -98,19 +103,27 @@ def status(collection: Optional[str] = COL, api: Optional[str] = API,
 
 
 @app.command()
-def jobs(collection: Optional[str] = COL, api: Optional[str] = API):
-    """List upload jobs (JOB ID · FILES · STATUS · REASON)."""
+def jobs(collection: Optional[str] = COL, api: Optional[str] = API,
+         page: int = typer.Option(0, help="0-based page"), size: int = typer.Option(5, help="page size")):
+    """List upload jobs (JOB ID · FILES · STATUS · REASON), paginated."""
     with _client(api) as c:
-        r = c.get("/api/jobs", params={"collection": collection} if collection else None)
+        params = {"page": page, "size": size}
+        if collection:
+            params["collection"] = collection
+        r = c.get("/api/jobs", params=params)
         if r.status_code >= 400:
             _die(r)
-        rows = r.json()
+        body = r.json()
+        rows = body["items"]
         if not rows:
             typer.echo("no jobs")
             return
-        typer.secho(f"{'JOB ID':12} {'FILES':5} {'STATUS':10} {'COLLECTION':12} REASON", fg="bright_black")
+        typer.secho(f"page {body['page'] + 1}/{body['pages']} · {body['total']} job(s) · size {body['size']}", fg="bright_black")
+        typer.secho(f"{'JOB ID':12} {'DOCS':5} {'PAGES':5} {'STATUS':10} {'COLLECTION':12} REASON", fg="bright_black")
         for j in rows:
-            typer.echo(f"{j['job_id']:12} {j['files']:<5} {j['status']:10} {j['collection']:12} {j['reason']}")
+            pages = j["total_pages"] if j["counts"].get("COMPLETED") else "-"
+            typer.echo(f"{j['job_id']:12} {j['total_documents']:<5} {str(pages):5} {j['status']:10} "
+                       f"{j['collection']:12} {j['reason']}")
 
 
 @app.command(name="job")
@@ -121,10 +134,12 @@ def job(job_id: str, api: Optional[str] = API):
         if r.status_code >= 400:
             _die(r)
         j = r.json()
-        typer.echo(f"job {j['job_id']}  {j['status']}  {j['reason']}  (collection {j['collection']})")
+        typer.echo(f"job {j['job_id']}  {j['status']}  {j['reason']}  (collection {j['collection']}, "
+                   f"{j['total_documents']} documents, {j['total_pages']} pages, {j['total_chunks']} chunks)")
         for d in j["documents"]:
             dup = f" -> original {d['duplicate_of']}" if d.get("duplicate_of") else ""
-            typer.echo(f"  {d['doc_id']:12} {d['filename'][:32]:32} {d['status']:26} {d.get('reason') or ''}{dup}")
+            pages = f"{d['pages']}p" if d.get("pages") else "-"
+            typer.echo(f"  {d['doc_id']:12} {d['filename'][:32]:32} {pages:5} {d['status']:26} {d.get('reason') or ''}{dup}")
 
 
 @app.command()
@@ -162,6 +177,24 @@ def ask(question: str, collection: Optional[str] = COL, api: Optional[str] = API
                 typer.secho(f"\n[{s['n']}] {s['source']} — {loc}{tag}  dense#{s['dense_rank']} "
                             f"bm25#{s['bm25_rank']} rrf={s['rrf_score']}", fg="cyan")
                 typer.echo(s["text"])
+
+
+@app.command()
+def retry(doc_id: str, api: Optional[str] = API, wait: bool = typer.Option(True, help="Wait for the result")):
+    """Re-process a FAILED document from its stored file."""
+    with _client(api) as c:
+        r = c.post(f"/api/documents/{doc_id}/retry")
+        if r.status_code >= 400:
+            _die(r)
+        d = r.json()
+        typer.echo(f"{d['status']:26} {d['filename']}  {d.get('reason') or ''}")
+        if not wait:
+            return
+        while d["status"] not in TERMINAL:
+            time.sleep(1)
+            d = c.get(f"/api/documents/{doc_id}").json()
+        typer.secho(f"{d['status']:26} {d['filename']}  {d.get('reason') or ''}",
+                    fg="green" if d["status"] == "COMPLETED" else "red")
 
 
 @app.command()

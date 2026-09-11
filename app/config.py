@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     OCR_MIN_CHARS_PER_PAGE: int = 20  # a PDF page with fewer extractable chars is OCR'd
     OCR_LANG: str = "eng"
     OCR_DPI: int = 200
+    TESSERACT_CMD: str = ""                  # path to the tesseract binary; empty = auto-detect (PATH, then common install dirs)
 
     # --- Retrieval (hybrid: dense + BM25, fused with RRF) ---
     DENSE_TOP_K: int = 20
@@ -55,8 +56,13 @@ class Settings(BaseSettings):
     DOCUMENTS_STORE: str = "documents"
     CHUNKS_STORE: str = "document_chunks"
     MAX_UPLOAD_MB: int = 50
+    LIST_PAGE_SIZE: int = 5                  # default page size for job / document listings (page is 0-based)
+    LIST_MAX_PAGE_SIZE: int = 200
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
+    RETRY_STALE_SECONDS: int = 120           # a QUEUED/PROCESSING document older than this may be retried (stuck worker)
+    LOG_LEVEL: str = "INFO"                  # DEBUG for per-chunk / per-batch detail
+    SNIFF_CONTENT: bool = True               # detect the real format from file bytes, not just the extension
 
     # --- Evaluation (Claude as judge) ---
     ANTHROPIC_API_KEY: str = ""
@@ -79,6 +85,11 @@ class Settings(BaseSettings):
         return self.DATA_DIR / f"{self.DOCUMENTS_STORE}.json"
 
     @property
+    def pages_dir(self) -> Path:
+        """Per-document page text (JSON) written at ingest; powers the show-page viewer."""
+        return self.DATA_DIR / "pages"
+
+    @property
     def jobs_file(self) -> Path:
         return self.DATA_DIR / f"{self.JOBS_STORE}.json"
 
@@ -97,6 +108,7 @@ SUPPORTED_EXTENSIONS: dict[str, str] = {
     ".txt": "text",
     ".md": "text",
     ".csv": "csv",
+    ".rtf": "rtf",
     # Image inputs go through Tesseract OCR
     ".png": "image",
     ".jpg": "image",

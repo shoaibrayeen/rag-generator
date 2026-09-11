@@ -12,14 +12,23 @@ for a completely different set and it works unchanged — no code edits, only `.
 | Interface | REST API (FastAPI) · single-page UI (upload · jobs · documents · ask · sources) · `rag` CLI |
 | Ingestion | asynchronous **jobs**: one upload request = one job → `job_id` → poll; job listing and per-file document listing with a fixed status vocabulary and reasons; SHA-256 duplicate detection |
 | Asking | over the whole collection **or scoped to selected documents and/or jobs**; answer = text with `[n]` markers + validated `citations` + all retrieved `sources` |
-| Formats | PDF (PyMuPDF), DOCX (python-docx), HTML (beautifulsoup4), TXT/MD/CSV (stdlib) → text with page metadata · **Tesseract OCR as fallback** when a primary extractor fails or finds no text · PNG/JPG/TIFF via OCR |
+| Formats | PDF (PyMuPDF), DOCX (python-docx), RTF (striprtf), HTML (beautifulsoup4), TXT/MD/CSV (stdlib) → text with page metadata · the **real format is sniffed from the bytes** (an RTF saved as `.docx` is read as RTF) · **Tesseract OCR as fallback** when a primary extractor fails or finds no text · PNG/JPG/TIFF via OCR |
 | Retrieval | dense top-k (fastembed → ChromaDB) **+** BM25 top-k (rank-bm25) → **Reciprocal Rank Fusion** |
 | Generation | any OpenAI-compatible LLM endpoint, configured only in `.env` |
 | Evaluation | own script with **Claude as judge** |
 | Deployment | Docker + docker compose |
-| Docs | [`documentation/`](documentation/) — [architecture](documentation/architecture.md) ([html](documentation/architecture.html)) · [interactive flow walkthrough](documentation/flow.html) · [changelog](documentation/changelog.html) · this README as [html](documentation/readme.html) |
+| Docs | [`documentation/`](documentation/) — [architecture](documentation/architecture.md) ([html](documentation/architecture.html)) · [interactive flow walkthrough](documentation/flow.html) · [changelog](documentation/changelog.html) · [enhancements](documentation/enhancements.md) ([html](documentation/enhancements.html)) · this README as [html](documentation/readme.html) |
 
 ---
+
+## 0. Two-minute tour
+
+![Animated walkthrough: upload as a job, job → documents filter, scoped ask, /jobs, /documents, show page chat, citation click → highlight, duplicate page](documentation/demo.gif)
+
+The GIF (`documentation/demo.gif`) is recorded from the real UI by `scripts/make_demo_gif.py`; the
+step-by-step interactive version with explanations is [`documentation/flow.html`](documentation/flow.html)
+(served at `/documentation/flow.html` when the app runs), now covering upload jobs, asking, the
+home/jobs/documents pages, and the show page's chat + citation highlighting.
 
 ## 1. Setup
 
@@ -58,9 +67,12 @@ cp .env.example .env                                       # edit the LLM_* line
 rag serve                                                  # http://localhost:8000
 ```
 
-OCR outside Docker needs the Tesseract binary (`brew install tesseract` / `apt install
-tesseract-ocr`). Without it the app still runs: scanned pages are skipped with a warning and
-image uploads end as `FAILED` with a clear reason.
+OCR outside Docker needs the Tesseract binary (`brew install tesseract tesseract-lang` / `apt install
+tesseract-ocr`). The binary is auto-detected from `PATH` and the usual install locations
+(`/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin`), so a Homebrew install works even when the server's
+PATH lacks it; set `TESSERACT_CMD` to point at a custom location. `GET /api/health` reports
+`ocr_available` and the resolved `tesseract_cmd`. Without a binary the app still runs: scanned pages end
+as `FAILED` with a clear reason and can be retried after installing it.
 
 ### Offline demo without an LLM key
 
@@ -81,16 +93,27 @@ document record per file. A background worker indexes the files; poll `GET /api/
 or watch the listings. The interactive walkthrough is in
 [`documentation/flow.html`](documentation/flow.html).
 
-Two listings:
+Per file the upload does, in order: validate extension and size → **upload step**: store the file
+and compute its SHA-256 (kept on the record) → **duplicate check** against live documents of the same
+collection → `QUEUED` for the background worker. A duplicate is therefore recorded after the upload
+step completes, with its hash and a link to the original.
 
-- **Jobs** (`GET /api/jobs`, UI panel 2): **JOB ID · FILES · STATUS · REASON**. Job status is
+Two listings, both **paginated** (`page` is 0-based and defaults to `0`, `size` defaults to `5`,
+max `LIST_MAX_PAGE_SIZE`). Every listing response is an envelope:
+
+```json
+{"items": [...], "page": 0, "size": 5, "total": 12, "pages": 3, "has_next": true, "has_prev": false}
+```
+
+- **Jobs** (`GET /api/jobs`, UI panel 2 and `/jobs`): **JOB ID · DOCUMENTS · PAGES · STATUS · REASON** — the number of documents in the job (with how many are indexed when they differ) and the pages indexed across its COMPLETED documents (`total_documents`, `total_pages`, `total_chunks` in the API). Job status is
   derived from its documents every time it is read: `QUEUED` (nothing started), `PROCESSING`
   (any file still running), `COMPLETED` (all files finished and at least one indexed or
   duplicate; reason says "partially completed: …" when some files failed) or `FAILED` (all
   files finished, none indexed). Clicking a job in the UI filters the document listing to that
   job (`GET /api/documents?job_id=…`).
-- **Documents** (`GET /api/documents`, UI panel 3): **DOC ID · NAME · STATUS · REASON** for every
-  file ever uploaded, including rejected ones, with a link from a duplicate to its original.
+- **Documents** (`GET /api/documents`, UI panel 3 and `/documents`): **DOC ID · NAME · PAGES · STATUS · REASON** for every
+  file ever uploaded, including rejected ones, with a link from a duplicate to its original. The total pages
+  (and chunks) appear as soon as extraction has run; before that the column shows `–`.
 
 | Status | Meaning | Processed? | REASON column |
 |---|---|---|---|
@@ -100,7 +123,7 @@ Two listings:
 | `COMPLETED` | indexed and searchable | yes | "Indexed N pages (k via OCR) into M chunks" |
 | `FAILED` | processing raised an error | no | `PROCESSING FAILED: <exception>` |
 | `EMPTY_FILE` | 0-byte upload | no | "The uploaded file is 0 bytes" |
-| `EXTRACTION_NOT_SUPPORTED` | extension not in `SUPPORTED_EXTENSIONS` | no | the extension and the supported list |
+| `EXTRACTION_NOT_SUPPORTED` | extension not in `SUPPORTED_EXTENSIONS` and content not recognised (file kept for retry) | no | the extension and the supported list |
 | `UPLOAD_FAILED` | unreadable stream, larger than `MAX_UPLOAD_MB`, or disk write error | no | `UPLOAD FAILED: <cause>` |
 
 Terminal statuses are all of them except `QUEUED` and `PROCESSING`. Duplicate detection is
@@ -123,10 +146,21 @@ citation it cannot open.
 
 ## 3. Using it
 
-### UI (<http://localhost:8000>)
+### UI
+
+Three pages plus a show page:
+
+| URL | Purpose |
+|---|---|
+| `/` | workbench: upload · jobs (5 per page) · documents (5 per page) · ask · sources |
+| `/jobs` | dedicated job listing, **20 per page**, filter by collection; shows documents / pages / chunks per job; click a job → its documents |
+| `/documents` | dedicated document listing, **20 per page**, filter by collection / status / job (`?job_id=&status=`); shows total pages and chunks per document; click a row → show page |
+| `/documents/{doc_id}` | **show page** = document viewer + chat. Left 55%: **Text view** of the indexed pages (plus *Original file* and *Details* tabs). Right 45%: a **chat that asks only this document** (`doc_ids=[id]`). Answers cite **page numbers** as blue chips; clicking a chip scrolls the viewer to that page and highlights the cited passage in light blue (the first citation is focused automatically). For any other status the page explains why the viewer/chat are not applicable and shows the reason; a `DUPLICATE` links to the original document's show page; a `FAILED` document offers *Retry*. |
+
+The workbench (`/`):
 1. **Upload** — drop files, optionally name a *collection* (a document set); they are submitted as one job and the job id is shown.
-2. **Jobs** — JOB ID · FILES · STATUS · REASON. Click a row to filter the documents to that job; tick a job to ask over it.
-3. **Documents** — DOC ID · NAME · STATUS · REASON for every file (job id shown under the doc id); duplicates link to their original; tick `COMPLETED` documents to ask over them; delete finished ones with ✕.
+2. **Jobs** — JOB ID · DOCUMENTS · PAGES · STATUS · REASON, 5 per page with prev/next. Click a row to filter the documents to that job; tick a job to ask over it.
+3. **Documents** — DOC ID · NAME · PAGES · STATUS · REASON for every file, 5 per page with prev/next (job id shown under the doc id); duplicates link to their original; tick `COMPLETED` documents to ask over them; *retry* any document that is not COMPLETED/DUPLICATE; delete finished ones with ✕.
 4. **Ask** — the scope line shows what will be searched (whole collection or the ticked jobs/documents). The answer shows `[n]` markers, then a **Citations** list (file, page, section, doc id); click a marker to jump to the chunk.
 5. **Sources** — every retrieved chunk with file, page/section, doc id, whether it came from dense or BM25 (or both), its RRF score and a "cited" badge. OCR'd chunks are flagged.
 
@@ -135,13 +169,15 @@ citation it cannot open.
 ### CLI
 ```bash
 rag ingest samples/*.md samples/*.pdf --collection demo   # one job; prints the job id, waits for it
-rag jobs                                                  # JOB ID · FILES · STATUS · REASON
+rag jobs                                                  # JOB ID · DOCS · PAGES · STATUS · REASON (page 0, size 5)
+rag jobs --page 1 --size 10                               # next page / larger page
 rag job <job_id>                                          # one job and its documents
-rag status --watch                                        # DOC ID · NAME · STATUS · REASON (all documents)
-rag status --job <job_id>                                 # documents of one job
+rag status --watch                                        # DOC ID · NAME · PAGES · STATUS · REASON (page 0, size 5)
+rag status --job <job_id> --page 0 --size 5               # documents of one job
 rag ask "How many days of annual leave do employees get?" -c demo          # whole collection
 rag ask "What is the notice period?" --doc <doc_id> --doc <doc_id>         # only these documents
 rag ask "Summarise the warranty terms" --job <job_id> --show-sources        # only this job's documents
+rag retry <doc_id>                                        # re-process a FAILED document
 rag reset -c demo --yes
 rag serve
 ```
@@ -152,12 +188,15 @@ The CLI talks to the API at `RAG_API_URL` (default `http://localhost:8000`, over
 |---|---|---|
 | `GET` | `/api/health` | status, models, supported extensions, status vocabulary, collections, non-secret settings |
 | `POST` | `/api/documents` | multipart `files[]` (+ `collection`) → **202** with the **job** (`job_id`, status, one document record per file) |
-| `GET` | `/api/jobs?collection=` | job listing: job id, files, status, reason, counts per status |
+| `GET` | `/api/jobs?collection=&page=0&size=5` | paginated job listing (newest first): job id, files, status, reason, counts per status |
 | `GET` | `/api/jobs/{job_id}` | poll one job, including its documents |
-| `GET` | `/api/documents?collection=&job_id=&status=` | document listing: doc id, name, status, reason, duplicate link; filter by job |
+| `GET` | `/api/documents?collection=&job_id=&status=&page=0&size=5` | paginated document listing (newest first): doc id, name, status, reason, duplicate link; filter by job / status |
 | `GET` | `/api/documents/{doc_id}` | one document |
+| `GET` | `/api/documents/{doc_id}/file?download=` | the stored original file (inline for PDF/HTML/text/CSV/images, attachment otherwise) |
+| `GET` | `/api/documents/{doc_id}/pages` | page text of a `COMPLETED` document with the chunk ids per page (stored at ingest, or reconstructed from chunk offsets) — powers the viewer |
+| `POST` | `/api/documents/{doc_id}/retry` | re-process a non-`COMPLETED`, non-`DUPLICATE` document from its stored file → **202** (409 completed/duplicate/still running, 410 nothing stored) |
 | `DELETE` | `/api/documents/{doc_id}` | remove a finished document and its chunks |
-| `GET` | `/api/chunks?collection=&doc_id=&job_id=&limit=&offset=` | inspect the `document_chunks` store, filterable by document or job |
+| `GET` | `/api/chunks?collection=&doc_id=&job_id=&limit=&offset=` | inspect the `document_chunks` store, filterable by document or job; each chunk carries `page`, `chunk_index`, `char_start`, `char_end` |
 | `POST` | `/api/ask` | `{"question", "collection"?, "doc_ids"?, "job_ids"?, "top_k"?}` → `answer`, `citations`, `sources`, `scope`, `unresolved_citations` |
 | `DELETE` | `/api/collections/{name}` | reset a whole document set |
 
@@ -173,14 +212,25 @@ curl -X POST localhost:8000/api/ask -H 'content-type: application/json' \
 
 ## 4. What is supported
 
-- **Input formats:** `.pdf .docx .html .htm .txt .md .csv` plus `.png .jpg .jpeg .tiff .tif` (OCR).
-- **Two-tier extraction.** Primary extractors run first: PyMuPDF (PDF), python-docx (DOCX),
+- **Input formats:** `.pdf .docx .rtf .html .htm .txt .md .csv` plus `.png .jpg .jpeg .tiff .tif` (OCR).
+- **Content sniffing** (`SNIFF_CONTENT`): the first bytes decide the reader, not the extension. An RTF or PDF
+  mislabelled as `.docx` is read correctly and the COMPLETED reason notes it ("extension '.docx' but content is
+  RTF"). A legacy binary `.doc` (OLE2) is recognised and fails with the advice to save it as `.docx` or PDF.
+- **Two-tier extraction.** Primary extractors run first: PyMuPDF (PDF), python-docx (DOCX), striprtf (RTF),
   beautifulsoup4 + lxml (HTML), stdlib (TXT/MD/CSV). **Tesseract is the fallback**, used only when a
   primary extractor raises or yields no text: scanned/image-only PDFs are rendered page by page
   (PyMuPDF) and OCR'd; a DOCX with no body text has its embedded images OCR'd; HTML that lxml cannot
   parse falls back to stdlib tag-stripping; individual scanned pages inside a digital PDF (fewer than
   `OCR_MIN_CHARS_PER_PAGE` characters) are OCR'd in place. Image files go straight to OCR.
-  If neither tier yields text the job ends `FAILED` with the precise reason (e.g. Tesseract not installed).
+  If neither tier yields text the document ends `FAILED` with a precise reason that names what the primary
+  reader hit (e.g. `the docx reader failed (BadZipFile: File is not a zip file)`) and what the fallback said.
+- **Retry** (`POST /api/documents/{id}/retry`, the *retry* button on the home page, `/documents` and the show page,
+  `rag retry <doc_id>`) is offered for every document that is not `COMPLETED` or `DUPLICATE`:
+  `FAILED` and `EXTRACTION_NOT_SUPPORTED` re-check the stored file (extension + content sniffing) and re-queue it
+  (unsupported files are stored too, so adding a format later makes them retryable); `QUEUED`/`PROCESSING` only when
+  the record has not moved for `RETRY_STALE_SECONDS` (stuck worker), otherwise 409; `EMPTY_FILE`/`UPLOAD_FAILED`
+  have nothing stored and answer 410 asking for a new upload. A retried document replaces its old chunks.
+- **Unknown extensions with recognisable content** (e.g. a PDF named `.bin`) are processed as the sniffed type.
 - **Page metadata:** PDF = printed page · DOCX = one page per heading section · HTML = one page, `<title>` as section ·
   MD = one page per heading · TXT = one page · CSV = one page per `CSV_ROWS_PER_PAGE` rows (header repeated) · images = one page per frame.
 - **Multiple document sets** via collections (names: 3-63 chars of letters, digits, `. _ -`); reset or delete without restarting.
@@ -196,7 +246,7 @@ curl -X POST localhost:8000/api/ask -H 'content-type: application/json' \
 - Asking across several collections in one question (a scope must live in one collection).
 - Authentication, multi-tenancy, rate limiting — run behind your own gateway.
 - Horizontal scaling: BM25 lives in one process's memory; run a single replica.
-- Formats outside the list above (PPTX, XLSX, EPUB, audio…). Adding one is a small extractor — see Tuning.
+- Formats outside the list above (legacy binary `.doc`, PPTX, XLSX, EPUB, audio…). Adding one is a small extractor — see Tuning.
 - OCR of images embedded in HTML pages (only DOCX-embedded images and PDF pages are OCR'd).
 - OCR languages other than English unless you install extra Tesseract language packs and set `OCR_LANG`.
 - Real-time streaming of the answer (responses are returned whole).
@@ -213,6 +263,9 @@ curl -X POST localhost:8000/api/ask -H 'content-type: application/json' \
 
 Every chunk carries `job_id` as well as `doc_id`, so filtering retrieval (or `/api/chunks`) by an
 upload job needs no join. Names are settings (`JOBS_STORE`, `DOCUMENTS_STORE`, `CHUNKS_STORE`).
+Alongside them, `data/pages/<doc_id>.json` keeps each document's cleaned page text (the text the chunk
+offsets refer to) so the show-page viewer can highlight cited passages exactly; it is written at ingest
+and removed with the document.
 
 Full description with diagrams: [`documentation/architecture.md`](documentation/architecture.md)
 (browser version: [`architecture.html`](documentation/architecture.html)). In short:
@@ -237,8 +290,12 @@ Every tunable is a field on `Settings` with a default, overridable from `.env` (
 | `RRF_K` | 60 | RRF smoothing constant |
 | `EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | any fastembed model (clear `data/chroma` after changing) |
 | `OCR_ENABLED` / `OCR_MIN_CHARS_PER_PAGE` / `OCR_LANG` / `OCR_DPI` | true / 20 / eng / 200 | when and how the Tesseract fallback runs |
+| `TESSERACT_CMD` | auto | explicit path to the tesseract binary; empty = PATH, then `/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin` |
 | `LLM_TEMPERATURE` / `LLM_MAX_TOKENS` / `LLM_TIMEOUT_S` | 0.1 / 1024 / 60 | generation parameters |
 | `MAX_UPLOAD_MB` / `DEFAULT_COLLECTION` | 50 / `default` | upload limit, collection used when none is given |
+| `LIST_PAGE_SIZE` / `LIST_MAX_PAGE_SIZE` | 5 / 200 | default and maximum `size` for the job and document listings (`page` is 0-based) |
+| `LOG_LEVEL` / `SNIFF_CONTENT` | `INFO` / true | log verbosity (`DEBUG` adds per-batch detail); detect the real format from file bytes |
+| `RETRY_STALE_SECONDS` | 120 | a `QUEUED`/`PROCESSING` document older than this may be retried (stuck worker) |
 | `APP_PORT` / `APP_HOST` | 8000 / `0.0.0.0` | port the app listens on (`rag serve`) and the host port docker compose publishes (`${APP_PORT:-8000}`) |
 | `JUDGE_MODEL` / `EVAL_MIN_FAITHFULNESS` | `claude-opus-5` / 3.5 | evaluation |
 
@@ -276,7 +333,7 @@ python -m evaluation.run_eval --dataset evaluation/dataset.mydocs.jsonl
 | API | FastAPI + uvicorn, pydantic, pydantic-settings | async uploads, background tasks, validation, free OpenAPI docs, `.env` settings |
 | UI | one static `index.html`, vanilla JS | no build step; the brief asked for a single page |
 | CLI | typer + httpx | talks to the API so only one process opens Chroma |
-| Extraction (primary) | PyMuPDF, python-docx, beautifulsoup4 + lxml, stdlib csv/html.parser | one small library per format; PyMuPDF also renders pages for OCR |
+| Extraction (primary) | PyMuPDF, python-docx, striprtf, beautifulsoup4 + lxml, stdlib csv/html.parser | one small library per format; PyMuPDF also renders pages for OCR; magic-byte sniffing picks the reader |
 | OCR (fallback) | Tesseract via pytesseract + Pillow | runs only when the primary extractor fails or finds no text, and for images |
 | Chunking | custom sliding window | overlapping, boundary-aware, metadata-tagged as required |
 | Embeddings | fastembed `BAAI/bge-small-en-v1.5` (ONNX, CPU) | fast, no GPU, no API key |
@@ -308,11 +365,12 @@ pytest   # chunker, RRF, every extractor, OCR-unavailable path, async job flow, 
 ## 11. Repository layout
 
 ```
-app/            FastAPI service (config, models, ingest/, retrieval/, llm/, rag.py, jobs.py [jobs + documents registry], main.py, static/index.html)
+app/            FastAPI service (config, models, ingest/, retrieval/, llm/, rag.py, jobs.py [jobs + documents registry], logging_utils.py, main.py,
+                static/ index.html (workbench) · jobs.html · documents.html · document.html (show page))
 cli/            `rag` CLI
 evaluation/     Claude-as-judge runner, dataset generator, example dataset, reports/
-documentation/  architecture.md(.html), flow.html (interactive), changelog.html, readme.html
-samples/        demo corpus     scripts/  make_samples.py, mock_llm.py, build_docs.py, sync_rules.py
+documentation/  architecture.md(.html), enhancements.md(.html), flow.html (interactive), demo.gif (recorded walkthrough), changelog.html, readme.html
+samples/        demo corpus     scripts/  make_samples.py, mock_llm.py, build_docs.py, sync_rules.py, export_transcript.py, make_demo_gif.py
 tests/          pytest suite    transcripts/  agent session exports    plans/  the approved implementation plan + change log
 CLAUDE.md       rules for AI agents (source of truth) → synced to .cursor/rules/project.mdc and AGENTS.md
 memory.md       project memory: decisions, gotchas, conventions

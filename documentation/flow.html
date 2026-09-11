@@ -33,7 +33,9 @@
 <h1>How RAG Generator works</h1>
 <div class="sub">Step through what happens after you upload a file, and what happens when you ask a question. Click any step, or press <b>Play</b>.</div>
 
-<div class="tabs"><button class="on" data-tab="ingest">1 · After upload (async job)</button><button data-tab="ask">2 · Asking a question</button><button data-tab="statuses">3 · Status vocabulary</button></div>
+<div class="tabs"><button class="on" data-tab="ingest">1 · After upload (async job)</button><button data-tab="ask">2 · Asking a question</button><button data-tab="pages">3 · Pages: home, jobs, documents</button><button data-tab="show">4 · Show page: chat + highlighting</button><button data-tab="statuses">5 · Status vocabulary</button></div>
+
+<div class="controls" style="margin:-6px 0 14px"><span class="muted">Prefer watching? <a href="/documentation/demo.gif" target="_blank">Animated demo (GIF)</a> walks through every step below on the real UI.</span></div>
 
 <!-- ============================== INGEST ============================== -->
 <section class="panel on" id="ingest">
@@ -56,22 +58,54 @@
   </div>
 </section>
 
+<!-- ============================== PAGES ============================== -->
+<section class="panel" id="pages">
+  <div class="controls"><button onclick="play('pages')">▶ Play</button><button class="sec" onclick="step('pages',-1)">‹ Back</button><button class="sec" onclick="step('pages',1)">Next ›</button><button class="sec" onclick="reset('pages')">Reset</button><span class="muted" id="pages-pos"></span></div>
+  <div class="track" id="pages-track"></div>
+  <div class="detail" id="pages-detail"></div>
+  <div class="try">
+    <h3 style="margin:0 0 4px">Where things live</h3>
+    <table>
+      <tr><th>URL</th><th>What you see</th><th>Page size</th><th>Backed by</th></tr>
+      <tr><td><code>/</code></td><td>Workbench: upload · jobs · documents · ask · sources</td><td>5 (jobs, documents)</td><td><code>/api/jobs</code>, <code>/api/documents</code>, <code>/api/ask</code></td></tr>
+      <tr><td><code>/jobs</code></td><td>JOB ID · Collection · Documents · Pages · Chunks · Status · Per status · Reason · Created</td><td>20</td><td><code>/api/jobs?page=&amp;size=&amp;collection=</code></td></tr>
+      <tr><td><code>/documents</code></td><td>DOC ID · Name · Type · Job · Pages · Chunks · Status · Reason · Updated; filters: collection, status, job</td><td>20</td><td><code>/api/documents?page=&amp;size=&amp;job_id=&amp;status=</code></td></tr>
+      <tr><td><code>/documents/{doc_id}</code></td><td>Show page: 55% viewer (Text view · Original file · Details) + 45% chat scoped to this document</td><td>–</td><td><code>/api/documents/{id}</code>, <code>/pages</code>, <code>/file</code>, <code>/api/chunks?doc_id=</code>, <code>/api/ask</code> with <code>doc_ids</code></td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ============================== SHOW PAGE ============================== -->
+<section class="panel" id="show">
+  <div class="controls"><button onclick="play('show')">▶ Play</button><button class="sec" onclick="step('show',-1)">‹ Back</button><button class="sec" onclick="step('show',1)">Next ›</button><button class="sec" onclick="reset('show')">Reset</button><span class="muted" id="show-pos"></span></div>
+  <div class="track" id="show-track"></div>
+  <div class="detail" id="show-detail"></div>
+  <div class="try">
+    <h3 style="margin:0 0 4px">Try the citation → highlight mechanics</h3>
+    <div class="muted" style="font-size:12px">This is the same logic the show page uses: the answer's chunk markers become page chips; clicking a chip highlights the cited passage in the page text. Click a chip.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
+      <div style="border:1px solid var(--line);border-radius:8px;padding:10px;font:13px/1.6 Georgia,serif;white-space:pre-wrap" id="demo-page"></div>
+      <div style="border:1px solid var(--line);border-radius:8px;padding:10px;font-size:13px;background:#fff" id="demo-chat"></div>
+    </div>
+  </div>
+</section>
+
 <!-- ============================== STATUSES ============================== -->
 <section class="panel" id="statuses">
   <table>
-    <thead><tr><th>Status</th><th>Meaning</th><th>Processed?</th><th>Reason column shows</th></tr></thead>
+    <thead><tr><th>Status</th><th>Meaning</th><th>Processed?</th><th>Reason column shows</th><th>Retry?</th></tr></thead>
     <tbody>
-      <tr><td><span class="pill">QUEUED</span></td><td>Accepted and stored; waiting for the background worker.</td><td>soon</td><td>"Waiting for the background worker"</td></tr>
-      <tr><td><span class="pill warn">DUPLICATE</span></td><td>A file with the same SHA-256 already exists (QUEUED/PROCESSING/COMPLETED) in this collection.</td><td><b>no</b></td><td>Name and id of the original, with a link in the listing</td></tr>
-      <tr><td><span class="pill info">PROCESSING</span></td><td>Worker is running; <code>stage</code> is extracting → chunking → embedding.</td><td>in progress</td><td>Current stage with counts</td></tr>
-      <tr><td><span class="pill ok">COMPLETED</span></td><td>Chunks are in ChromaDB and BM25; the file is searchable.</td><td>yes</td><td>"Indexed N pages (k via OCR) into M chunks"</td></tr>
-      <tr><td><span class="pill bad">FAILED</span></td><td>Processing raised an error (corrupt file, no extractable text, embedding error…).</td><td>no</td><td>"PROCESSING FAILED: &lt;exception&gt;"</td></tr>
-      <tr><td><span class="pill bad">EMPTY_FILE</span></td><td>The upload was 0 bytes.</td><td>no</td><td>"The uploaded file is 0 bytes"</td></tr>
-      <tr><td><span class="pill bad">EXTRACTION_NOT_SUPPORTED</span></td><td>Extension is not in <code>SUPPORTED_EXTENSIONS</code>.</td><td>no</td><td>The extension and the supported list</td></tr>
-      <tr><td><span class="pill bad">UPLOAD_FAILED</span></td><td>Could not read the upload stream, file exceeds <code>MAX_UPLOAD_MB</code>, or could not write to disk.</td><td>no</td><td>"UPLOAD FAILED: &lt;cause&gt;"</td></tr>
+      <tr><td><span class="pill">QUEUED</span></td><td>Accepted and stored; waiting for the background worker.</td><td>soon</td><td>"Waiting for the background worker"</td><td>only if stalled for RETRY_STALE_SECONDS (stuck worker) → re-queued</td></tr>
+      <tr><td><span class="pill warn">DUPLICATE</span></td><td>A file with the same SHA-256 already exists (QUEUED/PROCESSING/COMPLETED) in this collection.</td><td><b>no</b></td><td>Name and id of the original, with a link in the listing</td><td>no — use the original document</td></tr>
+      <tr><td><span class="pill info">PROCESSING</span></td><td>Worker is running; <code>stage</code> is extracting → chunking → embedding.</td><td>in progress</td><td>Current stage with counts</td><td>only if stalled for RETRY_STALE_SECONDS → re-queued</td></tr>
+      <tr><td><span class="pill ok">COMPLETED</span></td><td>Chunks are in ChromaDB and BM25; the file is searchable.</td><td>yes</td><td>"Indexed N pages (k via OCR) into M chunks"</td><td>no — already indexed</td></tr>
+      <tr><td><span class="pill bad">FAILED</span></td><td>Processing raised an error (corrupt file, no extractable text, embedding error…).</td><td>no</td><td>"PROCESSING FAILED: &lt;exception&gt;"</td><td><b>yes</b> — stored file is processed again with the current extractors</td></tr>
+      <tr><td><span class="pill bad">EMPTY_FILE</span></td><td>The upload was 0 bytes.</td><td>no</td><td>"The uploaded file is 0 bytes"</td><td>no file stored → asks you to upload again (410)</td></tr>
+      <tr><td><span class="pill bad">EXTRACTION_NOT_SUPPORTED</span></td><td>Extension is not in <code>SUPPORTED_EXTENSIONS</code>.</td><td>no</td><td>The extension and the supported list</td><td><b>yes</b> — stored file is re-checked (extension + content sniffing); processed if now recognised</td></tr>
+      <tr><td><span class="pill bad">UPLOAD_FAILED</span></td><td>Could not read the upload stream, file exceeds <code>MAX_UPLOAD_MB</code>, or could not write to disk.</td><td>no</td><td>"UPLOAD FAILED: &lt;cause&gt;"</td><td>no file stored → asks you to upload again (410)</td></tr>
     </tbody>
   </table>
-  <p class="muted" style="font-size:12px">Terminal statuses (no further change): everything except QUEUED and PROCESSING. Poll <code>GET /api/jobs/{job_id}</code> until the status is terminal.</p>
+  <p class="muted" style="font-size:12px">Terminal statuses (no further change): everything except QUEUED and PROCESSING. Poll <code>GET /api/jobs/{job_id}</code> until the status is terminal. <b>Retry</b> (<code>POST /api/documents/{id}/retry</code>, the <i>retry</i> button on the home page, /documents and the show page, or <code>rag retry</code>) is offered for every document that is not COMPLETED or DUPLICATE; the server applies the rules in the last column.</p>
 </section>
 
 <script>
@@ -79,19 +113,19 @@ const FLOWS = {
   ingest: [
     {t:'POST /api/documents', d:'Client sends one or more files (multipart) with an optional collection name. The whole request becomes ONE job; every file becomes a document of that job. The API responds 202 immediately with the job — nothing waits for indexing.',
      code:`curl -F "files=@handbook.md" -F "files=@warranty.pdf" -F collection=demo localhost:8000/api/documents\n→ 202 {"job_id":"7f3a…","status":"QUEUED","files":2,"reason":"2 queued",\n        "documents":[{"doc_id":"a1…","status":"QUEUED"},{"doc_id":"b2…","status":"QUEUED"}]}`},
-    {t:'Validate & hash', d:'Per file: read bytes → check extension against SUPPORTED_EXTENSIONS → reject empty or oversize → compute SHA-256 → look for a live document with the same hash in this collection.',
-     branches:[['EXTRACTION_NOT_SUPPORTED','bad','extension not supported'],['EMPTY_FILE','bad','0 bytes'],['UPLOAD_FAILED','bad','oversize / unreadable / disk error'],['DUPLICATE','warn','same hash already live → links to original, stops here']]},
+    {t:'Validate, store, hash, dedupe', d:'Per file, in order: read bytes and compute the SHA-256 (kept on the record) → check the extension against SUPPORTED_EXTENSIONS → reject empty or oversize → UPLOAD STEP: store the file under data/uploads → DUPLICATE CHECK: look for a live document with the same hash in this collection. Only then is the file queued.',
+     branches:[['EXTRACTION_NOT_SUPPORTED','bad','extension not supported'],['EMPTY_FILE','bad','0 bytes'],['UPLOAD_FAILED','bad','oversize / unreadable / disk error while storing'],['DUPLICATE','warn','after the upload step: same hash already live → links to original, not processed']]},
     {t:'QUEUED', d:'File stored at data/uploads/<doc_id>_<name>. The document record is written to data/documents.json, the job (data/jobs.json) lists it, and a background task is scheduled. The job status is derived from its documents whenever it is read.',
-     code:`GET /api/jobs/7f3a…            → {"status":"QUEUED", "counts":{"QUEUED":2}, "documents":[…]}\nGET /api/documents?job_id=7f3a… → the two documents of this job`},
-    {t:'PROCESSING · extracting', d:'Two tiers. The PRIMARY extractor for the format runs first: PyMuPDF (PDF), python-docx (DOCX), BeautifulSoup + lxml (HTML), stdlib (TXT/MD/CSV). Each page keeps its page number and section. Only if the primary raises or finds no text does the FALLBACK run: Tesseract OCR over PyMuPDF-rendered PDF pages, OCR over images embedded in a DOCX, stdlib tag-stripping for HTML. Inside a digital PDF, single scanned pages (fewer than OCR_MIN_CHARS_PER_PAGE characters) are OCR\'d in place. Image uploads go straight to Tesseract.',
+     code:`GET /api/jobs/7f3a…            → {"status":"QUEUED", "counts":{"QUEUED":2}, "documents":[…]}\nGET /api/documents?job_id=7f3a…&page=0&size=5 → the two documents of this job (paginated: page 0, size 5)`},
+    {t:'PROCESSING · extracting', d:'First the real format is sniffed from the file bytes (an RTF saved as .docx is read as RTF; a legacy binary .doc fails with advice to convert). Then two tiers. The PRIMARY extractor for the format runs first: PyMuPDF (PDF), python-docx (DOCX), striprtf (RTF), BeautifulSoup + lxml (HTML), stdlib (TXT/MD/CSV). Each page keeps its page number and section. Only if the primary raises or finds no text does the FALLBACK run: Tesseract OCR over PyMuPDF-rendered PDF pages, OCR over images embedded in a DOCX, stdlib tag-stripping for HTML. Inside a digital PDF, single scanned pages (fewer than OCR_MIN_CHARS_PER_PAGE characters) are OCR\'d in place. Image uploads go straight to Tesseract.',
      code:`pages = [Page(text, page_no=3, section="Leave policy", extraction="text"), …]   # or extraction="ocr" from the fallback`,
-     branches:[['primary','ok','PyMuPDF · python-docx · bs4 · stdlib — used whenever the file has a text layer'],['fallback','warn','Tesseract OCR (PDF pages, DOCX images) · stdlib HTML parser — only when the primary fails or yields nothing'],['FAILED','bad','neither tier produced text → precise reason (e.g. "Tesseract OCR is not installed")']]},
+     branches:[['primary','ok','PyMuPDF · python-docx · bs4 · stdlib — used whenever the file has a text layer'],['fallback','warn','Tesseract OCR (PDF pages, DOCX images) · stdlib HTML parser — only when the primary fails or yields nothing'],['FAILED','bad','neither tier produced text → precise reason naming the reader error and the fallback outcome; fix and use retry']]},
     {t:'PROCESSING · chunking', d:'Each page is split into overlapping windows (CHUNK_SIZE_CHARS=1200, CHUNK_OVERLAP_CHARS=200), cutting at paragraph/sentence/word boundaries. Every chunk is tagged with doc_id, source, page, section, extraction, chunk_index, char offsets.',
      code:`chunk_id "7f3a…:4"  metadata {source:"handbook.md", page:3, section:"Leave policy", chunk_index:4, char_start:812, …}`},
     {t:'PROCESSING · embedding', d:'fastembed (BAAI/bge-small-en-v1.5, 384-d, ONNX on CPU) embeds every chunk in batches. Vectors, text and metadata are written to the ChromaDB collection; then the BM25 index for the collection is rebuilt from Chroma.',
      code:`vector_store.add_chunks(collection, ids, texts, embeddings, metadatas)\nbm25_index.rebuild(collection)`},
     {t:'COMPLETED', d:'The document becomes COMPLETED with a reason like "Indexed 5 pages into 14 chunks". Any exception on the way → FAILED with "PROCESSING FAILED: …". The job rolls these up: PROCESSING while any file runs, then COMPLETED (at least one file indexed or duplicate; "partially completed" if some failed) or FAILED (nothing indexed). Both listings reflect it.',
-     branches:[['document COMPLETED','ok','searchable now'],['document FAILED','bad','PROCESSING FAILED: <exception>'],['job COMPLETED','ok','all files terminal, ≥1 indexed/duplicate'],['job FAILED','bad','all files terminal, none indexed']]},
+     branches:[['document COMPLETED','ok','searchable now'],['document FAILED','bad','PROCESSING FAILED: <exception> → retry button re-processes the stored file'],['job COMPLETED','ok','all files terminal, ≥1 indexed/duplicate'],['job FAILED','bad','all files terminal, none indexed']]},
   ],
   ask: [
     {t:'POST /api/ask', d:'{"question": "...", "collection": "demo"} searches the whole collection. Add "doc_ids": [...] and/or "job_ids": [...] to search only those documents (a job expands to its COMPLETED documents; a duplicate id resolves to its original). Synchronous: the answer comes back in the response.',
@@ -110,8 +144,44 @@ const FLOWS = {
     {t:'Answer + citations + sources', d:'The response carries the answer text with [n] markers, the citations (file, page, section, doc id, chunk text) those markers point to, every retrieved chunk (source file, page, section, dense/BM25 ranks, RRF score, text) and the scope that was searched. The UI shows the citations list under the answer and links each marker to its source card.',
      code:`{"answer":"Employees accrue 24 days … [1]",\n "citations":[{"n":1,"source":"handbook.md","page":3,"doc_id":"a1…",…}],\n "sources":[{"n":1,…},{"n":2,…}],\n "unresolved_citations":[],\n "scope":{"collection":"demo","doc_ids":["a1…"],"job_ids":["7f3a…"],"restricted":true}}`},
   ],
+  pages: [
+    {t:'Home / workbench', d:'The landing page at / does everything in one screen: upload files as a job, watch the Jobs and Documents panels (5 per page each, auto-refreshing while anything is QUEUED or PROCESSING), tick jobs or documents to narrow the ask scope, ask, and inspect the sources. Header links lead to the full listings and the docs.',
+     code:`/                       # panels 1-5
+Jobs panel:      Job ID · Documents · Pages · Status · Reason   (click row → filter documents; tick → ask scope)
+Documents panel: Doc ID · Name · Pages · Status · Reason        (doc id → show page; tick → ask scope; retry / ✕)`},
+    {t:'Upload → job id', d:'Dropping files and clicking "Upload as one job" posts them to /api/documents. The response is the job: its id, derived status and one document record per file, so the UI can show the job immediately and start polling.',
+     code:`Job 7f3a… accepted with 3 file(s) — status QUEUED. Poll /api/jobs/7f3a…`},
+    {t:'/jobs — job listing', d:'A dedicated, URL-addressable listing of every upload request, 20 per page: JOB ID, collection, DOCUMENTS (total in the job, plus how many are indexed), PAGES and CHUNKS summed over the job\'s COMPLETED documents, STATUS, per-status counts and REASON. Filter by collection. Clicking a job opens /documents?job_id=… .',
+     code:`GET /api/jobs?page=0&size=20&collection=default
+→ {items:[{job_id, total_documents:3, total_pages:11, total_chunks:14, status:"COMPLETED", counts:{COMPLETED:2, DUPLICATE:1}, reason:"…"}], page:0, size:20, total:7, pages:1, …}`},
+    {t:'/documents — document listing', d:'Every uploaded file, 20 per page: DOC ID, NAME, type, JOB (link), PAGES (as soon as extraction ran; – before), CHUNKS, STATUS, REASON (duplicates link to their original), updated time. Filters for collection, status and job are kept in the URL (?job_id=&status=&page=) so a filtered view can be shared. Every non-COMPLETED, non-DUPLICATE row has a retry button. Clicking a row opens the show page.',
+     code:`GET /api/documents?page=0&size=20&job_id=7f3a…&status=COMPLETED`},
+    {t:'Job → its documents', d:'From either listing, a job leads to the document listing filtered to that job (a chip shows the active filter with × to clear). This is how "what happened to my upload?" is answered: one job, all its files, each with a status and a reason.',
+     branches:[['COMPLETED','ok','indexed; pages and chunks shown; show page + chat available'],['DUPLICATE','warn','not processed; → original document link'],['FAILED','bad','reason names the cause; retry re-processes the stored file'],['EXTRACTION_NOT_SUPPORTED','bad','file stored anyway; retry re-checks it once a format is added'],['EMPTY_FILE / UPLOAD_FAILED','bad','nothing stored; retry asks you to upload again']]},
+    {t:'Document → show page', d:'Clicking a document (row on /documents, or its id on the home page) opens /documents/{doc_id}: the viewer + chat page described in the next tab. For non-COMPLETED documents the page explains why a viewer is not applicable, links to the original for duplicates, and offers Retry for failures.',
+     code:`/documents/a1b2c3d4e5f6`},
+  ],
+  show: [
+    {t:'Open /documents/{doc_id}', d:'The show page loads the document record, its page text (/api/documents/{id}/pages) and its chunks (/api/chunks?doc_id=). Layout: left 55% = viewer with tabs Text view (default), Original file (inline PDF/HTML/text/CSV/images, download for DOCX/RTF) and Details; right 45% = chat.',
+     code:`GET /api/documents/{id}          → status, reason, pages, chunks, sha256, job
+GET /api/documents/{id}/pages    → [{page, section, extraction, text, chunk_ids}]  (stored at ingest)
+GET /api/chunks?doc_id={id}      → chunk text + page + char_start/char_end`},
+    {t:'Text view = what retrieval sees', d:'The viewer renders each indexed page as a card (page number, section, OCR badge, chunk count) with the normalised page text — exactly the text the chunk offsets were measured against. That is what makes precise highlighting possible.',
+     code:`Page 2 · Coverage periods · 3 chunk(s)
+Desktop and collaborative arms: 2 years. Industrial arms (Titan series): 3 years. …`},
+    {t:'Ask this document only', d:'Typing a question in the chat posts /api/ask with doc_ids=[this document], so both retrievers are restricted to it. The conversation is shown as bubbles; a typing indicator shows while the LLM answers. Enter sends, Shift+Enter adds a line.',
+     code:`POST /api/ask {"question":"How long is the Titan warranty?","doc_ids":["a1b2…"]}
+→ scope {restricted:true, doc_ids:["a1b2…"]}`},
+    {t:'Answer with page-number citations', d:'The API returns [n] chunk markers plus the citations they resolve to. The chat rewrites every marker into a blue chip whose number is the PAGE of that chunk; several cited chunks on one page collapse into one chip. Under the answer, each cited page is listed with an excerpt and a passage count. Markers that match no source are dropped and reported.',
+     code:`"Industrial arms (Titan series): 3 years [1][3]."   →   "Industrial arms (Titan series): 3 years [2]"   (chunks 1 and 3 are both on page 2)
+Citations:  [2]  "Coverage periods — Desktop and collaborative arms: 2 years. Industrial arms…"  2 passages`},
+    {t:'Click a chip → jump + highlight', d:'Clicking a page chip switches to Text view, scrolls the viewer so the cited passage is in view, outlines the page card, and wraps every cited chunk on that page in a light-blue <mark> (the clicked page\'s passages darker). The passage is located by searching the chunk text in the page text, falling back to the stored char offsets. The first citation is focused automatically when the answer arrives.',
+     branches:[['light blue','ok','cited passages on other pages'],['darker blue','ok','passages on the page you clicked'],['outlined card','ok','the target page'],['auto-focus','ok','first cited page after each answer']]},
+    {t:'Not applicable states', d:'If the document is not COMPLETED the chat is disabled and a banner explains why: QUEUED/PROCESSING refresh automatically; FAILED shows the reason and a Retry button; DUPLICATE shows the original document\'s show-page URL to ask there instead; EMPTY_FILE / EXTRACTION_NOT_SUPPORTED / UPLOAD_FAILED explain that nothing was ever processed.',
+     branches:[['QUEUED / PROCESSING','warn','auto-refresh; retry only if stalled'],['FAILED / EXTRACTION_NOT_SUPPORTED','bad','reason + Retry (re-processes the stored file)'],['DUPLICATE','warn','→ /documents/<original id>'],['EMPTY_FILE / UPLOAD_FAILED','bad','nothing stored; retry asks to upload again']]},
+  ],
 };
-const pos = {ingest:-1, ask:-1}; const timers = {};
+const pos = {ingest:-1, ask:-1, pages:-1, show:-1}; const timers = {};
 
 function render(name){
   const flow = FLOWS[name], track = document.getElementById(name+'-track');
@@ -138,6 +208,25 @@ function rrf(){
   document.getElementById('rrf-table').innerHTML=`<tr><th>#</th><th>chunk</th><th>dense rank</th><th>bm25 rank</th><th>RRF score</th><th></th></tr>`+rows.map(([id,s],i)=>`<tr><td>${i+1}</td><td><b>${esc(id)}</b></td><td>${ranks[id].dense??'–'}</td><td>${ranks[id].bm25??'–'}</td><td>${s.toFixed(5)}</td><td style="width:30%"><div class="bar"><i style="width:${(s/max*100).toFixed(0)}%"></i></div></td></tr>`).join('');
 }
 document.getElementById('rrf-dense').oninput=rrf; document.getElementById('rrf-bm25').oninput=rrf; rrf();
-render('ingest'); render('ask');
+render('ingest'); render('ask'); render('pages'); render('show');
+
+// ---- mini demo of chip → highlight
+const DEMO_PAGE = `Coverage periods
+
+Desktop and collaborative arms: 2 years. Industrial arms (Titan series): 3 years. Mobile bases: 2 years. Accessories and end effectors: 1 year. Extended coverage of up to 5 years can be purchased within 90 days of delivery.
+
+Exclusions
+
+The warranty does not cover damage caused by operation outside the rated payload, unauthorised firmware, liquid ingress, or use in explosive atmospheres.`;
+const DEMO_CHUNKS = {1:'Desktop and collaborative arms: 2 years. Industrial arms (Titan series): 3 years. Mobile bases: 2 years.', 3:'Extended coverage of up to 5 years can be purchased within 90 days of delivery.', 4:'The warranty does not cover damage caused by operation outside the rated payload, unauthorised firmware, liquid ingress, or use in explosive atmospheres.'};
+function demoHighlight(chunkIds){
+  let html = esc(DEMO_PAGE);
+  chunkIds.forEach(id => { const t = esc(DEMO_CHUNKS[id]); html = html.replace(t, `<mark style="background:#bfdbfe;border-radius:3px">${t}</mark>`); });
+  document.getElementById('demo-page').innerHTML = html;
+}
+document.getElementById('demo-chat').innerHTML = `<div style="background:#2563eb;color:#fff;border-radius:12px;padding:8px 12px;margin-bottom:8px;display:inline-block">How long is the Titan warranty and what is excluded?</div>
+<div style="border:1px solid var(--line);border-radius:12px;padding:10px 12px">Industrial arms (Titan series) are covered for 3 years <cite class="pill" style="cursor:pointer" onclick="demoHighlight([1,3])">2</cite>. Damage from operating outside the rated payload, unauthorised firmware or liquid ingress is excluded <cite class="pill" style="cursor:pointer" onclick="demoHighlight([4])">2</cite>.
+<div class="muted" style="margin-top:8px">Both chips say <b>2</b> because both passages are on page 2 — one chip per page, not per chunk. Click them to see which passage each one highlights.</div></div>`;
+demoHighlight([]);
 </script>
 </main></body></html>

@@ -11,7 +11,7 @@
   header { padding:14px 28px; background:var(--card); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
   header h1 { margin:0; font-size:18px; }
   header .meta { color:var(--muted); font-size:12px; } header a { color:var(--accent); text-decoration:none; }
-  main { display:grid; grid-template-columns:minmax(320px,440px) 1fr; gap:20px; padding:20px 28px; max-width:1500px; margin:0 auto; }
+  main { display:grid; grid-template-columns:minmax(380px,600px) 1fr; gap:20px; padding:20px 28px; max-width:1600px; margin:0 auto; }
   @media (max-width:980px) { main { grid-template-columns:1fr; } }
   .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:20px; }
   .card h2 { margin:0 0 12px; font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
@@ -25,6 +25,8 @@
   .drop { border:2px dashed var(--line); border-radius:8px; padding:18px; text-align:center; color:var(--muted); cursor:pointer; }
   .drop.over { border-color:var(--accent); background:#eff6ff; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
+  #jobs td:nth-child(6), #docs td:nth-child(6) { min-width:170px; }
+  #jobs td:nth-child(2), #docs td:nth-child(2) { white-space:nowrap; }
   th, td { text-align:left; padding:6px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
   th { color:var(--muted); font-weight:600; font-size:12px; }
   tr.clickable { cursor:pointer; } tr.clickable:hover { background:#f8fafc; } tr.active { background:#eff6ff; }
@@ -49,13 +51,14 @@
   .chip button { background:none; color:var(--accent); padding:0; font-size:14px; line-height:1; }
   .scope { background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:12px; margin-bottom:8px; }
   .scroll { max-height:320px; overflow:auto; }
+  .pager { display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-top:8px; font-size:12px; color:var(--muted); }
 </style>
 </head>
 <body>
 <header>
   <h1>RAG Generator</h1>
   <span class="meta" id="meta">connecting…</span>
-  <span class="meta" style="margin-left:auto"><a href="/documentation/flow.html" target="_blank">How it works</a> · <a href="/documentation/architecture.html" target="_blank">Architecture</a> · <a href="/documentation/changelog.html" target="_blank">Changelog</a> · <a href="/docs" target="_blank">API docs</a></span>
+  <span class="meta" style="margin-left:auto"><a href="/jobs">All jobs</a> · <a href="/documents">All documents</a> · <a href="/documentation/flow.html" target="_blank">How it works</a> · <a href="/documentation/architecture.html" target="_blank">Architecture</a> · <a href="/documentation/changelog.html" target="_blank">Changelog</a> · <a href="/docs" target="_blank">API docs</a></span>
 </header>
 <main>
   <section>
@@ -75,20 +78,22 @@
     </div>
 
     <div class="card">
-      <h2>2 · Jobs <span class="hint">(one upload request = one job · click a row to see its documents · tick to ask over it)</span></h2>
+      <h2>2 · Jobs <span class="hint">(one upload request = one job · click a row to see its documents · tick to ask over it · <a href="/jobs">full list</a>)</span></h2>
       <div class="scroll"><table>
-        <thead><tr><th></th><th>Job ID</th><th>Files</th><th>Status</th><th>Reason</th></tr></thead>
+        <thead><tr><th></th><th>Job ID</th><th>Documents</th><th>Pages</th><th>Status</th><th>Reason</th></tr></thead>
         <tbody id="jobs"><tr><td colspan="5" class="muted">No jobs yet.</td></tr></tbody>
       </table></div>
+      <div class="pager" id="jobsPager"></div>
     </div>
 
     <div class="card">
-      <h2>3 · Documents <span class="hint">(tick COMPLETED documents to ask over them · poll <code>/api/jobs/{id}</code>)</span>
+      <h2>3 · Documents <span class="hint">(tick COMPLETED documents to ask over them · click an id for its show page · <a href="/documents">full list</a>)</span>
         <span id="jobFilter"></span></h2>
       <div class="scroll"><table>
-        <thead><tr><th></th><th>Doc ID</th><th>Name</th><th>Status</th><th>Reason</th><th></th></tr></thead>
+        <thead><tr><th></th><th>Doc ID</th><th>Name</th><th>Pages</th><th>Status</th><th>Reason</th><th></th></tr></thead>
         <tbody id="docs"><tr><td colspan="6" class="muted">No documents yet.</td></tr></tbody>
       </table></div>
+      <div class="pager" id="docsPager"></div>
     </div>
   </section>
 
@@ -121,6 +126,8 @@ const BAD = ['FAILED','UPLOAD_FAILED','EXTRACTION_NOT_SUPPORTED','EMPTY_FILE'];
 let pending = [], pollTimer = null, activeJob = null;
 const selDocs = new Set(), selJobs = new Set();
 let docsCache = [], jobsCache = [];
+const PAGE_SIZE = 5;                      // listing page size (API default LIST_PAGE_SIZE)
+const paging = { jobs: {page: 0, meta: null}, docs: {page: 0, meta: null} };
 
 async function api(path, opts = {}) {
   const r = await fetch(path, opts);
@@ -173,6 +180,20 @@ $('resetBtn').onclick = async () => {
   catch (e) { $('uploadErr').textContent = e.message; }
 };
 
+function retryTitle(d) {
+  return {FAILED: 'Process the stored file again with the current extractors',
+          EXTRACTION_NOT_SUPPORTED: 'Re-check the stored file (extension and content) and process it if it is now supported',
+          QUEUED: 'Re-queue if the worker has not made progress for a while',
+          PROCESSING: 'Re-queue if the worker has not made progress for a while',
+          EMPTY_FILE: 'Nothing was stored for an empty file — the retry will ask you to upload again',
+          UPLOAD_FAILED: 'Nothing was stored — the retry will ask you to upload again'}[d.status] || 'Retry';
+}
+async function retryDoc(id) {
+  $('uploadErr').textContent = '';
+  try { const d = await api(`/api/documents/${id}/retry`, { method: 'POST' }); await refresh(); if (d.status !== 'QUEUED') $('uploadErr').textContent = `${d.filename}: ${d.reason}`; }
+  catch (e) { $('uploadErr').textContent = `Retry not possible: ${e.message}`; }
+}
+
 async function deleteDoc(id) {
   try { await api(`/api/documents/${id}`, { method: 'DELETE' }); selDocs.delete(id); await refresh(); }
   catch (e) { $('uploadErr').textContent = e.message; }
@@ -181,10 +202,14 @@ async function deleteDoc(id) {
 /* ---------------- jobs + documents ---------------- */
 async function refresh() {
   try {
-    [jobsCache, docsCache] = await Promise.all([
-      api(`/api/jobs?collection=${encodeURIComponent(col())}`),
-      api(`/api/documents?collection=${encodeURIComponent(col())}${activeJob ? `&job_id=${activeJob}` : ''}`),
+    let [j, d] = await Promise.all([
+      api(`/api/jobs?collection=${encodeURIComponent(col())}&page=${paging.jobs.page}&size=${PAGE_SIZE}`),
+      api(`/api/documents?collection=${encodeURIComponent(col())}${activeJob ? `&job_id=${activeJob}` : ''}&page=${paging.docs.page}&size=${PAGE_SIZE}`),
     ]);
+    // if a page emptied out (deletes), step back and reload
+    if (!j.items.length && j.page > 0) { paging.jobs.page = Math.max(0, j.pages - 1); return refresh(); }
+    if (!d.items.length && d.page > 0) { paging.docs.page = Math.max(0, d.pages - 1); return refresh(); }
+    jobsCache = j.items; docsCache = d.items; paging.jobs.meta = j; paging.docs.meta = d;
   } catch (e) { return; }
   renderJobs(); renderDocs(); renderScope();
   const busy = jobsCache.some(j => !['COMPLETED', 'FAILED'].includes(j.status));
@@ -194,37 +219,50 @@ async function refresh() {
 
 function renderJobs() {
   const tb = $('jobs');
-  if (!jobsCache.length) { tb.innerHTML = '<tr><td colspan="5" class="muted">No jobs in this collection.</td></tr>'; return; }
+  renderPager('jobs', 'jobsPager');
+  if (!jobsCache.length) { tb.innerHTML = '<tr><td colspan="6" class="muted">No jobs in this collection.</td></tr>'; return; }
   tb.innerHTML = jobsCache.map(j => `
     <tr class="clickable ${j.job_id === activeJob ? 'active' : ''}" onclick="filterJob('${j.job_id}')">
       <td><input type="checkbox" ${selJobs.has(j.job_id) ? 'checked' : ''} ${j.counts.COMPLETED ? '' : 'disabled title="no COMPLETED document yet"'} onclick="event.stopPropagation(); toggleJob('${j.job_id}', this.checked)"></td>
       <td><code class="id">${esc(j.job_id)}</code></td>
-      <td>${j.files}</td>
+      <td title="documents in this job (${esc(Object.entries(j.counts).map(([k, v]) => v + ' ' + k.toLowerCase()).join(', '))})">${j.total_documents}${j.counts.COMPLETED && j.counts.COMPLETED !== j.total_documents ? ` <span class="muted">(${j.counts.COMPLETED} indexed)</span>` : ''}</td>
+      <td>${j.total_pages || (j.counts.COMPLETED ? 0 : '–')}</td>
       <td><span class="pill ${j.status}">${j.status}</span></td>
       <td class="muted" style="font-size:12px">${esc(j.reason)}</td>
     </tr>`).join('');
 }
 
-function filterJob(id) { activeJob = activeJob === id ? null : id; refresh(); }
+function renderPager(kind, elId) {
+  const m = paging[kind].meta;
+  const el = $(elId);
+  if (!m || m.total === 0) { el.innerHTML = ''; return; }
+  el.innerHTML = `<button class="small secondary" ${m.has_prev ? '' : 'disabled'} onclick="goPage('${kind}', ${m.page - 1})">‹ prev</button>
+    <span>page ${m.page + 1} / ${m.pages} · ${m.total} total · ${m.size} per page</span>
+    <button class="small secondary" ${m.has_next ? '' : 'disabled'} onclick="goPage('${kind}', ${m.page + 1})">next ›</button>`;
+}
+function goPage(kind, page) { paging[kind].page = Math.max(0, page); refresh(); }
+function filterJob(id) { activeJob = activeJob === id ? null : id; paging.docs.page = 0; refresh(); }
 function renderFilterChip() {
   $('jobFilter').innerHTML = activeJob ? `<span class="chip">job ${esc(activeJob)} <button title="Show all documents" onclick="filterJob('${activeJob}')">×</button></span>` : '';
 }
 
 function renderDocs() {
   renderFilterChip();
+  renderPager('docs', 'docsPager');
   const tb = $('docs');
-  if (!docsCache.length) { tb.innerHTML = `<tr><td colspan="6" class="muted">${activeJob ? 'This job has no documents.' : 'No documents in this collection.'}</td></tr>`; return; }
+  if (!docsCache.length) { tb.innerHTML = `<tr><td colspan="7" class="muted">${activeJob ? 'This job has no documents.' : 'No documents in this collection.'}</td></tr>`; return; }
   tb.innerHTML = docsCache.map(d => `
     <tr id="row-${d.doc_id}">
       <td><input type="checkbox" ${selDocs.has(d.doc_id) ? 'checked' : ''} ${d.status === 'COMPLETED' ? '' : 'disabled title="only COMPLETED documents can be searched"'} onclick="toggleDoc('${d.doc_id}', this.checked)"></td>
-      <td><code class="id">${esc(d.doc_id)}</code><br><span class="muted" title="job">job ${esc(d.job_id)}</span></td>
+      <td><a href="/documents/${d.doc_id}" title="Open show page"><code class="id">${esc(d.doc_id)}</code></a><br><span class="muted" title="job">job ${esc(d.job_id)}</span></td>
       <td>${esc(d.filename)}<br><span class="muted">${esc(d.file_type || '')}${d.ocr_pages ? ` · <span class="pill ocr">OCR ×${d.ocr_pages}</span>` : ''}</span></td>
+      <td title="${d.pages ? `${d.pages} pages · ${d.chunks} chunks` : 'pages are known once extraction has run'}">${d.pages ? `${d.pages}<br><span class="muted">${d.chunks} chunks</span>` : '<span class="muted">–</span>'}</td>
       <td><span class="pill ${d.status}">${d.status}</span>${d.stage ? `<div class="muted">${esc(d.stage)}…</div>` : ''}</td>
       <td class="${BAD.includes(d.status) ? 'err' : 'muted'}" style="font-size:12px">${esc(d.reason || '')}${d.duplicate_of ? ` <a href="#" onclick="highlight('${d.duplicate_of}');return false;">→ original ${esc(d.duplicate_of)}</a>` : ''}</td>
-      <td>${TERMINAL.includes(d.status) ? `<button class="del" title="Delete" onclick="deleteDoc('${d.doc_id}')">✕</button>` : ''}</td>
+      <td style="white-space:nowrap">${!['COMPLETED', 'DUPLICATE'].includes(d.status) ? `<button class="small secondary" title="${retryTitle(d)}" onclick="retryDoc('${d.doc_id}')">retry</button> ` : ''}${TERMINAL.includes(d.status) ? `<button class="del" title="Delete" onclick="deleteDoc('${d.doc_id}')">✕</button>` : ''}</td>
     </tr>`).join('');
 }
-function highlight(id) { activeJob = null; refresh().then(() => { const row = $(`row-${id}`); if (row) { row.style.background = '#fef9c3'; row.scrollIntoView({behavior:'smooth', block:'center'}); setTimeout(() => row.style.background = '', 1500); } }); }
+function highlight(id) { activeJob = null; paging.docs.page = 0; refresh().then(() => { const row = $(`row-${id}`); if (row) { row.style.background = '#fef9c3'; row.scrollIntoView({behavior:'smooth', block:'center'}); setTimeout(() => row.style.background = '', 1500); } }); }
 function toggleDoc(id, on) { on ? selDocs.add(id) : selDocs.delete(id); renderScope(); }
 function toggleJob(id, on) { on ? selJobs.add(id) : selJobs.delete(id); renderScope(); }
 function clearScope() { selDocs.clear(); selJobs.clear(); renderJobs(); renderDocs(); renderScope(); }
@@ -236,7 +274,7 @@ function renderScope() {
     ? `<b>Scope:</b> only ${parts.join(' + ')} <button class="small secondary" onclick="clearScope()">clear</button>`
     : `<b>Scope:</b> every COMPLETED document in collection <b>${esc(col())}</b>. Tick jobs or documents on the left to narrow it.`;
 }
-$('collection').onchange = () => { activeJob = null; selDocs.clear(); selJobs.clear(); refresh(); };
+$('collection').onchange = () => { activeJob = null; selDocs.clear(); selJobs.clear(); paging.jobs.page = 0; paging.docs.page = 0; refresh(); };
 
 /* ---------------- ask ---------------- */
 $('askBtn').onclick = ask;
@@ -279,6 +317,7 @@ function renderSources(sources, cited) {
 }
 function openSrc(n) { const el = $(`src-${n}`); if (el) { el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }
 
+const initCol = new URLSearchParams(location.search).get('collection'); if (initCol) $('collection').value = initCol;
 loadHealth(); refresh();
 </script>
 </body>

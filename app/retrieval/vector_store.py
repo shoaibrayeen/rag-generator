@@ -6,11 +6,14 @@ Every chunk's metadata carries `collection` (the user-facing document set), `doc
 """
 from __future__ import annotations
 
+import logging
 import threading
 
 import chromadb
 
 from app.config import settings
+
+log = logging.getLogger("rag.vector_store")
 
 _client = None
 _lock = threading.Lock()
@@ -22,6 +25,7 @@ def client() -> chromadb.ClientAPI:
         with _lock:
             if _client is None:
                 settings.chroma_dir.mkdir(parents=True, exist_ok=True)
+                log.info("[vector_store] opening Chroma at %s store=%s", settings.chroma_dir, settings.CHUNKS_STORE)
                 _client = chromadb.PersistentClient(path=str(settings.chroma_dir))
     return _client
 
@@ -47,6 +51,9 @@ def add_chunks(ids: list[str], texts: list[str], embeddings: list[list[float]], 
     for i in range(0, len(ids), step):
         col.add(ids=ids[i:i + step], documents=texts[i:i + step],
                 embeddings=embeddings[i:i + step], metadatas=metadatas[i:i + step])
+        log.debug("[store] added batch %d-%d", i, min(i + step, len(ids)))
+    log.info("[store] added chunks=%d doc=%s collection=%s", len(ids), metadatas[0].get("doc_id"),
+             metadatas[0].get("collection"))
 
 
 def count(collection: str, doc_ids: list[str] | None = None, job_id: str | None = None) -> int:
@@ -63,6 +70,8 @@ def query_dense(collection: str, query_embedding: list[float], top_k: int,
         return []
     res = store().query(query_embeddings=[query_embedding], n_results=min(top_k, total), where=where,
                         include=["documents", "metadatas", "distances"])
+    log.info("[retrieve-dense] collection=%s scope_docs=%s candidates=%d hits=%d", collection,
+             len(doc_ids) if doc_ids is not None else "all", total, len(res["ids"][0]))
     return [{"chunk_id": cid, "text": doc, "metadata": meta, "distance": dist}
             for cid, doc, meta, dist in zip(res["ids"][0], res["documents"][0],
                                             res["metadatas"][0], res["distances"][0])]
@@ -102,7 +111,9 @@ def list_collections() -> list[str]:
 
 
 def delete_document(collection: str, doc_id: str) -> None:
+    n = count(collection, [doc_id])
     store().delete(where=_where(collection, [doc_id]))
+    log.info("[store] deleted chunks=%d doc=%s collection=%s", n, doc_id, collection)
 
 
 def delete_collection(collection: str) -> None:
